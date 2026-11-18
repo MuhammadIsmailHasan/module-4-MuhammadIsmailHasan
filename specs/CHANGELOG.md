@@ -18,3 +18,21 @@ Versions match `.kiro/specs/CHANGELOG.md`. Each folder holds requirement domains
 ### Impact
 - Breaking: `email_or_username` renamed to `login_identifier`; attachment `file_url` is now signed and expires; a tokenless Guest on a private board gets 401 instead of 403.
 - Open: `login_identifier` format validation, the public-board reading of Decision A, and attachment delivery cost.
+
+## V3 - 2026-11-18
+### Changes
+- `v3/17-API-DOCS.md`: new Requirement 17 (API documentation: OpenAPI, `API.md`, Swagger UI gated by `APP_ENV`). Original V3 wording used a hand-written `openapi.yaml`; V4 supersedes it.
+
+### Reason
+- The backend had no written API reference. This folder was added after the fact so every version has a snapshot.
+
+## V4 - 2026-11-18
+### Changes
+- `v4/` holds the changed domains: `00-OVERVIEW` (Decision E, glossary), `01-AUTH`, `07-COMMENTS`, `10-ANALYTICS` (envelope examples), `13-API-CONVENTIONS` (status/message, flask-smorest), `17-API-DOCS` (generated OpenAPI).
+
+### Reason
+- Add `status` and `message` to every response and use flask-smorest for schemas and responses.
+
+### Impact
+- Breaking: the response body shape changes from `{ data }` to `{ status, message, data }`; 422 validation errors are mapped to 400.
+
