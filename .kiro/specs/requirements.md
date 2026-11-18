@@ -2,9 +2,9 @@
 
 ## Introduction
 
-This document specifies the Kanban Task Management application (Version V4). It is a role-based web app with a Flask REST API backend and a mobile-first Next.js frontend. Teams run day-to-day work on boards, columns, and cards, and supervisors and managers oversee progress through analytics without opening every board.
+This document specifies the Kanban Task Management application (Version V5). It is a role-based web app with a Flask REST API backend and a mobile-first Next.js frontend. Teams run day-to-day work on boards, columns, and cards, and supervisors and managers oversee progress through analytics without opening every board.
 
-The requirements translate decisions already recorded in `specs/project-brief.md` and the steering documents in `.kiro/steering/`. V4 revises V3 and adds no scope beyond the decisions in the Decisions Log. Ten decisions that resolved gaps in the brief are recorded there: Decisions 1 to 5 (carried from V1), Decisions A to D (carried from V2), and Decision E (new in V4: every response carries `status` and `message`, and the Backend uses flask-smorest with marshmallow schemas and a generated OpenAPI document). Criteria affected by a decision carry an inline label such as "(Decision A)".
+The requirements translate decisions already recorded in `specs/project-brief.md` and the steering documents in `.kiro/steering/`. V5 revises V4 and adds no scope beyond the decisions in the Decisions Log. Eleven decisions that resolved gaps in the brief are recorded there: Decisions 1 to 5 (carried from V1), Decisions A to D (carried from V2), Decision E (carried from V4: every response carries `status` and `message`, and the Backend uses flask-smorest with marshmallow schemas and a generated OpenAPI document), and Decision F (new in V5: models declare SQLAlchemy relationships only for real cross-table reads, repositories load related rows explicitly, and serialization belongs to marshmallow schemas). Criteria affected by a decision carry an inline label such as "(Decision A)".
 
 Out of scope for V2: Google OAuth login (post-MVP, added only after login_identifier and password auth is verified end-to-end), rate limiting and server-side token revocation (deferred past MVP), custom per-board workflow templates beyond the five default columns, and subtasks with their own assignee or date. Stretch features (card `progress` meter, `views_count`, decorative Overview/Notes/Questions tabs) are covered in Requirement 16 and are built only after all other requirements work end-to-end.
 
@@ -71,6 +71,7 @@ Clarification to Decision A (V2): Req 3.4 and 11.2 grant Supervisor writes only 
 | C | One unified `login_identifier` field replaces separate email and username. Uniqueness and login matching are case-insensitive. | One column means one uniqueness check and one login lookup. | Req 1.1 to 1.5, 1.17, Glossary |
 | D | Uploaded Attachment files are access-gated through an authenticated endpoint or a Signed_File_URL. No permanent public URL. | A permanent public URL bypasses Board_Access and role checks. | Req 4.18, 4.19, 4.24 to 4.27 |
 | E | Every response carries top-level `status` (HTTP status integer) and `message`; the Backend uses flask-smorest with marshmallow schemas, validation failures stay HTTP 400 `VALIDATION_ERROR` (not 422), and the OpenAPI document is generated instead of hand-written. | One declaration per endpoint drives validation, serialization, and documentation, so they cannot drift; the body alone states the outcome. | Req 13.2 to 13.4, 13.11 to 13.15, 17 |
+| F | Models declare SQLAlchemy relationships only for real cross-table reads (`Board.columns`, `Board.members`, `Card.subtasks`, `Card.attachments`, `Comment.replies`), each with `back_populates` (not `backref`), `lazy="raise"`, and no cascade delete. Repositories load related rows explicitly with `selectinload` or `joinedload`. Models have no `to_dict`; marshmallow schemas serialize, because output depends on the viewer. | An accidental lazy load fails loudly instead of becoming a hidden N+1 query, and viewer-dependent serialization stays in one place. | Req 13.16 to 13.18, 14.12, 15.8, 15.9 |
 
 Notes on status codes: V2 standardizes "no Token returns 401; valid Token with insufficient role or access returns 403". This changes Req 11.5 (a Guest requesting a private Board) from 403 in V1 to 401 in V2. Guests may still read public Boards without a Token.
 
@@ -353,6 +354,9 @@ Note (Decision B): Admin is a separate administration track and is deliberately 
 13. IF request body or query validation fails, THEN THE Backend SHALL return HTTP 400 with the code `VALIDATION_ERROR` and the Envelope error shape, and SHALL NOT return HTTP 422 (Decision E).
 14. THE Backend SHALL keep each blueprint layered `routes.py → service.py → repository.py` with the marshmallow schemas in `schema.py` (Decision E).
 15. THE Backend SHALL declare each success response with a schema that wraps the blueprint's payload schema in the Envelope (Decision E).
+16. THE Backend SHALL declare the SQLAlchemy relationships `Board.columns`, `Board.members`, `Card.subtasks`, `Card.attachments`, and `Comment.replies`, each paired with its inverse through `back_populates`, declared with `lazy="raise"`, and without a delete cascade (Decision F).
+17. THE Backend SHALL define no `to_dict` or other serialization method on any model (Decision F).
+18. THE Backend SHALL ensure that services and schemas trigger no lazy load, by having each repository load the related rows it returns with `selectinload` or `joinedload` (Decision F).
 
 ### Requirement 14: Non-Functional Quality
 
@@ -371,6 +375,7 @@ Note (Decision B): Admin is a separate administration track and is deliberately 
 9. THE Frontend SHALL use the prototype's CSS custom properties for all colors, spacing, and radii and no hard-coded hex or pixel values.
 10. THE Frontend SHALL build shared buttons, badges, and modals only as `BaseButton`, `BaseBadge`, and `BaseModal` in `components/shared/`.
 11. THE Frontend SHALL render components as Server Components unless a component needs state, an event handler, or a browser API.
+12. WHEN a list endpoint returns rows, THE Backend SHALL execute a number of database queries that does not depend on the number of returned rows, so that the board cards list with Subtasks and Attachments loads in at most a fixed number of queries instead of one query per Card (Decision F).
 
 ### Requirement 15: Automated Testing
 
@@ -385,6 +390,8 @@ Note (Decision B): Admin is a separate administration track and is deliberately 
 5. THE System SHALL include `pytest` tests covering the HTTP 401 (no Token) and HTTP 403 (insufficient role or access) cases for every mutating endpoint.
 6. THE System SHALL include a `pytest` test that an unrelated Member receives HTTP 403 on a private Board (Decision A).
 7. THE System SHALL include `pytest` tests for Attachment access covering a permitted viewer, an unrelated Member, a Guest on a private Board, and an expired signature (Decision D).
+8. THE System SHALL include a `pytest` test that counts the database queries of the board cards list with 5 Cards and with 50 Cards, each with Subtasks and Attachments, and asserts that the two counts are equal (Decision F).
+9. THE System SHALL include a `pytest` test that asserts accessing an unloaded relationship raises an error (Decision F).
 
 ### Requirement 16: Stretch Features
 

@@ -2,7 +2,9 @@
 
 ## Overview
 
-Version V4. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+Version V5. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+
+V5 adds group 25, which adds the five SQLAlchemy relationships with `lazy="raise"` and moves related-row loading into the repositories with `selectinload` (Decision F). Group 25 runs after group 24 (the marshmallow schemas replace the DTO functions) and before the checkpoint 14.6 and the frontend group 15. It needs no database migration. Existing checkbox states are unchanged.
 
 V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13, plain `flask.Blueprint`, `{ "data": ... }` bodies) to flask-smorest with marshmallow schemas and the `status`/`message` envelope (Decision E). Group 24 runs before the envelope property test 14.4, before the frontend (group 15 onward), and before the API documentation group 23. Group 23 is rewritten to document the generated OpenAPI instead of a hand-written `openapi.yaml`. Existing checkbox states are unchanged.
 
@@ -432,11 +434,32 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 24.4 Checkpoint - Run the full pytest suite
     - Run the full backend `pytest` suite and ensure all tests pass, ask the user if questions arise.
 
+- [ ] 25. Add model relationships and eager loading
+  - [ ] 25.1 Add the five relationships to the models
+    - Declare `Board.columns`, `Board.members`, `Card.subtasks`, `Card.attachments`, and `Comment.replies`, each with its inverse (`Column.board`, `BoardMember.board`, `Subtask.card`, `Attachment.card`, `Comment.parent` with `remote_side`) through `back_populates` (never `backref`), `lazy="raise"`, the `order_by` from the design's relationship table, and no `cascade`.
+    - Declare no other relationships; `Card.assignee_id`, `Card.category_id`, `Comment.author_id`, `Board.owner_id`, and `Card.column_id` stay plain foreign-key columns.
+    - Remove any `to_dict` or other serialization method still on a model; serialization stays in the marshmallow schemas.
+    - Add no migration: this is a mapper-level change only.
+    - _Requirements: 13.16, 13.17_
+  - [ ] 25.2 Load related rows in the repositories
+    - Per the design's repository loading table: `board_repository.get_detail` uses `selectinload(Board.columns)`; `card_repository.list_for_board` and `get_detail` use `selectinload(Card.subtasks)` and `selectinload(Card.attachments)`; `comment_repository.list_for_card` uses `selectinload(Comment.replies)` and selects the author role in the same joined query.
+    - Fix every service, schema, and route that now raises because it read an unloaded relationship; services and schemas must trigger no lazy load, and the board cards list must run a constant number of queries.
+    - _Requirements: 13.18, 14.12_
+  - [ ]* 25.3 Write tests for relationships and constant query count
+    - **Property 39: Constant query count for list endpoints**: count SQL statements with a `before_cursor_execute` listener for a board with 5 cards and a board with 50 cards (each with subtasks and attachments), and assert the counts are equal; repeat for the comment listing.
+    - Add the `lazy="raise"` test: access an unloaded `Card.subtasks`, `Board.columns`, `Board.members`, `Card.attachments`, and `Comment.replies` and assert `sqlalchemy.exc.InvalidRequestError`, then assert the access succeeds when the repository loads it.
+    - Add a static check: no model defines `to_dict`, and each of the five relationships has `lazy="raise"`, `back_populates`, and no `cascade`.
+    - **Validates: Requirements 13.16, 13.17, 13.18, 14.12, 15.8, 15.9**
+  - [ ] 25.4 Checkpoint - Run the full pytest suite
+    - Run the full backend `pytest` suite and ensure all tests pass, ask the user if questions arise.
+
 ## Notes
 
 - Google OAuth is out of scope and has no task.
 - Group 24 (flask-smorest and envelope migration) must be done before the frontend group 15, before group 23 (generated documentation), and before test 14.4 (envelope property test). The frontend `lib/api.ts` (task 15.3) unwraps the new `{ status, message, data }` envelope.
 - Tasks 1 to 13 were built as plain `flask.Blueprint` code with `{ "data": ... }` bodies; their checkboxes stay ticked, and group 24 changes the implementation without changing URLs, status codes, or role rules.
+- Group 25 (relationships and eager loading) runs after group 24, because the marshmallow schemas replace the DTO functions, and before the checkpoint 14.6 and the frontend group 15. It needs no migration. The cross-cutting tests in group 14 run after it.
+- Property 39 (constant query count) is covered by optional task 25.3; Properties 1 to 38 keep their existing tasks.
 - Task 23 depends on group 24 (it documents the generated OpenAPI); it is listed last only for numbering.
 - Tasks marked with `*` are optional test tasks.
 - Services are tested against fake repositories; no `Model.query` call appears outside a `repository.py`.
@@ -464,25 +487,29 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     { "id": 13, "tasks": ["24.2"] },
     { "id": 14, "tasks": ["24.3"] },
     { "id": 15, "tasks": ["24.4"] },
-    { "id": 16, "tasks": ["14.1", "14.2", "14.3", "14.4", "14.5"] },
-    { "id": 17, "tasks": ["14.6"] },
-    { "id": 18, "tasks": ["15.1"] },
-    { "id": 19, "tasks": ["15.2", "15.3"] },
-    { "id": 20, "tasks": ["15.4", "15.5"] },
-    { "id": 21, "tasks": ["16.1"] },
-    { "id": 22, "tasks": ["16.2", "17.1"] },
-    { "id": 23, "tasks": ["17.2"] },
-    { "id": 24, "tasks": ["17.3", "18.1"] },
-    { "id": 25, "tasks": ["18.2", "18.3"] },
-    { "id": 26, "tasks": ["18.4", "19.1", "19.2"] },
-    { "id": 27, "tasks": ["19.3"] },
-    { "id": 28, "tasks": ["20.1", "20.2"] },
-    { "id": 29, "tasks": ["21.1"] },
-    { "id": 30, "tasks": ["22.1"] },
-    { "id": 31, "tasks": ["22.2"] },
-    { "id": 32, "tasks": ["23.1"] },
-    { "id": 33, "tasks": ["23.2"] },
-    { "id": 34, "tasks": ["23.3", "23.4"] }
+    { "id": 16, "tasks": ["25.1"] },
+    { "id": 17, "tasks": ["25.2"] },
+    { "id": 18, "tasks": ["25.3"] },
+    { "id": 19, "tasks": ["25.4"] },
+    { "id": 20, "tasks": ["14.1", "14.2", "14.3", "14.4", "14.5"] },
+    { "id": 21, "tasks": ["14.6"] },
+    { "id": 22, "tasks": ["15.1"] },
+    { "id": 23, "tasks": ["15.2", "15.3"] },
+    { "id": 24, "tasks": ["15.4", "15.5"] },
+    { "id": 25, "tasks": ["16.1"] },
+    { "id": 26, "tasks": ["16.2", "17.1"] },
+    { "id": 27, "tasks": ["17.2"] },
+    { "id": 28, "tasks": ["17.3", "18.1"] },
+    { "id": 29, "tasks": ["18.2", "18.3"] },
+    { "id": 30, "tasks": ["18.4", "19.1", "19.2"] },
+    { "id": 31, "tasks": ["19.3"] },
+    { "id": 32, "tasks": ["20.1", "20.2"] },
+    { "id": 33, "tasks": ["21.1"] },
+    { "id": 34, "tasks": ["22.1"] },
+    { "id": 35, "tasks": ["22.2"] },
+    { "id": 36, "tasks": ["23.1"] },
+    { "id": 37, "tasks": ["23.2"] },
+    { "id": 38, "tasks": ["23.3", "23.4"] }
   ]
 }
 ```

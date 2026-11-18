@@ -111,7 +111,7 @@ inclusion: always
   column (email or username shape) — never separate `email` and `username`
   columns.
   **Rationale:** One column means one uniqueness check and one login lookup.
-  **Example:** `login_identifier = db.Column(db.String(255), unique=True, nullable=False)`.
+  **Example:** `login_identifier = db.Column(db.String(255), nullable=False)` plus `db.Index("uq_users_login_lower", db.func.lower(User.login_identifier), unique=True)`.
 
 - **Rule:** `BoardMember` is a join entity `(id, board_id, user_id, created_at,
   updated_at)` with a unique `(board_id, user_id)`; it records users attached
@@ -131,3 +131,15 @@ inclusion: always
   and avoids duplicating soft-delete state.
   **Example:** dropping at the top of a column whose first card is `1.0`
   gives order `0.0`.
+
+- **Rule:** Models declare SQLAlchemy relationships only for real cross-table
+  reads: `Board.columns`, `Board.members`, `Card.subtasks`, `Card.attachments`,
+  `Comment.replies`, each paired with `back_populates` (never `backref`) and
+  declared `lazy="raise"`, with no `cascade="all, delete"` (boards and cards are
+  never hard-deleted). Models carry no `to_dict()` or other serialization
+  method.
+  **Rationale:** `lazy="raise"` turns an accidental lazy load into a test
+  failure instead of a hidden N+1 query that threatens the 300 ms p95 target;
+  serialization depends on the viewer (guest privacy, `can_create_card`, signed
+  URLs), so it belongs to marshmallow schemas, not the model.
+  **Example:** `subtasks = db.relationship("Subtask", back_populates="card", lazy="raise", order_by="Subtask.order")`.

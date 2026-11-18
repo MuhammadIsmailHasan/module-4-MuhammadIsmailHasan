@@ -149,3 +149,14 @@ inclusion: always
   and documentation, so the three cannot drift apart.
   **Example:** `@blp.post("/cards")`, `@blp.arguments(CardCreateSchema)`,
   `@blp.response(201, envelope(CardSchema))` on `POST /api/boards/{id}/cards`.
+
+- **Rule:** A repository that returns rows whose related collections will be
+  read loads them in the same function with `selectinload` (collections) or
+  `joinedload` (many-to-one); services and schemas never trigger a lazy load.
+  A list endpoint's query count is constant in the number of rows, not
+  proportional to it.
+  **Rationale:** Relationships are declared `lazy="raise"`, so the repository
+  is the one place that decides what is loaded. This keeps list endpoints
+  inside the 300 ms p95 target.
+  **Example:** `select(Card).where(...).options(selectinload(Card.subtasks), selectinload(Card.attachments))`
+  makes 3 queries for 200 cards, not 201.
