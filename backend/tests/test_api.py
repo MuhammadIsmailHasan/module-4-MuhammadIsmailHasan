@@ -2,6 +2,7 @@ import io
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from conftest import TEST_PASSWORD
 
 from app.common import clock
 from app.extensions import db
@@ -36,13 +37,13 @@ def mkcard(w, title="t", who="supervisor", i=0, **extra):
 
 # ---- auth ----
 def test_register_login_roundtrip(client):
-    r = client.post("/api/auth/register", json={"full_name": " Ann ", "login_identifier": " Ann@X.com ", "password": "REMOVED"})
+    r = client.post("/api/auth/register", json={"full_name": " Ann ", "login_identifier": " Ann@X.com ", "password": TEST_PASSWORD})
     assert r.status_code == 201
     d = r.get_json()["data"]
     assert d["user"]["full_name"] == "Ann" and d["token"]
-    assert client.post("/api/auth/login", json={"login_identifier": "ann@x.COM", "password": "REMOVED"}).status_code == 200
+    assert client.post("/api/auth/login", json={"login_identifier": "ann@x.COM", "password": TEST_PASSWORD}).status_code == 200
     assert client.post("/api/auth/login", json={"login_identifier": "ann@x.com", "password": "bad"}).status_code == 401
-    dup = client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "ANN@x.com", "password": "REMOVED"})
+    dup = client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "ANN@x.com", "password": TEST_PASSWORD})
     assert dup.status_code == 409
     assert client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "z", "password": "short"}).status_code == 400
     assert client.post("/api/auth/logout").get_json() == {"status": 200, "message": "Logged out", "data": None}
@@ -345,7 +346,7 @@ def test_user_admin(world):
     for who in ("member", "supervisor", "manager"):
         assert c.get("/api/users", headers=world.h[who]).status_code == 403
     assert c.get("/api/users").status_code == 401
-    r = c.post("/api/users", headers=world.h["admin"], json={"full_name": "N", "login_identifier": "n@x.com", "password": "REMOVED", "role": "supervisor"})
+    r = c.post("/api/users", headers=world.h["admin"], json={"full_name": "N", "login_identifier": "n@x.com", "password": TEST_PASSWORD, "role": "supervisor"})
     assert r.status_code == 201
     uid = r.get_json()["data"]["id"]
     r = c.patch(f"/api/users/{uid}", headers=world.h["admin"], json={"role": "manager", "full_name": "M"})

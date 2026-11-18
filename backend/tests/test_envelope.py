@@ -1,6 +1,7 @@
 import re
 
 import pytest
+from conftest import TEST_PASSWORD
 from hypothesis import HealthCheck, given, settings, strategies as st
 
 from app.common.auth import issue_token
@@ -33,7 +34,7 @@ def api_rules(app):
 
 
 def test_success_and_error_shapes(client, make_user, auth):
-    r = client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "a@x.com", "password": "REMOVED"})
+    r = client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "a@x.com", "password": TEST_PASSWORD})
     assert check_envelope(r)["message"] == "Registered"
     assert check_envelope(client.post("/api/auth/logout"))["data"] is None
     assert check_envelope(client.get("/api/boards"))["data"] == []

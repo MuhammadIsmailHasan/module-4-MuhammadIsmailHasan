@@ -1,10 +1,14 @@
 import os
+import secrets
 
 import pytest
 
+# Random per run: no credential or secret literal is committed.
+TEST_PASSWORD = secrets.token_urlsafe(12)
+
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3000")
-os.environ.setdefault("JWT_SECRET", "test-jwt-secret-0REMOVED9abcdef0123")
-os.environ.setdefault("FILE_URL_SECRET", "test-file-secret-0REMOVED9abcdef01")
+os.environ.setdefault("JWT_SECRET", secrets.token_hex(32))
+os.environ.setdefault("FILE_URL_SECRET", secrets.token_hex(32))
 os.environ.setdefault("APP_TIMEZONE", "UTC")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["APP_ENV"] = "testing"
@@ -57,7 +61,7 @@ def make_user(app):
 
     def _make(role="member", login=None):
         login = login or f"{role}-{User.query.count()}@example.com"
-        user = User(full_name=role.title(), login_identifier=login, password_hash=hasher.hash("REMOVED"), role=role)
+        user = User(full_name=role.title(), login_identifier=login, password_hash=hasher.hash(TEST_PASSWORD), role=role)
         db.session.add(user)
         db.session.commit()
         return user
