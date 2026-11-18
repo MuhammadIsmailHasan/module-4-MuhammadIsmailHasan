@@ -1,0 +1,9 @@
+flask
+flask-sqlalchemy
+flask-migrate
+flask-cors
+flask-jwt-extended
+argon2-cffi
+psycopg[binary]
+pytest
+hypothesis

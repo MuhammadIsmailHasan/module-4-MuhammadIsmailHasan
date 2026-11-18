@@ -1,0 +1,36 @@
+from app.extensions import db
+from app.models.base import TimestampMixin, uuid_fk, uuid_pk
+
+
+class Board(TimestampMixin, db.Model):
+    __tablename__ = "boards"
+
+    id = uuid_pk()
+    name = db.Column(db.String(255), nullable=False)
+    visibility = db.Column(
+        db.Enum("public", "private", name="board_visibility"),
+        nullable=False,
+        default="private",
+        server_default="private",
+    )
+    owner_id = uuid_fk("users.id", nullable=True)
+    deleted_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    archived_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+
+class BoardMember(TimestampMixin, db.Model):
+    __tablename__ = "board_members"
+    __table_args__ = (db.UniqueConstraint("board_id", "user_id", name="uq_board_members_board_user"),)
+
+    id = uuid_pk()
+    board_id = uuid_fk("boards.id", nullable=False)
+    user_id = uuid_fk("users.id", nullable=False)
+
+
+class Column(TimestampMixin, db.Model):
+    __tablename__ = "columns"
+
+    id = uuid_pk()
+    board_id = uuid_fk("boards.id", nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    order = db.Column(db.Float, nullable=False)

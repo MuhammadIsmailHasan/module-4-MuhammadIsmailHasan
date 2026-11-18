@@ -1,0 +1,37 @@
+from app.common.errors import ValidationError
+from app.common.http import iso
+
+DEFAULT_COLUMNS = ("Todo", "In Progress", "Review", "Revision", "Done")
+
+
+def clean_name(value):
+    if not isinstance(value, str) or not value.strip():
+        raise ValidationError("name is required")
+    value = value.strip()
+    if len(value) > 255:
+        raise ValidationError("name must be at most 255 characters")
+    return value
+
+
+def clean_visibility(value):
+    if value not in ("public", "private"):
+        raise ValidationError("visibility must be public or private")
+    return value
+
+
+def serialize_column(col):
+    return {"id": str(col.id), "board_id": str(col.board_id), "name": col.name, "order": col.order}
+
+
+def serialize_board(board, columns=None, viewer=None):
+    # Guests never receive comments or activity_log; boards embed neither.
+    data = {
+        "id": str(board.id),
+        "name": board.name,
+        "visibility": board.visibility,
+        "owner_id": str(board.owner_id) if board.owner_id else None,
+        "archived_at": iso(board.archived_at),
+    }
+    if columns is not None:
+        data["columns"] = [serialize_column(c) for c in columns]
+    return data
