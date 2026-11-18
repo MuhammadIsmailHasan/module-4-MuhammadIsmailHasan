@@ -1,3 +1,5 @@
+from sqlalchemy.orm import selectinload
+
 from app.common import clock
 from app.extensions import db
 from app.models import Card, Comment, User
@@ -19,11 +21,27 @@ def add(card_id, author_id, content, parent_id=None):
     return c
 
 
-def for_card(card_id):
-    return Comment.query.filter_by(card_id=card_id).all()
+def list_for_card(card_id, sort="latest"):
+    """Top-level comments with replies loaded, plus author roles: 3 queries whatever the row count.
 
-
-def author_roles(ids):
-    if not ids:
-        return {}
-    return {u.id: u.role for u in User.query.filter(User.id.in_(ids)).all()}
+    Returns (comments, roles) where roles maps author id to role for comments and replies.
+    """
+    order = [Comment.is_priority.desc()]
+    if sort == "popular":
+        order += [Comment.reply_count.desc(), Comment.created_at.desc(), Comment.id.desc()]
+    else:
+        order += [Comment.created_at.desc(), Comment.id.desc()]
+    rows = db.session.execute(
+        db.select(Comment, User.role)
+        .join(User, User.id == Comment.author_id)
+        .where(Comment.card_id == card_id, Comment.parent_id.is_(None))
+        .options(selectinload(Comment.replies))
+        .order_by(*order)
+        .execution_options(populate_existing=True)
+    ).all()
+    comments = [c for c, _ in rows]
+    roles = {c.author_id: role for c, role in rows}
+    reply_authors = {r.author_id for c in comments for r in c.replies} - set(roles)
+    if reply_authors:
+        roles.update(dict(db.session.execute(db.select(User.id, User.role).where(User.id.in_(reply_authors))).all()))
+    return comments, roles

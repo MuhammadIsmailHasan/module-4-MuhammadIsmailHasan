@@ -4,7 +4,6 @@ from app.blueprints.activity import repository as activity
 from app.blueprints.activity.schema import ActivitySchema
 from app.blueprints.auth.dto import serialize_user
 from app.blueprints.auth.schema import UserSchema
-from app.blueprints.boards import repository as repo
 from app.blueprints.boards import service
 from app.blueprints.boards.dto import serialize_board
 from app.blueprints.boards.schema import (
@@ -29,8 +28,8 @@ ANY_USER = ("member", "supervisor", "manager", "admin")
 @bp.arguments(CreateBoardSchema)
 @bp.response(201, envelope(BoardSchema))
 def create_board(data):
-    board = service.create_board(current_actor(), data)
-    return ok(serialize_board(board, repo.list_columns(board.id)), "Board created", 201)
+    board = service.reload_detail(service.create_board(current_actor(), data))
+    return ok(serialize_board(board, board.columns), "Board created", 201)
 
 
 @bp.route("/boards", methods=["GET"])
@@ -44,8 +43,8 @@ def list_boards():
 @endpoint(bp, "Get a board with its columns", "Guests may read public boards. Private boards: 401 for Guests, 403 without access.", auth="optional")
 @bp.response(200, envelope(BoardSchema))
 def get_board(board_id):
-    board = service.load_board(current_actor(), board_id)
-    return ok(serialize_board(board, repo.list_columns(board.id), current_actor()), "Board retrieved")
+    board = service.board_detail(current_actor(), board_id)
+    return ok(serialize_board(board, board.columns, current_actor()), "Board retrieved")
 
 
 @bp.route("/boards/<board_id>", methods=["PATCH"])
@@ -54,8 +53,8 @@ def get_board(board_id):
 @bp.arguments(UpdateBoardSchema)
 @bp.response(200, envelope(BoardSchema))
 def update_board(data, board_id):
-    board = service.update_board(current_actor(), board_id, data)
-    return ok(serialize_board(board, repo.list_columns(board.id)), "Board updated")
+    board = service.reload_detail(service.update_board(current_actor(), board_id, data))
+    return ok(serialize_board(board, board.columns), "Board updated")
 
 
 @bp.route("/boards/<board_id>/archive", methods=["POST"])

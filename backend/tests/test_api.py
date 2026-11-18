@@ -206,7 +206,8 @@ def test_attachments_and_signed_urls(world, app):
     att = ok.get_json()["data"]
     assert "sig=" in att["file_url"]
     assert c.get(att["file_url"]).data == b"%PDF"  # signature only, no token
-    assert c.get(att["file_url"][:-1] + "0").status_code == 403
+    flipped = "1" if att["file_url"][-1] == "0" else "0"
+    assert c.get(att["file_url"][:-1] + flipped).status_code == 403
     fresh = c.get(f"/api/attachments/{att['id']}/url", headers=world.h["member"])
     assert fresh.status_code == 200
     assert c.get(f"/api/attachments/{att['id']}/url", headers=world.h["other_member"]).status_code == 403

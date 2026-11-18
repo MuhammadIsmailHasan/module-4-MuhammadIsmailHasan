@@ -1,5 +1,7 @@
+from sqlalchemy.orm import selectinload
+
 from app.extensions import db
-from app.models import Attachment, Board, Card, Category, Column, Subtask
+from app.models import Attachment, Card, Category, Column, Subtask
 
 
 def get_card(card_id, include_deleted=False):
@@ -42,6 +44,7 @@ def get_category(category_id):
 
 
 def subtasks_of(card_id):
+    """Plain sibling list for reordering (no relationship access)."""
     return Subtask.query.filter_by(card_id=card_id).order_by(Subtask.order).all()
 
 
@@ -68,10 +71,6 @@ def delete_subtask(sub):
     db.session.delete(sub)
 
 
-def attachments_of(card_id):
-    return Attachment.query.filter_by(card_id=card_id).order_by(Attachment.created_at, Attachment.id).all()
-
-
 def add_attachment(**fields):
     a = Attachment(**fields)
     db.session.add(a)
@@ -87,19 +86,34 @@ def delete_attachment(att):
     db.session.delete(att)
 
 
-def search_cards(board_id, search=None, priority=None, assignee=None, category=None):
-    q = (
-        Card.query.join(Column, Card.column_id == Column.id)
-        .join(Board, Board.id == Column.board_id)
-        .filter(Column.board_id == board_id, Card.deleted_at.is_(None))
+def _with_children(stmt):
+    return stmt.options(selectinload(Card.subtasks), selectinload(Card.attachments))
+
+
+def get_detail(card_id):
+    """One card with subtasks and attachments loaded (2 extra queries, constant)."""
+    return db.session.scalars(
+        _with_children(
+            db.select(Card).where(Card.id == card_id, Card.deleted_at.is_(None))
+        ).execution_options(populate_existing=True)
+    ).first()
+
+
+def list_for_board(board_id, filters):
+    """Cards of a board with subtasks and attachments: 3 queries whatever the card count."""
+    stmt = (
+        db.select(Card)
+        .join(Column, Card.column_id == Column.id)
+        .where(Column.board_id == board_id, Card.deleted_at.is_(None))
     )
-    if search:
-        like = f"%{search.lower()}%"
-        q = q.filter(db.or_(db.func.lower(Card.title).like(like), db.func.lower(Card.description).like(like)))
-    if priority:
-        q = q.filter(Card.priority == priority)
-    if assignee:
-        q = q.filter(Card.assignee_id == assignee)
-    if category:
-        q = q.filter(Card.category_id == category)
-    return q.order_by(Column.order, Card.order).all()
+    if filters.get("search"):
+        like = f"%{filters['search'].lower()}%"
+        stmt = stmt.where(db.or_(db.func.lower(Card.title).like(like), db.func.lower(Card.description).like(like)))
+    if filters.get("priority"):
+        stmt = stmt.where(Card.priority == filters["priority"])
+    if filters.get("assignee"):
+        stmt = stmt.where(Card.assignee_id == filters["assignee"])
+    if filters.get("category"):
+        stmt = stmt.where(Card.category_id == filters["category"])
+    stmt = _with_children(stmt).order_by(Column.order, Card.order).execution_options(populate_existing=True)
+    return db.session.scalars(stmt).all()

@@ -1,3 +1,5 @@
+from sqlalchemy.orm import selectinload
+
 from app.extensions import db
 from app.models import Board, BoardMember, Column, User
 
@@ -6,6 +8,17 @@ def get_by_id(board_id, include_deleted=False):
     board = db.session.get(Board, board_id)
     if board is None or (board.deleted_at is not None and not include_deleted):
         return None
+    return board
+
+
+def get_detail(board_id):
+    """One board with its columns loaded (Req 3.10)."""
+    board = db.session.scalars(
+        db.select(Board)
+        .where(Board.id == board_id, Board.deleted_at.is_(None))
+        .options(selectinload(Board.columns))
+        .execution_options(populate_existing=True)
+    ).first()
     return board
 
 

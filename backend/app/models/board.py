@@ -17,6 +17,12 @@ class Board(TimestampMixin, db.Model):
     deleted_at = db.Column(db.DateTime(timezone=True), nullable=True)
     archived_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # Relationships are lazy="raise": repositories load them explicitly (selectinload).
+    columns = db.relationship("Column", back_populates="board", lazy="raise", order_by="Column.order")
+    members = db.relationship(
+        "BoardMember", back_populates="board", lazy="raise", order_by="BoardMember.created_at"
+    )
+
 
 class BoardMember(TimestampMixin, db.Model):
     __tablename__ = "board_members"
@@ -26,6 +32,8 @@ class BoardMember(TimestampMixin, db.Model):
     board_id = uuid_fk("boards.id", nullable=False)
     user_id = uuid_fk("users.id", nullable=False)
 
+    board = db.relationship("Board", back_populates="members", lazy="raise")
+
 
 class Column(TimestampMixin, db.Model):
     __tablename__ = "columns"
@@ -34,3 +42,4 @@ class Column(TimestampMixin, db.Model):
     board_id = uuid_fk("boards.id", nullable=False)
     name = db.Column(db.String(255), nullable=False)
     order = db.Column(db.Float, nullable=False)
+    board = db.relationship("Board", back_populates="columns", lazy="raise")

@@ -44,6 +44,11 @@ class Card(TimestampMixin, db.Model):
     archived_at = db.Column(db.DateTime(timezone=True), nullable=True)
     # Stretch columns (progress, views_count) are intentionally left for a later migration.
 
+    subtasks = db.relationship("Subtask", back_populates="card", lazy="raise", order_by="Subtask.order")
+    attachments = db.relationship(
+        "Attachment", back_populates="card", lazy="raise", order_by="Attachment.created_at"
+    )
+
 
 class Subtask(TimestampMixin, db.Model):
     __tablename__ = "subtasks"
@@ -53,6 +58,8 @@ class Subtask(TimestampMixin, db.Model):
     title = db.Column(db.String(255), nullable=False)
     is_done = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     order = db.Column(db.Float, nullable=False)
+
+    card = db.relationship("Card", back_populates="subtasks", lazy="raise")
 
 
 class Attachment(TimestampMixin, db.Model):
@@ -67,3 +74,5 @@ class Attachment(TimestampMixin, db.Model):
     url = db.Column(db.String(2048), nullable=True)
     file_path = db.Column(db.String(1024), nullable=True)
     mime_type = db.Column(db.String(255), nullable=True)
+
+    card = db.relationship("Card", back_populates="attachments", lazy="raise")

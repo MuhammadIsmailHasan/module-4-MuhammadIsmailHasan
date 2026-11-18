@@ -58,6 +58,17 @@ def load_board(actor, board_id):
     return require_access(actor, board)
 
 
+def board_detail(actor, board_id):
+    """Board with columns loaded; same 404/401/403 rules as load_board."""
+    bid = to_uuid(board_id)
+    board = repo.get_detail(bid) if bid else None
+    return require_access(actor, board)
+
+
+def reload_detail(board):
+    return repo.get_detail(board.id)
+
+
 def create_board(actor, data):
     name = clean_name(data.get("name"))
     visibility = clean_visibility(data.get("visibility", "private"))

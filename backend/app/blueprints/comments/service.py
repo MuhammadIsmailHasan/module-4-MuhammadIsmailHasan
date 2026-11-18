@@ -91,22 +91,10 @@ def serialize(c, viewer_role, author_roles, replies=None):
 def list_comments(card, actor, sort="latest"):
     if sort not in ("latest", "popular"):
         raise ValidationError("sort must be latest or popular")
-    rows = repo.for_card(card.id)
-    roles = repo.author_roles({r.author_id for r in rows})
-    top = [r for r in rows if r.parent_id is None]
-    key_time = lambda r: (r.created_at, str(r.id))  # noqa: E731
-    priority = sorted((r for r in top if r.is_priority), key=key_time, reverse=True)
-    others = [r for r in top if not r.is_priority]
-    if sort == "popular":
-        others.sort(key=lambda r: (r.reply_count, r.created_at, str(r.id)), reverse=True)
-    else:
-        others.sort(key=key_time, reverse=True)
-    replies = {}
-    for r in sorted((r for r in rows if r.parent_id is not None), key=lambda r: (r.created_at, str(r.id))):
-        replies.setdefault(r.parent_id, []).append(r)
+    comments, roles = repo.list_for_card(card.id, sort)
     return [
-        serialize(c, actor.role, roles, [serialize(x, actor.role, roles) for x in replies.get(c.id, [])])
-        for c in priority + others
+        serialize(c, actor.role, roles, [serialize(r, actor.role, roles) for r in c.replies])
+        for c in comments
     ]
 
 

@@ -13,6 +13,11 @@ class Comment(TimestampMixin, db.Model):
     is_priority = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     reply_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
+    replies = db.relationship(
+        "Comment", back_populates="parent", lazy="raise", order_by="Comment.created_at"
+    )
+    parent = db.relationship("Comment", back_populates="replies", remote_side="Comment.id", lazy="raise")
+
 
 class ActivityLog(db.Model):
     """Append-only: created_at only, never updated or deleted."""

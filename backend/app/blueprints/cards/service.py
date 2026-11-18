@@ -63,9 +63,8 @@ def present(card, actor):
     if actor is not None:
         comments = comments_service.list_comments(card, actor, "latest")
         activity_rows = [activity.serialize(r) for r in activity.for_card(card.id)]
-    return serialize_card(
-        card, actor, repo.subtasks_of(card.id), repo.attachments_of(card.id), comments, activity_rows
-    )
+    detail = repo.get_detail(card.id)
+    return serialize_card(detail, actor, detail.subtasks, detail.attachments, comments, activity_rows)
 
 
 def create_card(actor, column_id, data):
@@ -362,5 +361,7 @@ def list_board_cards(actor, board_id, args):
         elif key.startswith("filter["):
             raise ValidationError(f"Unsupported filter: {key}")
     search = (args.get("search") or "").strip()
-    cards = repo.search_cards(board.id, search or None, priority, assignee, category)
-    return [serialize_card(c, actor) for c in cards]
+    cards = repo.list_for_board(
+        board.id, {"search": search or None, "priority": priority, "assignee": assignee, "category": category}
+    )
+    return [serialize_card(c, actor, c.subtasks, c.attachments) for c in cards]
