@@ -57,5 +57,5 @@
 
 ### Impact
 - Requirements: 1, 7, 10, 13, 17 and the Decisions Log. Design: layout, envelope, errors, API documentation, Properties 36 to 38. Tasks: 14.4, 23, 24 (new).
-- Code: not changed yet; group 24 migrates the existing backend. This breaks the response shape for any client written against V3.
+- Code: group 24 migrated the backend to flask-smorest and the `status`/`message` envelope, and group 23 added generated OpenAPI, `backend/openapi.json` and `backend/API.md`. This breaks the response shape for any client written against V3.
 - Open: Swagger UI assets load from a CDN under flask-smorest (Open Question 4).
