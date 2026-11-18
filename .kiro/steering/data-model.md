@@ -4,7 +4,7 @@ inclusion: always
 
 # Data Model Steering
 
-- **Rule:** Core entities are `User, Board, Column, Card, Category, Subtask,
+- **Rule:** Core entities are `User, Board, BoardMember, Column, Card, Category, Subtask,
   Comment, ActivityLog, Notification, Attachment`; every entity has
   `id (UUID)`, `created_at`, `updated_at`; `Board` and `Card` additionally have
   `deleted_at` and `archived_at`. The one exception is `ActivityLog`, which has
@@ -15,8 +15,10 @@ inclusion: always
   `Card(id, column_id, category_id, title, description, priority, start_date, end_date, order: Float, assignee_id, created_at, updated_at, deleted_at, archived_at)`.
 
 - **Rule:** `Category` is `id, board_id, name, color (nullable), created_at,
-  updated_at`, cascade-deleted with its board; `Card.category_id` is a
-  nullable FK to `Category`.
+  updated_at`, scoped to its board and unique by case-insensitive `name`
+  within that board; boards are never hard-deleted, so categories simply
+  become unreachable once their board is soft-deleted. `Card.category_id` is
+  a nullable FK to `Category`.
   **Rationale:** Scoping categories to a board (not global) is what "every
   board has its own category" means at the schema level.
   **Example:** `Category(board_id=board.id, name="Design", color="#7c5cff")`.
@@ -104,3 +106,28 @@ inclusion: always
   Float-order approach working.
   **Example:** dropping between `1.0` and `1.0000005` triggers a renumber, then
   the card is placed at the midpoint of its new neighbours.
+
+- **Rule:** `User` has one unique, case-insensitive `login_identifier` string
+  column (email or username shape) — never separate `email` and `username`
+  columns.
+  **Rationale:** One column means one uniqueness check and one login lookup.
+  **Example:** `login_identifier = db.Column(db.String(255), unique=True, nullable=False)`.
+
+- **Rule:** `BoardMember` is a join entity `(id, board_id, user_id, created_at,
+  updated_at)` with a unique `(board_id, user_id)`; it records users attached
+  to a board beyond its `owner_id`. Supervisor access to a board is
+  `owner OR BoardMember`; a Member's access to a private board needs
+  `BoardMember`. Manager and Admin need no membership.
+  **Rationale:** "Private" must gate unrelated signed-in users, which needs a
+  real relationship to check.
+  **Example:** `BoardMember(board_id=board.id, user_id=member.id)`.
+
+- **Rule:** Card and Subtask `order` has boundary rules: first position is
+  `min_order - 1`, last is `max_order + 1`, and Subtask reordering uses the
+  same averaging and renumber rule as Card ordering. Child rows (Subtask,
+  Attachment, Comment) have no `deleted_at`; they are hidden by joining the
+  parent Card's `deleted_at`.
+  **Rationale:** Closes the edge cases the averaging rule alone leaves open
+  and avoids duplicating soft-delete state.
+  **Example:** dropping at the top of a column whose first card is `1.0`
+  gives order `0.0`.

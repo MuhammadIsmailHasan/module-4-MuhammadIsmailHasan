@@ -42,8 +42,9 @@ Business rules Kiro must respect when generating requirements, design, or code.
   to the top of the thread for everyone, with no card-creation action attached.
 
 - **Rule:** The "create new card" quick action appears only on comments whose
-  **author** is a manager — regardless of whether that comment is flagged
-  priority.
+  **author** is a manager, and only to a viewer who is a supervisor, manager,
+  or admin (a plain member or guest never sees it) — regardless of whether
+  that comment is flagged priority.
   **Rationale:** Keeps the two mechanisms independent: priority controls sort
   order for anyone's comment; "create a card from this" stays a manager's own
   authorial action.
@@ -84,3 +85,18 @@ Business rules Kiro must respect when generating requirements, design, or code.
   a blocker.
   **Example:** Ship and test `POST /api/auth/register` and `POST /api/auth/login`
   first; add the OAuth callback route only after MVP sign-off.
+
+- **Rule:** A private board is visible only to its owner, its `BoardMember`s,
+  Managers, and Admins; a public board is visible to every signed-in user and
+  to guests (columns and cards only for guests). Owner, Manager, and Admin can
+  add or remove board members.
+  **Rationale:** "Private" has to mean private from unrelated signed-in
+  users too, not only from guests.
+  **Example:** a Member who is not on a private board gets `403` when opening it.
+
+- **Rule:** Admin is deliberately not a superset of Manager: Admin cannot post
+  or flag comments and gets `403` on analytics. This is a recorded decision,
+  not an oversight.
+  **Rationale:** Admin is a separate operations track; "fixing" the gap would
+  quietly change the permission model.
+  **Example:** `PATCH /api/comments/{id}/priority` as Admin → `403`.

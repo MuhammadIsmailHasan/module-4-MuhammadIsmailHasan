@@ -59,7 +59,7 @@ inclusion: always
   `reply_count DESC`, ties broken by `created_at DESC`. Each top-level
   comment's replies come back nested, oldest-first, unaffected by the sort
   toggle. The "create new card" action is a separate flag on each comment,
-  `can_create_card = (author.role == "manager")` — independent of
+  `can_create_card = (author.role == "manager" and viewer.role in ("supervisor", "manager", "admin"))` — independent of
   `is_priority`.
   **Rationale:** Computing all of this once in `comment_service` means the
   frontend never has to re-sort, re-derive popularity, or re-implement the
@@ -98,12 +98,40 @@ inclusion: always
   **Example:** `@require_role("supervisor", "manager", "admin")` on
   `POST /api/boards/{id}/categories`, but no role check on the matching `GET`.
 
-- **Rule:** An uploaded attachment's file is stored somewhere that resolves
-  to a stable, directly-fetchable URL (object storage or a static file
-  route) — never behind an endpoint that streams/proxies the file through
-  the API.
-  **Rationale:** Attachments open in a new browser tab on click; that only
-  works cleanly if the URL returned by the API is something a browser tab
-  can load on its own.
-  **Example:** `attachment.file_url` → `https://.../uploads/{id}/{filename}`,
-  used directly as `<a href>`'s target, not a `/api/attachments/{id}/stream` call.
+- **Rule:** An uploaded attachment's file is served only through a path that
+  enforces the same board-access and role checks as its owning card: either an
+  authenticated endpoint or a signed, time-limited URL (V2 default: signed URL,
+  15-minute lifetime, issued only to a viewer who can see the card). A
+  permanently public, unauthenticated file URL is never returned.
+  **Rationale:** A permanent public URL bypasses every board-privacy and role
+  check the moment it leaks or is guessed. A signed, expiring URL still opens
+  in a plain browser tab (`target="_blank"`), which a bearer-token-only
+  endpoint cannot.
+  **Example:** `GET /api/cards/{id}` returns `attachment.file_url` as
+  `/api/attachments/{id}/file?exp=...&sig=...`; `GET /api/attachments/{id}/url`
+  re-issues a fresh one after the visibility check.
+
+- **Rule:** Board access is resolved in one place, `board_service.can_access(user, board)`:
+  guest sees public boards only; a signed-in user sees a public board, or a
+  private board only if they are its owner, a `BoardMember`, a Manager, or an
+  Admin. Every board-scoped read and write (columns, cards, categories,
+  comments, activity, search, attachments) calls it.
+  **Rationale:** "Private" has to gate unrelated signed-in users, not just
+  guests; one function keeps that from drifting per endpoint.
+  **Example:** an unrelated Member requesting a private board gets `403`.
+
+- **Rule:** Authentication is stateless JWT with a 24-hour expiry and no
+  server-side revocation list in V2; passwords are at least 8 characters and
+  hashed with bcrypt or argon2; no token returns `401`, a valid token with
+  insufficient access returns `403`, everywhere.
+  **Rationale:** One predictable status rule for the frontend; revocation and
+  rate limiting are deferred, not forgotten.
+  **Example:** `POST /api/auth/logout` returns `{ "data": null }`; the client
+  discards the token.
+
+- **Rule:** Notifications are marked read through
+  `PATCH /api/notifications/{id}/read` and `PATCH /api/notifications/read-all`,
+  both scoped to the signed-in user's own rows.
+  **Rationale:** The unread count in the inbox is only meaningful if it can go
+  down.
+  **Example:** marking another user's notification read returns `404`.

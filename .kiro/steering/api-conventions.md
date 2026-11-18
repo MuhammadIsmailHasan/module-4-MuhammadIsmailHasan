@@ -28,7 +28,7 @@ inclusion: always
   **Example:** `GET /api/boards/{id}/cards?search=login&filter[priority]=high`.
 
 - **Rule:** `POST /api/auth/register` and `POST /api/auth/login` both return
-  `{ "data": { "user": { id, full_name, email_or_username, avatar_url }, "token": "..." } }`.
+  `{ "data": { "user": { id, full_name, login_identifier, avatar_url }, "token": "..." } }`.
   **Rationale:** One shared user shape from both endpoints keeps the frontend
   auth client simple — it never branches on which endpoint it just called.
   **Example:** register and login responses are interchangeable as far as the
@@ -65,3 +65,14 @@ inclusion: always
   with a nested array every time one checkbox changes.
   **Example:** `PATCH /api/subtasks/st_1 { "is_done": true }` →
   `{ "data": { "id": "st_1", "is_done": true } }`.
+
+- **Rule:** The `login_identifier` is one unique, case-insensitive string
+  column; the same field accepts an email or a username. Additional auth and
+  membership endpoints: `POST /api/auth/logout` (returns `{ "data": null }`),
+  `PATCH /api/notifications/{id}/read`, `PATCH /api/notifications/read-all`,
+  `GET|POST /api/boards/{id}/members`, `DELETE /api/boards/{id}/members/{user_id}`,
+  `GET /api/attachments/{id}/url`.
+  **Rationale:** One identifier column keeps register/login matching simple;
+  the other endpoints close gaps the first version left open.
+  **Example:** `POST /api/boards/b_1/members { "user_id": "u_2" }` →
+  `{ "data": { "board_id": "b_1", "user_id": "u_2" } }`.

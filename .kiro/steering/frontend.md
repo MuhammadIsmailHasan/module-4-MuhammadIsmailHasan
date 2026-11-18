@@ -86,8 +86,9 @@ overriding any looser prose description elsewhere.
   **Example:** `<CommentThread sort={sort} onSortChange={setSort}/>` renders
   the toggle; clicking "Reply" only shows on `comment.parentId === null`.
 
-- **Rule:** The **"create new card"** action renders only on comments whose
-  `author.role === "manager"` — it does not depend on `is_priority`.
+- **Rule:** The **"create new card"** action renders only where the API
+  sets `can_create_card` (author is a manager and the viewer is a supervisor,
+  manager, or admin) — it does not depend on `is_priority`.
   **Rationale:** Keeps the two signals visually and logically separate: a
   priority badge can appear on anyone's comment, the create-card button only
   on a manager's.
@@ -105,9 +106,11 @@ overriding any looser prose description elsewhere.
 
 - **Rule:** Clicking an attachment (link or file) opens it with
   `target="_blank" rel="noopener noreferrer"` — there is no in-app preview
-  or viewer modal.
-  **Rationale:** Matches the agreed behavior exactly, and avoids building a
-  file-preview component for PDF/Word/RAR that isn't needed.
+  or viewer modal. A file attachment's `href` is the short-lived signed
+  `file_url` from the API; if it has expired, the client calls
+  `GET /api/attachments/{id}/url` for a fresh one before opening.
+  **Rationale:** Matches the agreed behavior, and keeps file access behind the
+  same board-visibility checks as the card.
   **Example:** `<a href={attachment.url} target="_blank" rel="noopener noreferrer">{attachment.name}</a>`.
 
 - **Rule:** The subtask checklist renders as a flat list of checkboxes with
