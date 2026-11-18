@@ -27,5 +27,18 @@
 ### Impact
 - Requirements: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15 (all but 14 and 16).
 - Design: data model, access control, attachments, ordering, auth, endpoints, correctness properties.
-- Tasks: `tasks.md` not yet created; generate it from V2.
+- Tasks: `tasks.md` created from V2 (22 task groups).
 - Open: login_identifier format, public-board interpretation of Decision A, and attachment delivery cost (see Open Questions in requirements). Root `specs/v2` created.
+
+## V3 - 2026-11-18
+### Changes
+- **API documentation (specification):** new Requirement 17. A hand-written `backend/openapi.yaml` and `backend/API.md` document every endpoint. Swagger UI at `/api/docs` is registered only when the new optional `APP_ENV` is `development` or `testing`; it defaults to `production` and is hidden there.
+- **Design:** new `APP_ENV` variable, `app/docs.py`, an "API Documentation" section, Properties 37 and 38.
+- **Tasks:** new task group 23 (23.1 to 23.4).
+
+### Reason
+- The backend has no written API reference; the product owner asked for API.md and a Swagger page that production must not expose.
+
+### Impact
+- Requirements: 17 (new). Design: environment variables, backend layout, new section. Tasks: 23 (new). Code: not changed yet.
+

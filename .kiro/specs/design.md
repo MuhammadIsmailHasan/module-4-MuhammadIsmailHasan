@@ -77,14 +77,17 @@ backend/app/
     auth/ boards/ columns/ cards/ categories/ comments/
     notifications/ analytics/ users/     # each: routes.py service.py repository.py schema.py
   jobs/deadlines.py      # daily deadline notifications
+  docs.py                # register_docs(app): Swagger UI + openapi.yaml, only when APP_ENV is not production
 backend/tests/           # pytest + hypothesis, fake repositories
+backend/openapi.yaml     # OpenAPI 3 source of truth for the API reference
+backend/API.md           # human-readable reference, same endpoints as openapi.yaml
 ```
 
 Activity has no public blueprint of its own. Activity reads are exposed through the `cards` blueprint (`GET /api/cards/{id}/activity`) and the `boards` blueprint (`GET /api/boards/{id}/activity`). Writes go through `activity_repository.add(...)`, called by each service inside its own transaction. Board members are handled inside the `boards` blueprint (`board_service`, `board_repository`); attachments are a sub-resource of `cards`.
 
 ### Environment variables (listed in each app's `.env.example`, never a real `.env`)
 
-Backend: `DATABASE_URL`, `JWT_SECRET`, `ALLOWED_ORIGINS`, `FILE_URL_SECRET` (HMAC key for signed file URLs, separate from `JWT_SECRET`), `APP_TIMEZONE` (IANA name, for example `UTC`), `UPLOAD_DIR`. Frontend: `NEXT_PUBLIC_API_URL`. The app refuses to start when `ALLOWED_ORIGINS`, `JWT_SECRET`, `FILE_URL_SECRET`, or `APP_TIMEZONE` is missing, or when `ALLOWED_ORIGINS` contains `*`.
+Backend: `DATABASE_URL`, `JWT_SECRET`, `ALLOWED_ORIGINS`, `FILE_URL_SECRET` (HMAC key for signed file URLs, separate from `JWT_SECRET`), `APP_TIMEZONE` (IANA name, for example `UTC`), `UPLOAD_DIR`, `APP_ENV` (`development`, `testing`, or `production`; optional, defaults to `production`; controls API documentation routes, see Requirement 17). Frontend: `NEXT_PUBLIC_API_URL`. The app refuses to start when `ALLOWED_ORIGINS`, `JWT_SECRET`, `FILE_URL_SECRET`, or `APP_TIMEZONE` is missing, or when `ALLOWED_ORIGINS` contains `*`.
 
 ### Frontend layout
 
@@ -682,3 +685,21 @@ Unresolved Open Questions carried from `requirements.md`:
 1. `login_identifier` format: the design applies trim, non-empty, 255 maximum, and case-insensitive uniqueness only.
 2. Attachment delivery cost: signed URLs add a signing module, a file route, and a re-issue endpoint; the owner of the estimate has not confirmed the cost.
 3. Decision A interpretation: the design keeps public boards readable by every signed-in user, pending product owner confirmation.
+
+## API Documentation (Requirement 17)
+
+- **Source of truth:** a hand-written `backend/openapi.yaml` (OpenAPI 3.0). It is written by hand, not generated from code, so route files stay free of doc decorators and the blueprint layering is unchanged. A drift test keeps it honest.
+- **Swagger UI:** the `flask-swagger-ui` package serves the UI at `/api/docs` and bundles its own assets, so no CDN is needed. `app/docs.py` exposes `register_docs(app)`; the factory calls it, and it registers nothing unless `APP_ENV` is `development` or `testing`. `/api/docs/openapi.yaml` serves the raw file from the same condition.
+- **Production safety:** `APP_ENV` defaults to `production`, so a missing variable fails closed (docs hidden). The docs routes are not registered at all in production, so the generic 404 handler returns the Envelope.
+- **API.md:** a Markdown reference (Envelope, error codes, role matrix, per-blueprint endpoint tables with example JSON) kept in sync with `openapi.yaml` by hand and by review.
+- **Security scheme:** `bearerAuth` (HTTP bearer JWT) is declared once and referenced by every protected operation; public operations (auth register/login/logout, Guest-readable GETs, the signature-gated file route) declare `security: []` or an optional Token.
+- **Drift test:** parse `openapi.yaml`, convert Flask rules (`<id>`) to `{id}`, and compare the set of `(method, path)` pairs with `app.url_map` excluding `static` and the docs routes.
+
+### Property 37: Documentation matches the routes
+For any registered `/api` route, the OpenAPI document contains the same method and path, and no documented operation lacks a registered route.
+**Validates: Requirements 17.1, 17.7**
+
+### Property 38: Documentation hidden in production
+For `APP_ENV` equal to `production` or unset, `GET /api/docs` and `GET /api/docs/openapi.yaml` return 404 with the Envelope; for `development` and `testing` they return 200.
+**Validates: Requirements 17.3, 17.4, 17.5, 17.8**
+
