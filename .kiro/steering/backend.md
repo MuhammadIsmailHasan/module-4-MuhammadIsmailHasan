@@ -135,3 +135,17 @@ inclusion: always
   **Rationale:** The unread count in the inbox is only meaningful if it can go
   down.
   **Example:** marking another user's notification read returns `404`.
+
+- **Rule:** Every blueprint is a `flask_smorest.Blueprint` registered on one
+  `Api` instance. Request bodies and query strings are validated with
+  `@blp.arguments(Schema)`, and every success response is declared with
+  `@blp.response(status, EnvelopeSchema)` where the schema is built from the
+  blueprint's marshmallow classes in `schema.py` wrapped by the shared
+  envelope (`status`, `message`, `data`). The OpenAPI document is generated
+  from those declarations, never written by hand. Validation failures map to
+  `400 VALIDATION_ERROR` (never smorest's default `422`), and every error
+  still renders the shared error envelope.
+  **Rationale:** One declaration per endpoint drives validation, serialization,
+  and documentation, so the three cannot drift apart.
+  **Example:** `@blp.post("/cards")`, `@blp.arguments(CardCreateSchema)`,
+  `@blp.response(201, envelope(CardSchema))` on `POST /api/boards/{id}/cards`.

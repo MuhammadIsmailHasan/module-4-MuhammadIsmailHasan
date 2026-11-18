@@ -11,15 +11,19 @@ inclusion: always
   of each domain inventing its own.
   **Example:** `PATCH /api/cards/{id}/move` for a drag-and-drop position change.
 
-- **Rule:** Every successful response is `{ "data": <payload> }` — a single
-  object, a list, or `null`. Every error response is
-  `{ "error": { "code": string, "message": string } }`, with a matching HTTP
-  status (`400`, `401`, `403`, `404`, `409`).
-  **Rationale:** One envelope on both the success and the error path means the
-  frontend's API client has exactly one place that unwraps a response or
-  throws — it never has to guess the shape per endpoint.
-  **Example:** `GET /api/cards/{id}` → `200 { "data": { "id": "...", "title": "..." } }`;
-  a missing comment body → `400 { "error": { "code": "VALIDATION_ERROR", "message": "content is required" } }`.
+- **Rule:** Every response carries a top-level `status` (the HTTP status code,
+  integer) and a human-readable `message` (string). A success is
+  `{ "status": 200, "message": "...", "data": <payload> }` where the payload is
+  a single object, a list, or `null`. An error is
+  `{ "status": 404, "message": "...", "error": { "code": string, "message": string } }`
+  with a matching HTTP status (`400`, `401`, `403`, `404`, `405`, `409`, `500`); `error.message`
+  repeats the top-level `message`.
+  **Rationale:** One envelope on both paths means the frontend's API client has
+  exactly one place that unwraps a response or throws, and the body alone says
+  what happened without reading the HTTP line. Keeping `error.code` and
+  `error.message` leaves existing error handling intact.
+  **Example:** `GET /api/cards/{id}` → `200 { "status": 200, "message": "Card retrieved", "data": { "id": "...", "title": "..." } }`;
+  a missing comment body → `400 { "status": 400, "message": "content is required", "error": { "code": "VALIDATION_ERROR", "message": "content is required" } }`.
 
 - **Rule:** List endpoints that back a search/filter UI accept `?search=` and
   `?filter[<field>]=` query params.

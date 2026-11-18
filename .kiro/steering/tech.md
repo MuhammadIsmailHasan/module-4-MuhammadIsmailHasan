@@ -4,7 +4,7 @@ inclusion: always
 
 # Tech Steering — Stack & Conventions
 
-- **Rule:** Backend = Flask + SQLAlchemy, organized by blueprint; frontend =
+- **Rule:** Backend = Flask + SQLAlchemy + flask-smorest (marshmallow schemas, generated OpenAPI), organized by blueprint; frontend =
   Next.js (App Router) + TypeScript.
   **Rationale:** One domain, one blueprint, one set of pages — a consistent
   shape that stays easy to navigate as more domains get added.

@@ -12,7 +12,7 @@ inclusion: always
   unit-testable, every raw query lives in exactly one place per domain, and
   (de)serialization/validation has its own home.
   **Example:** `routes.py` calls `card_service.move_card(...)`, which calls
-  `card_repository.get_by_id(...)`; `schema.py` defines `CardCreateSchema`.
+  `card_repository.get_by_id(...)`; `schema.py` defines the marshmallow `CardCreateSchema` and `CardSchema`.
 
 - **Rule:** Shared, reusable frontend primitives live only in
   `components/shared/` (`BaseButton`, `BaseBadge`, `BaseModal`); feature pages
