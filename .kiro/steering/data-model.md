@@ -7,7 +7,8 @@ inclusion: always
 - **Rule:** Core entities are `User, Board, Column, Card, Category, Subtask,
   Comment, ActivityLog, Notification, Attachment`; every entity has
   `id (UUID)`, `created_at`, `updated_at`; `Board` and `Card` additionally have
-  `deleted_at` and `archived_at`.
+  `deleted_at` and `archived_at`. The one exception is `ActivityLog`, which has
+  `created_at` only (see the append-only rule below).
   **Rationale:** One shared shape simplifies serialization and gives every
   entity an audit trail.
   **Example:**
@@ -80,3 +81,26 @@ inclusion: always
   fields (priority, dates, attachments, subtasks, category, assignee).
   **Example:** `progress = db.Column(db.Integer, nullable=True)` added in a
   later migration, not the first one.
+
+- **Rule:** `Board.owner_id` is a nullable FK to `User` (the supervisor who
+  owns the board). Supervisor analytics access and board-ownership checks key
+  off it.
+  **Rationale:** "A supervisor sees analytics only for boards they own" needs
+  a real column, not an inferred relationship.
+  **Example:** `owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey("user.id"), nullable=True)`.
+
+- **Rule:** `Notification` has a `notify_date` (Date) and a unique constraint
+  on `(user_id, card_id, type, notify_date)`.
+  **Rationale:** The deadline job can run more than once a day (retries,
+  restarts); the constraint makes reruns insert nothing new instead of
+  notifying an assignee twice.
+  **Example:** `db.UniqueConstraint("user_id", "card_id", "type", "notify_date")`.
+
+- **Rule:** When averaging `order` values leaves a gap below `1e-6` between
+  neighbours, the move service renumbers that column's cards as `1.0, 2.0, ...`
+  in the same transaction.
+  **Rationale:** Float averaging runs out of precision after roughly 50
+  consecutive drops into the same gap; a rare in-column renumber keeps the
+  Float-order approach working.
+  **Example:** dropping between `1.0` and `1.0000005` triggers a renumber, then
+  the card is placed at the midpoint of its new neighbours.
