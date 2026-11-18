@@ -36,3 +36,13 @@ Versions match `.kiro/specs/CHANGELOG.md`. Each folder holds requirement domains
 ### Impact
 - Breaking: the response body shape changes from `{ data }` to `{ status, message, data }`; 422 validation errors are mapped to 400.
 
+
+## V5 - 2026-11-18
+### Changes
+- `v5/` holds the changed domains: `00-OVERVIEW` (Decision F), `13-API-CONVENTIONS` (relationship and no-`to_dict` rules), `14-NON-FUNCTIONAL` (constant query count), `15-TESTING` (query-count and `lazy="raise"` tests).
+
+### Reason
+- Keep list endpoints inside the 300 ms p95 target and keep serialization out of models.
+
+### Impact
+- No API or schema change; no migration.
