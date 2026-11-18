@@ -434,23 +434,23 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 24.4 Checkpoint - Run the full pytest suite
     - Run the full backend `pytest` suite and ensure all tests pass, ask the user if questions arise.
 
-- [ ] 25. Add model relationships and eager loading
-  - [ ] 25.1 Add the five relationships to the models
+- [x] 25. Add model relationships and eager loading
+  - [x] 25.1 Add the five relationships to the models
     - Declare `Board.columns`, `Board.members`, `Card.subtasks`, `Card.attachments`, and `Comment.replies`, each with its inverse (`Column.board`, `BoardMember.board`, `Subtask.card`, `Attachment.card`, `Comment.parent` with `remote_side`) through `back_populates` (never `backref`), `lazy="raise"`, the `order_by` from the design's relationship table, and no `cascade`.
     - Declare no other relationships; `Card.assignee_id`, `Card.category_id`, `Comment.author_id`, `Board.owner_id`, and `Card.column_id` stay plain foreign-key columns.
     - Remove any `to_dict` or other serialization method still on a model; serialization stays in the marshmallow schemas.
     - Add no migration: this is a mapper-level change only.
     - _Requirements: 13.16, 13.17_
-  - [ ] 25.2 Load related rows in the repositories
+  - [x] 25.2 Load related rows in the repositories
     - Per the design's repository loading table: `board_repository.get_detail` uses `selectinload(Board.columns)`; `card_repository.list_for_board` and `get_detail` use `selectinload(Card.subtasks)` and `selectinload(Card.attachments)`; `comment_repository.list_for_card` uses `selectinload(Comment.replies)` and selects the author role in the same joined query.
     - Fix every service, schema, and route that now raises because it read an unloaded relationship; services and schemas must trigger no lazy load, and the board cards list must run a constant number of queries.
     - _Requirements: 13.18, 14.12_
-  - [ ]* 25.3 Write tests for relationships and constant query count
+  - [x]* 25.3 Write tests for relationships and constant query count
     - **Property 39: Constant query count for list endpoints**: count SQL statements with a `before_cursor_execute` listener for a board with 5 cards and a board with 50 cards (each with subtasks and attachments), and assert the counts are equal; repeat for the comment listing.
     - Add the `lazy="raise"` test: access an unloaded `Card.subtasks`, `Board.columns`, `Board.members`, `Card.attachments`, and `Comment.replies` and assert `sqlalchemy.exc.InvalidRequestError`, then assert the access succeeds when the repository loads it.
     - Add a static check: no model defines `to_dict`, and each of the five relationships has `lazy="raise"`, `back_populates`, and no `cascade`.
     - **Validates: Requirements 13.16, 13.17, 13.18, 14.12, 15.8, 15.9**
-  - [ ] 25.4 Checkpoint - Run the full pytest suite
+  - [x] 25.4 Checkpoint - Run the full pytest suite
     - Run the full backend `pytest` suite and ensure all tests pass, ask the user if questions arise.
 
 ## Notes
