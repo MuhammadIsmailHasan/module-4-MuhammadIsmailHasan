@@ -2,7 +2,9 @@
 
 ## Overview
 
-Version V2. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+Version V4. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+
+V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13, plain `flask.Blueprint`, `{ "data": ... }` bodies) to flask-smorest with marshmallow schemas and the `status`/`message` envelope (Decision E). Group 24 runs before the envelope property test 14.4, before the frontend (group 15 onward), and before the API documentation group 23. Group 23 is rewritten to document the generated OpenAPI instead of a hand-written `openapi.yaml`. Existing checkbox states are unchanged.
 
 ## Tasks
 
@@ -289,9 +291,10 @@ Version V2. Derived from `requirements.md` and `design.md` in this folder. Backe
     - Cover {guest, member, supervisor owner, supervisor BoardMember, supervisor unrelated, manager, admin} against {public, private} for columns, cards, categories, comments, activity, search, and attachments, including an unrelated Supervisor getting 403 on public-board writes and an unrelated Member getting 403 on a private board.
     - _Requirements: 15.4, 15.6_
   - [ ]* 14.4 Write property test for the response envelope
-    - Run against the Flask test client for every registered route.
+    - Run against the Flask test client for every registered `/api` route (excluding the documentation routes and the successful bytes of the signed file route), including unknown routes and wrong methods; requires group 24.
+    - Assert success bodies are exactly `{ status, message, data }` and error bodies are exactly `{ status, message, error: { code, message } }`, with `status` equal to the HTTP status, `error.message` equal to `message`, and validation failures returning 400 `VALIDATION_ERROR`, never 422.
     - **Property 36: Response envelope**
-    - **Validates: Requirements 13.2, 13.3, 13.4**
+    - **Validates: Requirements 13.2, 13.3, 13.4, 13.11, 13.13**
   - [x]* 14.5 Write static checks
     - Assert no `.query` call outside a `repository.py` file, and that `.env.example` files list the required variables and no real `.env` is tracked.
     - _Requirements: 13.7, 13.9, 15.4_
@@ -389,27 +392,52 @@ Version V2. Derived from `requirements.md` and `design.md` in this folder. Backe
     - Render the per-card progress meter, views counter, and Overview, Notes, Questions tabs in `CardModal` as in the prototype, behind a feature flag, using only token variables.
     - _Requirements: 16.2, 16.3_
 
-- [ ] 23. API documentation (Swagger and API.md)
-  - [ ] 23.1 Add the `APP_ENV` setting and the gated Swagger UI
-    - Add `flask-swagger-ui` and `pyyaml` to `backend/requirements.txt`; add `APP_ENV=` to `backend/.env.example`; read `APP_ENV` in `create_app()` (default `production`, no startup failure when missing).
-    - Create `backend/app/docs.py` with `register_docs(app)` that serves Swagger UI at `/api/docs` and the raw file at `/api/docs/openapi.yaml` only when `APP_ENV` is `development` or `testing`; call it from the factory; set `APP_ENV=testing` in the default test app and use `production` in the production test.
-    - _Requirements: 17.3, 17.4, 17.5, 17.6_
-  - [ ] 23.2 Write `backend/openapi.yaml`
-    - Document every route registered by the blueprints: parameters, request bodies, success payloads in the Envelope, `bearerAuth`, roles in each description, and the 400/401/403/404/409 error responses; define shared `Error`, `User`, `Board`, `Column`, `Card`, `Subtask`, `Attachment`, `Category`, `Comment`, `Notification`, `Activity`, and `Analytics` schemas.
-    - _Requirements: 17.1_
+- [ ] 23. API documentation (generated OpenAPI, Swagger UI, API.md)
+  - [ ] 23.1 Finish the `APP_ENV` gating and remove the hand-written documentation stack
+    - Confirm `APP_ENV=` is listed in `backend/.env.example` and that `create_app()` defaults it to `production` without failing when it is missing.
+    - Confirm `OPENAPI_URL_PREFIX`, `OPENAPI_JSON_PATH`, `OPENAPI_SWAGGER_UI_PATH`, and `OPENAPI_SWAGGER_UI_URL` are set only when `APP_ENV` is `development` or `testing`, so `/api/docs` and `/api/openapi.json` return the 404 envelope otherwise; use `APP_ENV=testing` in the default test app and `production` in the production test.
+    - Ensure `backend/requirements.txt` has no `flask-swagger-ui` or `pyyaml`, and that no `backend/app/docs.py` or `backend/openapi.yaml` exists.
+    - Exclude the documentation routes from the 401/403 sweep in task 14.1 (they are read-only, public, and carry no secrets).
+    - _Requirements: 17.4, 17.5, 17.6, 17.7, 17.10_
+  - [ ] 23.2 Complete the generated OpenAPI metadata and export it
+    - On every endpoint add `@blp.doc` summary and description (roles allowed, access rule), a tag per blueprint, request and response examples where useful, `security=[{"bearerAuth": []}]` on protected operations, and the 400/401/403/404/409 error responses (`@blp.alt_response` or `Api.ERROR_SCHEMA`); give every marshmallow field a description so the generated document is complete.
+    - Run `flask export-openapi` and commit the generated `backend/openapi.json`; never edit it by hand.
+    - _Requirements: 17.1, 17.3_
   - [ ] 23.3 Write `backend/API.md`
-    - Cover the Envelope, error codes, authentication, the role matrix, signed file URLs, ordering and move semantics, then one table plus an example request and response per blueprint; state how to enable Swagger locally (`APP_ENV=development`) and that it is off in production.
+    - Cover the envelope (`status`, `message`), error codes, authentication, the role matrix, signed file URLs, ordering and move semantics, then one table plus an example request and response per blueprint group; state that the generated `openapi.json` is the source of truth and how to enable Swagger locally (`APP_ENV=development`), and that it is off in production.
     - _Requirements: 17.2_
   - [ ]* 23.4 Write the drift and production-gate tests
-    - **Property 37: Documentation matches the routes**
-    - **Property 38: Documentation hidden in production**
-    - Exclude `/api/docs*` routes from the 401/403 sweep in task 14.1.
-    - **Validates: Requirements 17.1, 17.3, 17.4, 17.5, 17.7, 17.8**
+    - **Property 37: Every route is documented** (iterate `app.url_map` under `/api`, excluding `static` and the documentation routes, and assert each method and path has an operation in `api.spec.to_dict()["paths"]`, and the reverse)
+    - **Property 38: Documentation hidden outside development and testing** (`/api/docs` and `/api/openapi.json` return 200 for `development` and `testing`, and the 404 envelope for `production`, unset, or any other value)
+    - **Validates: Requirements 17.1, 17.4, 17.5, 17.6, 17.8, 17.9**
+
+- [ ] 24. Migrate the implemented backend to flask-smorest and the status/message envelope
+  - [ ] 24.1 Add flask-smorest, the envelope, and the error mapping
+    - Add `flask-smorest` and `marshmallow` to `backend/requirements.txt`.
+    - Create `backend/app/api.py` with `EnvelopeApi(flask_smorest.Api)`: register every blueprint on it, declare the `bearerAuth` scheme once, and map errors to `{ status, message, error: { code, message } }`: `AppError` to its status and code, smorest/webargs 422 to 400 `VALIDATION_ERROR` (first field message), 404 `NOT_FOUND`, 405 `METHOD_NOT_ALLOWED`, any other exception to 500 `INTERNAL_ERROR` with a generic message, and the JWT missing, invalid, and expired callbacks to the 401 envelope. Set `Api.ERROR_SCHEMA` to the error envelope schema. Remove the old app-level error handler.
+    - In `api.py`, set `API_TITLE`, `API_VERSION`, `OPENAPI_VERSION`, and, only when `APP_ENV` is `development` or `testing`, the `OPENAPI_*` keys for `/api/openapi.json` and `/api/docs`; add the `flask export-openapi` command that writes `backend/openapi.json` from `api.spec.to_dict()` under any `APP_ENV`.
+    - Create `backend/app/common/envelope.py` with `envelope(DataSchema, many=False)` (cached `<Name>Envelope` / `<Name>ListEnvelope` schema with `status`, `message`, `data`), `NullEnvelopeSchema`, and `ErrorEnvelopeSchema`.
+    - Change `ok(data, message=None, status=200)` in `app/common/responses.py` to return `{ status, message, data }` with the HTTP reason phrase as the default message; update error rendering in `app/common/errors.py` handling to emit `status` and `message`.
+    - Keep `AppError` classes free of Flask imports; keep all URLs, status codes, and role rules unchanged.
+    - _Requirements: 13.2, 13.3, 13.4, 13.11, 13.12, 13.13, 13.15, 17.3, 17.4, 17.5, 17.6, 17.10_
+  - [ ] 24.2 Convert each blueprint to flask-smorest with marshmallow schemas
+    - For each of `auth, boards (including members), columns, cards (including subtasks, attachments, and the board cards search/filter), categories, comments, notifications, analytics, users, activity (card and board activity reads)`: replace `flask.Blueprint` with `flask_smorest.Blueprint`; turn `schema.py` into marshmallow request, query, and payload schemas; validate with `@blp.arguments(Schema)` or `@blp.arguments(Schema, location="query")`; declare each success response with `@blp.response(status, envelope(PayloadSchema))` (`NullEnvelopeSchema` for logout); mark protected operations with `@blp.doc(security=[{"bearerAuth": []}])`; return `ok(dto, "<descriptive message>", status)` with the same status as the declaration.
+    - Keep data-dependent rules (uniqueness, access, ordering, ownership) in the service; `service.py` and `repository.py` import none of `flask`, `flask_smorest`, or `marshmallow`. Keep `filter[<field>]` parsing and the `400` for an unsupported filter key, and the signed file route returning raw bytes on success and the error envelope on failure.
+    - Keep every URL, HTTP status code, and role rule unchanged.
+    - _Requirements: 13.2, 13.3, 13.12, 13.13, 13.14, 13.15_
+  - [ ] 24.3 Update the existing tests and add envelope tests
+    - Update the 36 existing pytest tests that assert `{ "data": ... }` or `{ "error": ... }` bodies to the new `{ status, message, data }` and `{ status, message, error }` shapes; change no expected HTTP status.
+    - Add tests that: every success body carries `status` equal to the HTTP status and a non-empty `message`; every error body carries `status`, `message`, and `error.message` equal to `message`; body and query validation failures return 400 `VALIDATION_ERROR` and never 422; an unknown route returns the 404 envelope, a wrong method returns the 405 envelope, a forced unhandled exception returns the 500 envelope with a generic message, and a missing or invalid JWT returns the 401 envelope; the signed file route returns the error envelope on failure.
+    - _Requirements: 13.2, 13.3, 13.4, 13.11, 13.13_
+  - [ ] 24.4 Checkpoint - Run the full pytest suite
+    - Run the full backend `pytest` suite and ensure all tests pass, ask the user if questions arise.
 
 ## Notes
 
 - Google OAuth is out of scope and has no task.
-- Task 23 depends only on the finished backend (tasks 1 to 13) and may run before the frontend tasks; its wave numbers are listed last only for numbering.
+- Group 24 (flask-smorest and envelope migration) must be done before the frontend group 15, before group 23 (generated documentation), and before test 14.4 (envelope property test). The frontend `lib/api.ts` (task 15.3) unwraps the new `{ status, message, data }` envelope.
+- Tasks 1 to 13 were built as plain `flask.Blueprint` code with `{ "data": ... }` bodies; their checkboxes stay ticked, and group 24 changes the implementation without changing URLs, status codes, or role rules.
+- Task 23 depends on group 24 (it documents the generated OpenAPI); it is listed last only for numbering.
 - Tasks marked with `*` are optional test tasks.
 - Services are tested against fake repositories; no `Model.query` call appears outside a `repository.py`.
 - Task 5.8 uses `app/common/ordering.py`, which task 6.1 creates; implement 6.1 before 5.8.
@@ -432,24 +460,29 @@ Version V2. Derived from `requirements.md` and `design.md` in this folder. Backe
     { "id": 9, "tasks": ["5.4", "5.5", "5.6", "5.8", "5.10", "6.3", "7.2", "8.1", "9.1", "12.1"] },
     { "id": 10, "tasks": ["5.7", "5.9", "5.11", "5.12", "6.4", "8.2", "8.3", "9.2", "9.3", "10.1", "10.2", "11.1", "12.2", "13.1"] },
     { "id": 11, "tasks": ["6.5", "8.4", "8.5", "10.3", "11.2", "13.2"] },
-    { "id": 12, "tasks": ["14.1", "14.2", "14.3", "14.4", "14.5"] },
-    { "id": 13, "tasks": ["14.6"] },
-    { "id": 14, "tasks": ["15.1"] },
-    { "id": 15, "tasks": ["15.2", "15.3"] },
-    { "id": 16, "tasks": ["15.4", "15.5"] },
-    { "id": 17, "tasks": ["16.1"] },
-    { "id": 18, "tasks": ["16.2", "17.1"] },
-    { "id": 19, "tasks": ["17.2"] },
-    { "id": 20, "tasks": ["17.3", "18.1"] },
-    { "id": 21, "tasks": ["18.2", "18.3"] },
-    { "id": 22, "tasks": ["18.4", "19.1", "19.2"] },
-    { "id": 23, "tasks": ["19.3"] },
-    { "id": 24, "tasks": ["20.1", "20.2"] },
-    { "id": 25, "tasks": ["21.1"] },
-    { "id": 26, "tasks": ["22.1"] },
-    { "id": 27, "tasks": ["22.2"] },
-    { "id": 28, "tasks": ["23.1", "23.2"] },
-    { "id": 29, "tasks": ["23.3", "23.4"] }
+    { "id": 12, "tasks": ["24.1"] },
+    { "id": 13, "tasks": ["24.2"] },
+    { "id": 14, "tasks": ["24.3"] },
+    { "id": 15, "tasks": ["24.4"] },
+    { "id": 16, "tasks": ["14.1", "14.2", "14.3", "14.4", "14.5"] },
+    { "id": 17, "tasks": ["14.6"] },
+    { "id": 18, "tasks": ["15.1"] },
+    { "id": 19, "tasks": ["15.2", "15.3"] },
+    { "id": 20, "tasks": ["15.4", "15.5"] },
+    { "id": 21, "tasks": ["16.1"] },
+    { "id": 22, "tasks": ["16.2", "17.1"] },
+    { "id": 23, "tasks": ["17.2"] },
+    { "id": 24, "tasks": ["17.3", "18.1"] },
+    { "id": 25, "tasks": ["18.2", "18.3"] },
+    { "id": 26, "tasks": ["18.4", "19.1", "19.2"] },
+    { "id": 27, "tasks": ["19.3"] },
+    { "id": 28, "tasks": ["20.1", "20.2"] },
+    { "id": 29, "tasks": ["21.1"] },
+    { "id": 30, "tasks": ["22.1"] },
+    { "id": 31, "tasks": ["22.2"] },
+    { "id": 32, "tasks": ["23.1"] },
+    { "id": 33, "tasks": ["23.2"] },
+    { "id": 34, "tasks": ["23.3", "23.4"] }
   ]
 }
 ```
