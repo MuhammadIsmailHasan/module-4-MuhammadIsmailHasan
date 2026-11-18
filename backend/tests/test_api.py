@@ -45,7 +45,7 @@ def test_register_login_roundtrip(client):
     dup = client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "ANN@x.com", "password": "REMOVED"})
     assert dup.status_code == 409
     assert client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "z", "password": "short"}).status_code == 400
-    assert client.post("/api/auth/logout").get_json() == {"data": None}
+    assert client.post("/api/auth/logout").get_json() == {"status": 200, "message": "Logged out", "data": None}
 
 
 def test_token_expiry_24h(app, make_user):
@@ -374,7 +374,7 @@ def test_envelope_everywhere(world, app):
     c = world.client
     for path in ("/api/boards", "/api/nope", "/api/cards/not-a-uuid", f"/api/boards/{world.board['id']}"):
         body = c.get(path, headers=world.h["manager"]).get_json()
-        assert set(body) in ({"data"}, {"error"})
+        assert set(body) in ({"status", "message", "data"}, {"status", "message", "error"})
         if "error" in body:
             assert set(body["error"]) == {"code", "message"}
 
@@ -391,6 +391,22 @@ def test_no_query_outside_repository_and_env_not_tracked():
         if ".query" in p.read_text():
             offenders.append(str(p.relative_to(root)))
     assert offenders == []
+    banned = ("import flask", "from flask", "flask_smorest", "marshmallow")
+    layering = [
+        str(p.relative_to(root))
+        for p in (root / "app" / "blueprints").rglob("*.py")
+        if p.name in ("service.py", "repository.py") and any(b in p.read_text() for b in banned)
+    ]
+    # services/repositories stay free of Flask, smorest and marshmallow (only config access via current_app is allowed)
+    assert [x for x in layering if "from flask import current_app" not in (root / x).read_text()] == []
+    views = []
+    for p in (root / "app" / "blueprints").glob("*/routes.py"):
+        src = p.read_text()
+        for block in src.split("@bp.route(")[1:]:
+            head = block.split("\ndef ")[0]
+            if "@bp.response(" not in head and "/file" not in head:
+                views.append(f"{p.parent.name}: {head.splitlines()[0]}")
+    assert views == []
     example = (root / ".env.example").read_text()
     for var in ("DATABASE_URL", "JWT_SECRET", "ALLOWED_ORIGINS", "FILE_URL_SECRET", "APP_TIMEZONE", "UPLOAD_DIR"):
         assert var + "=" in example

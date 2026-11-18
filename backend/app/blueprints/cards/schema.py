@@ -1,87 +1,90 @@
-from app.common import clock
-from app.common.errors import ValidationError
-from app.common.http import iso, parse_date
-from app.common.signing import sign_file_url
+from marshmallow import fields, validate
 
-PRIORITIES = ("high", "medium", "low")
+from app.blueprints.activity.schema import ActivitySchema
+from app.blueprints.comments.schema import CommentSchema
+from app.common.fields import BaseSchema, Text
 
-
-def _title(value):
-    if not isinstance(value, str) or not value.strip():
-        raise ValidationError("title is required")
-    value = value.strip()
-    if len(value) > 255:
-        raise ValidationError("title must be at most 255 characters")
-    return value
+_priority = validate.OneOf(["high", "medium", "low"], error="priority must be high, medium or low")
 
 
-def validate_card_fields(data, partial):
-    """Return a dict of validated column values for the keys present in data."""
-    out = {}
-    if "title" in data or not partial:
-        out["title"] = _title(data.get("title"))
-    if "description" in data:
-        if data["description"] is not None and not isinstance(data["description"], str):
-            raise ValidationError("description must be text")
-        out["description"] = data["description"]
-    if "priority" in data:
-        if data["priority"] not in PRIORITIES:
-            raise ValidationError("priority must be high, medium or low")
-        out["priority"] = data["priority"]
-    for key in ("start_date", "end_date"):
-        if key in data:
-            out[key] = parse_date(data[key], key)
-    return out
+class _CardFields(BaseSchema):
+    description = fields.String(allow_none=True)
+    priority = fields.String(validate=_priority)
+    start_date = fields.Date(allow_none=True)
+    end_date = fields.Date(allow_none=True, metadata={"description": "Must be on or after start_date"})
+    category_id = fields.UUID(allow_none=True, metadata={"description": "Category of the same board"})
+    assignee_id = fields.UUID(allow_none=True)
 
 
-def check_dates(start, end):
-    if start is not None and end is not None and end < start:
-        raise ValidationError("end_date must be on or after start_date")
+class CreateCardSchema(_CardFields):
+    title = Text(required=True, max_length=255)
 
 
-def serialize_subtask(s):
-    return {"id": str(s.id), "card_id": str(s.card_id), "title": s.title, "is_done": s.is_done, "order": s.order}
+class UpdateCardSchema(_CardFields):
+    title = Text(max_length=255)
 
 
-def serialize_attachment(a, now=None):
-    data = {
-        "id": str(a.id),
-        "card_id": str(a.card_id),
-        "name": a.name,
-        "mime_type": a.mime_type,
-        "url": a.url,
-        "file_url": None,
-        "expires_at": None,
-    }
-    if a.file_path:
-        from datetime import datetime, timezone
-
-        path, exp = sign_file_url(a.id, now or clock.now())
-        data["file_url"] = path
-        data["expires_at"] = datetime.fromtimestamp(exp, timezone.utc).isoformat()
-    return data
+class MoveCardSchema(BaseSchema):
+    column_id = fields.UUID(required=True)
+    prev = fields.UUID(allow_none=True, metadata={"description": "Card above the drop position"})
+    next = fields.UUID(allow_none=True, metadata={"description": "Card below the drop position"})
 
 
-def serialize_card(card, viewer, subtasks=(), attachments=(), comments=None, activity=None):
-    data = {
-        "id": str(card.id),
-        "column_id": str(card.column_id),
-        "category_id": str(card.category_id) if card.category_id else None,
-        "assignee_id": str(card.assignee_id) if card.assignee_id else None,
-        "title": card.title,
-        "description": card.description,
-        "priority": card.priority,
-        "start_date": iso(card.start_date),
-        "end_date": iso(card.end_date),
-        "order": card.order,
-        "archived_at": iso(card.archived_at),
-        "subtasks": [serialize_subtask(s) for s in subtasks],
-        "attachments": [serialize_attachment(a) for a in attachments],
-    }
-    # Guests never get comments or activity.
-    if viewer is not None:
-        if comments is not None:
-            data["comments"] = comments
-        if activity is not None:
-            data["activity"] = activity
-    return data
+class CreateSubtaskSchema(BaseSchema):
+    title = Text(required=True, max_length=255)
+
+
+class UpdateSubtaskSchema(BaseSchema):
+    title = Text(max_length=255)
+    is_done = fields.Boolean(truthy={True}, falsy={False})
+    order = fields.Float()
+    prev = fields.UUID(allow_none=True)
+    next = fields.UUID(allow_none=True)
+
+
+class BoardCardsQuerySchema(BaseSchema):
+    search = fields.String(metadata={"description": "Case-insensitive match on title or description"})
+    filter_priority = fields.String(data_key="filter[priority]", validate=_priority)
+    filter_assignee = fields.UUID(data_key="filter[assignee]")
+    filter_category = fields.UUID(data_key="filter[category]")
+
+
+class SubtaskSchema(BaseSchema):
+    id = fields.UUID()
+    card_id = fields.UUID()
+    title = fields.String()
+    is_done = fields.Boolean()
+    order = fields.Float()
+
+
+class AttachmentSchema(BaseSchema):
+    id = fields.UUID()
+    card_id = fields.UUID()
+    name = fields.String()
+    mime_type = fields.String(allow_none=True)
+    url = fields.String(allow_none=True, metadata={"description": "Stored link, for link attachments"})
+    file_url = fields.String(allow_none=True, metadata={"description": "Signed URL valid 15 minutes, uploads only"})
+    expires_at = fields.String(allow_none=True)
+
+
+class AttachmentUrlSchema(BaseSchema):
+    file_url = fields.String(allow_none=True)
+    expires_at = fields.String(allow_none=True)
+
+
+class CardSchema(BaseSchema):
+    id = fields.UUID()
+    column_id = fields.UUID()
+    category_id = fields.UUID(allow_none=True)
+    assignee_id = fields.UUID(allow_none=True)
+    title = fields.String()
+    description = fields.String(allow_none=True)
+    priority = fields.String()
+    start_date = fields.String(allow_none=True)
+    end_date = fields.String(allow_none=True)
+    order = fields.Float()
+    archived_at = fields.String(allow_none=True)
+    subtasks = fields.List(fields.Nested(SubtaskSchema))
+    attachments = fields.List(fields.Nested(AttachmentSchema))
+    comments = fields.List(fields.Nested(CommentSchema), metadata={"description": "Omitted for Guests"})
+    activity = fields.List(fields.Nested(ActivitySchema), metadata={"description": "Omitted for Guests"})

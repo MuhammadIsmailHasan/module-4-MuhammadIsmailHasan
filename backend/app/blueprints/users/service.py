@@ -2,9 +2,8 @@ from argon2 import PasswordHasher
 
 from app.blueprints.activity import repository as activity
 from app.blueprints.auth import repository as auth_repo
-from app.blueprints.auth.schema import validate_register
 from app.blueprints.users import repository as repo
-from app.blueprints.users.schema import ROLES
+from app.blueprints.users.dto import ROLES
 from app.common.errors import Conflict, NotFound, ValidationError
 from app.common.ids import to_uuid
 from app.extensions import db
@@ -23,7 +22,7 @@ def _role(value):
 
 
 def create_user(actor, data):
-    full_name, login, password = validate_register(data)
+    full_name, login, password = data["full_name"], data["login_identifier"], data["password"]
     role = _role(data.get("role", "member"))
     if auth_repo.get_by_login(login):
         raise Conflict("login_identifier already registered")

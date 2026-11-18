@@ -7,3 +7,5 @@ argon2-cffi
 psycopg[binary]
 pytest
 hypothesis
+flask-smorest
+marshmallow

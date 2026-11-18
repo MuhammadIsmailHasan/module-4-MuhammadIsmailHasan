@@ -7,6 +7,7 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret-0REMOVED9abcdef0123")
 os.environ.setdefault("FILE_URL_SECRET", "test-file-secret-0REMOVED9abcdef01")
 os.environ.setdefault("APP_TIMEZONE", "UTC")
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["APP_ENV"] = "testing"
 
 from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
@@ -72,3 +73,16 @@ def auth(app):
         return {"Authorization": f"Bearer {issue_token(user.id, user.role)}"}
 
     return _auth
+
+
+@pytest.fixture
+def make_app(tmp_path):
+    """Factory for apps with a given APP_ENV (docs gating tests)."""
+    created = []
+
+    def _make(app_env):
+        app = create_app({"TESTING": True, "APP_ENV": app_env, "UPLOAD_DIR": str(tmp_path / "u")})
+        created.append(app)
+        return app
+
+    return _make

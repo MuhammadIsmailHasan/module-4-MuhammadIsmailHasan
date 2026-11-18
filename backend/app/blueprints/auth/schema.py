@@ -1,40 +1,30 @@
-from app.common.errors import ValidationError
+from marshmallow import fields
+
+from app.common.fields import BaseSchema, Text
 
 
-def _text(data, key, label):
-    value = data.get(key)
-    if not isinstance(value, str) or not value.strip():
-        raise ValidationError(f"{label} is required")
-    return value.strip()
+class RegisterSchema(BaseSchema):
+    full_name = Text(required=True, max_length=255)
+    login_identifier = Text(required=True, max_length=255, metadata={"description": "Case-insensitive, unique"})
+    password = Text(required=True, min_length=8, strip=False, metadata={"description": "At least 8 characters"})
 
 
-def validate_register(data):
-    full_name = _text(data, "full_name", "full_name")
-    login = _text(data, "login_identifier", "login_identifier")
-    if len(login) > 255:
-        raise ValidationError("login_identifier must be at most 255 characters")
-    password = data.get("password")
-    if not isinstance(password, str) or len(password) < 8:
-        raise ValidationError("password must be at least 8 characters")
-    return full_name, login, password
+class LoginSchema(BaseSchema):
+    login_identifier = Text(required=True, max_length=255)
+    password = Text(required=True, strip=False)
 
 
-def validate_login(data):
-    login = _text(data, "login_identifier", "login_identifier")
-    password = data.get("password")
-    if not isinstance(password, str) or not password:
-        raise ValidationError("password is required")
-    return login, password
+class UserSchema(BaseSchema):
+    id = fields.UUID()
+    full_name = fields.String()
+    login_identifier = fields.String()
+    avatar_url = fields.String(allow_none=True)
 
 
-def serialize_user(user):
-    return {
-        "id": str(user.id),
-        "full_name": user.full_name,
-        "login_identifier": user.login_identifier,
-        "avatar_url": user.avatar_url,
-    }
+class AdminUserSchema(UserSchema):
+    role = fields.String(metadata={"description": "member, supervisor, manager or admin"})
 
 
-def serialize_user_admin(user):
-    return {**serialize_user(user), "role": user.role}
+class AuthSchema(BaseSchema):
+    user = fields.Nested(UserSchema)
+    token = fields.String(metadata={"description": "JWT, valid 24 hours"})

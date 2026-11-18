@@ -21,6 +21,6 @@ BLUEPRINTS = (
 )
 
 
-def register_blueprints(app):
+def register_blueprints(api):
     for bp in BLUEPRINTS:
-        app.register_blueprint(bp, url_prefix="/api")
+        api.register_blueprint(bp, url_prefix="/api")

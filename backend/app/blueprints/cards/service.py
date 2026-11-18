@@ -9,7 +9,7 @@ from app.blueprints.auth import repository as users
 from app.blueprints.boards import repository as boards_repo
 from app.blueprints.boards import service as boards
 from app.blueprints.cards import repository as repo
-from app.blueprints.cards.schema import check_dates, serialize_attachment, serialize_card, validate_card_fields
+from app.blueprints.cards.dto import check_dates, serialize_attachment, serialize_card, validate_card_fields
 from app.blueprints.notifications import repository as notif_repo
 from app.common import clock, ordering
 from app.common.errors import Forbidden, NotFound, ValidationError

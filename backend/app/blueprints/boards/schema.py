@@ -1,37 +1,40 @@
-from app.common.errors import ValidationError
-from app.common.http import iso
+from marshmallow import fields, validate
 
-DEFAULT_COLUMNS = ("Todo", "In Progress", "Review", "Revision", "Done")
+from app.common.fields import BaseSchema, Text
 
-
-def clean_name(value):
-    if not isinstance(value, str) or not value.strip():
-        raise ValidationError("name is required")
-    value = value.strip()
-    if len(value) > 255:
-        raise ValidationError("name must be at most 255 characters")
-    return value
+_visibility = validate.OneOf(["public", "private"], error="visibility must be public or private")
 
 
-def clean_visibility(value):
-    if value not in ("public", "private"):
-        raise ValidationError("visibility must be public or private")
-    return value
+class CreateBoardSchema(BaseSchema):
+    name = Text(required=True, max_length=255)
+    visibility = fields.String(validate=_visibility, load_default="private")
 
 
-def serialize_column(col):
-    return {"id": str(col.id), "board_id": str(col.board_id), "name": col.name, "order": col.order}
+class UpdateBoardSchema(BaseSchema):
+    name = Text(max_length=255)
+    visibility = fields.String(validate=_visibility)
+    owner_id = fields.UUID(allow_none=True, metadata={"description": "Supervisor user id, or null to clear"})
 
 
-def serialize_board(board, columns=None, viewer=None):
-    # Guests never receive comments or activity_log; boards embed neither.
-    data = {
-        "id": str(board.id),
-        "name": board.name,
-        "visibility": board.visibility,
-        "owner_id": str(board.owner_id) if board.owner_id else None,
-        "archived_at": iso(board.archived_at),
-    }
-    if columns is not None:
-        data["columns"] = [serialize_column(c) for c in columns]
-    return data
+class AddMemberSchema(BaseSchema):
+    user_id = fields.UUID(required=True)
+
+
+class CreateColumnSchema(BaseSchema):
+    name = Text(required=True, max_length=255)
+
+
+class ColumnSchema(BaseSchema):
+    id = fields.UUID()
+    board_id = fields.UUID()
+    name = fields.String()
+    order = fields.Float()
+
+
+class BoardSchema(BaseSchema):
+    id = fields.UUID()
+    name = fields.String()
+    visibility = fields.String()
+    owner_id = fields.UUID(allow_none=True)
+    archived_at = fields.String(allow_none=True)
+    columns = fields.List(fields.Nested(ColumnSchema))

@@ -1,7 +1,7 @@
 from app.blueprints.activity import repository as activity
 from app.blueprints.auth import repository as users
 from app.blueprints.boards import repository as repo
-from app.blueprints.boards.schema import DEFAULT_COLUMNS, clean_name, clean_visibility
+from app.blueprints.boards.dto import DEFAULT_COLUMNS, clean_name, clean_visibility
 from app.common import clock
 from app.common.errors import Forbidden, NotFound, Unauthorized, ValidationError
 from app.common.ids import to_uuid

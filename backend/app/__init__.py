@@ -6,7 +6,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from app.common.auth import register_jwt_callbacks
-from app.common.errors import register_error_handlers
+from app.api import init_api, openapi_config
 from app.extensions import db, jwt, migrate
 
 REQUIRED_ENV = ("ALLOWED_ORIGINS", "JWT_SECRET", "FILE_URL_SECRET", "APP_TIMEZONE")
@@ -36,8 +36,10 @@ def _load_config(overrides):
         "APP_TIMEZONE": tz,
         "UPLOAD_DIR": env.get("UPLOAD_DIR") or "uploads",
         "ALLOWED_ORIGINS": origins,
+        "APP_ENV": (env.get("APP_ENV") or "production").strip().lower(),
     }
     config.update(overrides)
+    config.update(openapi_config(config["APP_ENV"]))
     return config
 
 
@@ -56,11 +58,11 @@ def create_app(config_overrides=None):
     migrate.init_app(app, db)
     jwt.init_app(app)
     register_jwt_callbacks(jwt)
-    register_error_handlers(app)
+    api = init_api(app)
 
     from app.blueprints import register_blueprints
 
-    register_blueprints(app)
+    register_blueprints(api)
 
     from app.seed import register_cli
 

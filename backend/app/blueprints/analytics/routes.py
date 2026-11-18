@@ -1,19 +1,26 @@
-from flask import Blueprint
+from flask_smorest import Blueprint
 
 from app.blueprints.analytics import service
+from app.blueprints.analytics.schema import AnalyticsSchema
 from app.common.auth import current_actor, require_role
+from app.common.docs import endpoint
+from app.common.envelope import envelope
 from app.common.responses import ok
 
-bp = Blueprint("analytics", __name__)
+bp = Blueprint("analytics", __name__, description="Board and cross-board summaries")
 
 
-@bp.get("/boards/<board_id>/analytics")
+@bp.route("/boards/<board_id>/analytics", methods=["GET"])
+@endpoint(bp, "Board analytics", "Manager on any board; Supervisor only as board owner. Member and Admin 403.")
 @require_role("member", "supervisor", "manager", "admin")
+@bp.response(200, envelope(AnalyticsSchema))
 def board_analytics(board_id):
-    return ok(service.board_analytics(current_actor(), board_id))
+    return ok(service.board_analytics(current_actor(), board_id), "Analytics retrieved")
 
 
-@bp.get("/analytics/boards")
+@bp.route("/analytics/boards", methods=["GET"])
+@endpoint(bp, "Cross-board analytics", "Manager only. One summary per board.", errors=(401, 403))
 @require_role("manager")
+@bp.response(200, envelope(AnalyticsSchema, many=True))
 def all_boards():
-    return ok(service.all_boards(current_actor()))
+    return ok(service.all_boards(current_actor()), "Analytics retrieved")

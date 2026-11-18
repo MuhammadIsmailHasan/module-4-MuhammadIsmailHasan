@@ -1,32 +1,45 @@
-from flask import Blueprint, request
+from flask_smorest import Blueprint
 
 from app.blueprints.comments import service
+from app.blueprints.comments.schema import CommentListQuerySchema, CommentSchema, CreateCommentSchema, ReplySchema
 from app.common.auth import current_actor, require_role
-from app.common.http import json_body
+from app.common.docs import endpoint
+from app.common.envelope import envelope
 from app.common.responses import ok
 
-bp = Blueprint("comments", __name__)
+bp = Blueprint("comments", __name__, description="Comments, replies and the priority flag")
 
 
-@bp.post("/cards/<card_id>/comments")
-def create(card_id):
-    c = service.create_comment(current_actor(), card_id, json_body())
-    return ok(service.serialize(c, current_actor().role, {}), 201)
+@bp.route("/cards/<card_id>/comments", methods=["POST"])
+@endpoint(bp, "Add a comment", "Member, Supervisor, Manager with board access. Admin 403. Guest: 403 on a public board, 401 on a private one.", auth="optional")
+@bp.arguments(CreateCommentSchema)
+@bp.response(201, envelope(ReplySchema))
+def create(data, card_id):
+    c = service.create_comment(current_actor(), card_id, data)
+    return ok(service.serialize(c, current_actor().role, {}), "Comment created", 201)
 
 
-@bp.post("/comments/<comment_id>/replies")
-def reply(comment_id):
-    c = service.reply(current_actor(), comment_id, json_body())
-    return ok(service.serialize(c, current_actor().role, {}), 201)
+@bp.route("/comments/<comment_id>/replies", methods=["POST"])
+@endpoint(bp, "Reply to a top-level comment", "400 when the target is itself a reply. Increments the parent's reply_count.", auth="optional")
+@bp.arguments(CreateCommentSchema)
+@bp.response(201, envelope(ReplySchema))
+def reply(data, comment_id):
+    c = service.reply(current_actor(), comment_id, data)
+    return ok(service.serialize(c, current_actor().role, {}), "Reply created", 201)
 
 
-@bp.patch("/comments/<comment_id>/priority")
+@bp.route("/comments/<comment_id>/priority", methods=["PATCH"])
+@endpoint(bp, "Toggle the priority flag", "Manager only.", errors=(401, 403, 404))
 @require_role("manager")
+@bp.response(200, envelope(ReplySchema))
 def priority(comment_id):
     c = service.toggle_priority(current_actor(), comment_id)
-    return ok(service.serialize(c, "manager", {}))
+    return ok(service.serialize(c, "manager", {}), "Priority toggled")
 
 
-@bp.get("/cards/<card_id>/comments")
-def list_comments(card_id):
-    return ok(service.list_for_request(current_actor(), card_id, request.args.get("sort")))
+@bp.route("/cards/<card_id>/comments", methods=["GET"])
+@endpoint(bp, "List comments", "Priority comments first, then latest or popular; replies oldest first. Guests get 403.", auth="optional")
+@bp.arguments(CommentListQuerySchema, location="query")
+@bp.response(200, envelope(CommentSchema, many=True))
+def list_comments(args, card_id):
+    return ok(service.list_for_request(current_actor(), card_id, args.get("sort")), "Comments retrieved")

@@ -59,6 +59,6 @@ def register_jwt_callbacks(jwt):
 
 
 def _envelope(message):
-    from app.common.errors import error_response
+    from app.api import render_error
 
-    return error_response(401, "UNAUTHORIZED", message)
+    return render_error(401, "UNAUTHORIZED", message)
