@@ -304,22 +304,22 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - _Requirements: 13.7, 13.9, 15.4_
   - [x] 14.6 Checkpoint - Ensure all tests pass, ask the user if questions arise
 
-- [ ] 15. Frontend scaffold, tokens, shared components, API client, auth pages
-  - [ ] 15.1 Scaffold the Next.js app and design tokens
+- [x] 15. Frontend scaffold, tokens, shared components, API client, auth pages
+  - [x] 15.1 Scaffold the Next.js app and design tokens
     - Initialize Next.js (App Router, TypeScript) in `frontend/`; confirm `frontend/.env.example` lists `NEXT_PUBLIC_API_URL`.
     - Create `styles/tokens.css` copying the prototype's `:root` custom properties (`--brand`, `--surface-*`, `--ink*`, `--space-*`, `--radius-*`, `--label-*`) from `design/kanban-prototype.html`; use only these variables for colors, spacing, and radii, with mobile-first base styles and `min-width` queries (960px breakpoint).
     - _Requirements: 14.5, 14.9_
-  - [ ] 15.2 Create shared components
+  - [x] 15.2 Create shared components
     - `BaseButton`, `BaseBadge`, `BaseModal` in `frontend/components/shared/`, styled only from `tokens.css`; all pages import these instead of raw `<button>`, badges, or modals.
     - _Requirements: 14.9, 14.10_
-  - [ ] 15.3 Create the API client and session handling
+  - [x] 15.3 Create the API client and session handling
     - `lib/api.ts`: adds the Bearer token, reads the boolean `status` of `{ status, message, data }` and returns `data` when it is true; when it is false, throws a typed `ApiError(httpStatus, code, message, details)` where `httpStatus` comes from the `Response`, `code` from `error.code`, `message` from the top-level `message`, and `details` from `error.details` (field to list of messages, present for `VALIDATION_ERROR`; forms map it onto their fields). A 401 clears the stored Token and redirects to login; logout calls `POST /api/auth/logout` then discards the Token.
     - _Requirements: 1.15, 1.16, 13.2, 13.3, 13.13_
-  - [ ] 15.4 Build login and register pages
+  - [x] 15.4 Build login and register pages
     - `app/(auth)/login/page.tsx` and `register/page.tsx` using an `AuthSplitLayout` Server Component: brand panel beside an elevated rounded form card on desktop; brand panel hidden at mobile width.
     - Forms submit `login_identifier` and password through the API client and store the returned Token.
     - _Requirements: 1.1, 1.2, 1.9, 1.10, 14.4, 14.5_
-  - [ ]* 15.5 Write component tests for shared components and auth pages
+  - [x]* 15.5 Write component tests for shared components and auth pages
     - Test that the auth form renders and shows server errors; test `BaseButton`, `BaseBadge`, `BaseModal` basics with React Testing Library.
     - _Requirements: 1.9, 14.10_
 
