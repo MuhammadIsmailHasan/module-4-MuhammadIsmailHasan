@@ -90,3 +90,13 @@ def make_app(tmp_path):
         return app
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def fast_password_hashing(monkeypatch):
+    """Cheap argon2 parameters keep property tests fast; hashes stay valid argon2."""
+    from argon2 import PasswordHasher
+
+    cheap = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
+    monkeypatch.setattr("app.blueprints.auth.service._hasher", cheap)
+    monkeypatch.setattr("app.blueprints.users.service._hasher", cheap)
