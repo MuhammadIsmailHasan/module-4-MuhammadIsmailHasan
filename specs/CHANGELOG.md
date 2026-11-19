@@ -46,3 +46,13 @@ Versions match `.kiro/specs/CHANGELOG.md`. Each folder holds requirement domains
 
 ### Impact
 - No API or schema change; no migration.
+
+## V6 - 2026-11-18
+### Changes
+- `v6/` holds the changed domains: `00-OVERVIEW` (Decision G, glossary), `01-AUTH`, `07-COMMENTS`, `10-ANALYTICS` (envelope examples), `13-API-CONVENTIONS` (boolean `status`, single `message`, `error.details`).
+
+### Reason
+- Remove the duplicated message on errors and make `status` a success flag.
+
+### Impact
+- Breaking: `status` changes from a number to a boolean; `error.message` is removed; validation errors add `error.details`.
