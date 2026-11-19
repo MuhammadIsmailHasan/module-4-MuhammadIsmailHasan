@@ -5,7 +5,7 @@ inclusion: always
 # Tech Steering — Stack & Conventions
 
 - **Rule:** Backend = Flask + SQLAlchemy + flask-smorest (marshmallow schemas, generated OpenAPI), organized by blueprint; frontend =
-  Next.js (App Router) + TypeScript.
+  Next.js (App Router) + TypeScript, styled with Tailwind CSS v4 and shadcn/ui.
   **Rationale:** One domain, one blueprint, one set of pages — a consistent
   shape that stays easy to navigate as more domains get added.
   **Example:** `app/blueprints/cards/routes.py`, `frontend/app/boards/[id]/page.tsx`.
@@ -59,3 +59,21 @@ inclusion: always
   **Example:** the card's description and activity list render server-side;
   the drag-and-drop board and the comment composer are Client Components.
   See `frontend.md` for the full rule.
+
+- **Rule:** The frontend is styled with Tailwind CSS and shadcn/ui primitives,
+  themed from the design tokens (`styles/tokens.css`) through the
+  Tailwind `@theme` block. Tailwind's default palette and arbitrary values
+  (`bg-[#fff]`, `p-[13px]`) are not used.
+  **Rationale:** Tailwind and Radix-based shadcn/ui give consistent utilities and
+  accessible behaviour, while one token file keeps the whole look in one place.
+  **Example:** `bg-brand text-white rounded-md` resolves to `var(--brand)` and
+  `var(--radius-md)`; `bg-[#2b5748]` is a violation.
+
+- **Rule:** The frontend adds `@radix-ui/react-popover` and `react-day-picker`
+  (as shadcn/ui `Popover` and `Calendar`) for the card modal's chips and date
+  range, and `@fontsource-variable/inter` for the self-hosted Inter font.
+  **Rationale:** Radix gives accessible popovers; react-day-picker is the
+  calendar shadcn/ui uses and supports range selection; a bundled font avoids a
+  third-party request.
+  **Example:** `BasePopover` wraps the shadcn `Popover`; feature code never
+  imports `components/ui/popover` directly.

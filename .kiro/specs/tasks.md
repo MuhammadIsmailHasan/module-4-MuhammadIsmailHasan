@@ -2,7 +2,7 @@
 
 ## Overview
 
-Version V6. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+Version V8. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
 
 V6 applies Decision G to the envelope. `status` is a boolean, true exactly when the HTTP status is 2xx; the numeric HTTP status travels on the HTTP line only. A success body is `{ "status": true, "message", "data" }`. An error body is `{ "status": false, "message", "error": { "code", "details"? } }`: the message text appears once at the top level, `error` has no `message` field, and `error.details` (field name to list of messages) appears only for `VALIDATION_ERROR`. Mutating endpoints pass a short descriptive message (for example "Card moved"); reads default to "OK". V6 edits tasks 1.2, 3.2, 8.1, 14.4, 15.3, 23.3, 24.1, 24.2, and 24.3 and the Notes. Existing checkbox states are unchanged; tasks already ticked that quote the old envelope are brought to the V6 shape by group 24.
 
@@ -37,7 +37,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 2.1 Create shared model base and the User, Board, BoardMember, Column models
     - Add `app/models/` modules with UUID primary keys (`default=uuid.uuid4`) and a `TimestampMixin` (`created_at`, `updated_at`).
     - `User`: `full_name`, `login_identifier` String(255) with a unique index on `lower(login_identifier)`, `password_hash`, `role` enum (member, supervisor, manager, admin), nullable `avatar_url`.
-    - `Board`: `name`, `visibility` enum (public, private; default private), nullable `owner_id` FK User, `deleted_at`, `archived_at`.
+    - `Board`: `name`, `visibility` enum (public, private; default private), nullable `owner_id` FK User, `deleted_at`, `archived_at`. (V8 round 5 adds a nullable `description`, task 31.1.)
     - `BoardMember`: `board_id`, `user_id`, unique `(board_id, user_id)`.
     - `Column`: `board_id`, `name`, Float `order`.
     - _Requirements: 1.6, 3.8, 11.1, 13.5, 13.6_
@@ -323,40 +323,40 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - Test that the auth form renders and shows server errors; test `BaseButton`, `BaseBadge`, `BaseModal` basics with React Testing Library.
     - _Requirements: 1.9, 14.10_
 
-- [ ] 16. App shell, sidebar, side panel
-  - [ ] 16.1 Build the app shell
+- [x] 16. App shell, sidebar, side panel
+  - [x] 16.1 Build the app shell
     - `app/(app)/layout.tsx` (Server Component) with `Sidebar` (Client): brand, nav with Inbox and Activity links, Boards list from `GET /api/boards` as the board switcher, team members, profile; Categories entry only for supervisor, manager, admin.
     - Below 960px the sidebar is an off-canvas drawer behind a scrim with its toggle in a persistent header; at 960px and above it stays visible.
     - Place primary actions (add card, open Inbox, switch Board) in the persistent header or bottom third on mobile.
     - _Requirements: 3.9, 6.11, 14.6, 14.7, 14.8, 14.11_
-  - [ ] 16.2 Build the side panel host
+  - [x] 16.2 Build the side panel host
     - `SidePanel` (Client) sliding in from the right with one shared `toggleSidePanel("inbox" | "activity")` called by the sidebar items and the header bell; render a view only when the API returned its data.
     - _Requirements: 8.6, 9.6, 9.7_
 
-- [ ] 17. Board view, filters, drag-and-drop
-  - [ ] 17.1 Build the board page and filter row
+- [x] 17. Board view, filters, drag-and-drop
+  - [x] 17.1 Build the board page and filter row
     - `app/(app)/boards/[id]/page.tsx` (Server Component) fetches columns and cards; `FilterRow` (Client) renders category chips from `GET /api/boards/{id}/categories` (no hard-coded list), re-fetches on board switch, and a search input; chip selection and search call `GET /api/boards/{id}/cards`.
     - _Requirements: 3.10, 6.9, 6.10, 12.5_
-  - [ ] 17.2 Implement drag-and-drop
+  - [x] 17.2 Implement drag-and-drop
     - `lib/ordering.ts` with pure `computeDropOrder` mirroring the backend rules (first `min - 1`, last `max + 1`, empty `1.0`, average otherwise).
     - `Board` (Client): placeholder at the drop target, FLIP animation of siblings, `PATCH /api/cards/{id}/move` on `dragend`, reconcile with the response, revert the card on failure; after refresh the card renders at its moved position.
     - Add a per-column "+ Add a card" action inside the thumb-reach rule.
     - _Requirements: 5.2, 5.3, 5.9, 14.8_
-  - [ ]* 17.3 Write fast-check test for drop order
+  - [x]* 17.3 Write fast-check test for drop order
     - Mirror Property 15 for `computeDropOrder`.
     - **Property 15: Drop order and rebalance (cards and subtasks)**
     - **Validates: Requirements 4.13, 5.1, 5.10, 5.11**
 
 - [ ] 18. Card modal, subtasks, attachments, comments
-  - [ ] 18.1 Build the two-pane card modal
+  - [x] 18.1 Build the two-pane card modal
     - `CardModal` (Client) using `BaseModal`: left pane has title, description (`CardDescription` Server Component), priority, dates, attachments, subtask checklist, and `ActivityList` (Server Component); right pane has the comment thread and composer.
     - "Save changes" commits the left pane without closing the modal or affecting the composer; omit the activity section and comment thread when the response omits `activity` or `comments`.
     - _Requirements: 4.20, 4.21, 7.20, 8.7, 14.11_
-  - [ ] 18.2 Build the subtask checklist and attachment list
+  - [x] 18.2 Build the subtask checklist and attachment list
     - `SubtaskChecklist` (Client): flat checkbox list, inline-editable titles, drag handle reorder, one-click toggle calling `PATCH /api/subtasks/{id}`.
     - `AttachmentList` (Client): links open with `target="_blank" rel="noopener noreferrer"`, no in-app preview; before opening, request a fresh URL from `GET /api/attachments/{id}/url` when the `exp` query value has passed or a request returns 403.
     - _Requirements: 4.14, 4.19, 4.22_
-  - [ ] 18.3 Build the comment thread and composer
+  - [x] 18.3 Build the comment thread and composer
     - `CommentThread` (Client): priority comments first with a priority indicator, remaining top-level comments under a Latest/Popular toggle with a reply-count badge, replies nested, Reply action only where `parentId === null`, no like button, "Create card" button only where `comment.canCreateCard`, a Manager-only "Mark as priority" action.
     - `CommentComposer` posts independently without closing the modal.
     - _Requirements: 7.17, 7.18, 7.19, 7.20_
@@ -365,12 +365,11 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - _Requirements: 4.19, 7.18, 7.19, 7.20, 8.7, 9.7_
 
 - [ ] 19. Inbox, activity panel, categories screen, members screen
-  - [ ] 19.1 Build inbox and activity panel contents
+  - [x] 19.1 Build inbox and activity panel contents
     - Inbox view lists `GET /api/notifications` with unread count and mark-read / read-all actions; Activity view lists the board feed from `GET /api/boards/{id}/activity`; neither polls or computes notifications client-side.
     - _Requirements: 8.6, 9.4, 9.5, 9.6, 9.8, 9.9_
-  - [ ] 19.2 Build categories and members screens
-    - `app/(app)/boards/[id]/categories/page.tsx` with `CategoriesScreen` (add, rename, recolor, delete) for supervisor, manager, admin, scoped to the current board.
-    - `app/(app)/boards/[id]/members/page.tsx` with `BoardMembersScreen` (add and remove) for the owner, Manager, Admin; `app/(app)/admin/users/page.tsx` for Admin user management.
+  - [ ] 19.2 Build the admin users screen
+    - `app/(app)/admin/users/page.tsx` for Admin user management. (V8 round 4: the Categories screen moved to task 30.8; the board members screen is replaced by the Sidebar Team members section, task 30.3.)
     - _Requirements: 1.7, 3.11, 3.14, 6.11_
   - [ ] 19.3 Checkpoint - Ensure all tests pass, ask the user if questions arise
 
@@ -455,8 +454,159 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 25.4 Checkpoint - Run the full pytest suite
     - Run the full backend `pytest` suite and ensure all tests pass, ask the user if questions arise.
 
+- [x] 26. Migrate the frontend styling to Tailwind CSS and shadcn/ui (Decision H)
+  - [x] 26.1 Install Tailwind CSS v4 and map the theme to the design tokens
+    - Install `tailwindcss`, `@tailwindcss/postcss`, `class-variance-authority`, `clsx`, `tailwind-merge`, `@radix-ui/react-dialog`, `@radix-ui/react-slot`, `tw-animate-css`; add `postcss.config.mjs` and `lib/utils.ts` (`cn`).
+    - Rewrite `styles/globals.css`: `@import "tailwindcss"`, an `@theme` block that clears the default palette and maps utilities to the tokens in `styles/tokens.css` (colors, `--space-*`, `--radius-*`, `--shadow-*`, `--breakpoint-lg: 60rem`), and shadcn variable aliases. Keep `tokens.css` as the single source; delete `shell.css`.
+    - _Requirements: 14.5, 14.9, 14.13, 14.14_
+  - [x] 26.2 Add the shadcn/ui primitives and rewrite the Base components as wrappers
+    - Add `components/ui/button.tsx`, `badge.tsx`, `dialog.tsx` themed from the tokens; rewrite `BaseButton`, `BaseBadge`, `BaseModal` as thin wrappers with unchanged props. Nothing outside `components/shared/` imports `components/ui/`.
+    - _Requirements: 14.10, 14.13, 14.15_
+  - [x] 26.3 Restyle the app with Tailwind utilities, following the prototype
+    - Replace the hand-written class names in the auth pages, app shell, sidebar, side panel, board, card tile, card modal, subtask checklist, attachment list, and comment thread. Keep the prototype's palette, layout, and interaction patterns; refine type scale, elevation, spacing rhythm, and motion (honoring `prefers-reduced-motion`).
+    - Base styles target 360 to 414 px; `lg:` adds the desktop layout; no `max-*` layout variants, no arbitrary values, no hex colors.
+    - _Requirements: 14.4, 14.5, 14.6, 14.7, 14.9, 14.13_
+  - [x] 26.4 Update tests and add the static styling check
+    - Update component tests to assert roles, names, and attributes instead of class names; add a test that scans `components/**` and `app/**` for hex colors, arbitrary-value utilities, and imports of `components/ui/` outside `components/shared/`.
+    - _Requirements: 14.9, 14.10_
+  - [x] 26.5 Checkpoint - Run typecheck, tests, and `next build`
+    - Ensure `tsc --noEmit`, `vitest run`, and `next build` pass, ask the user if questions arise.
+  - [x] 26.6 Prototype fidelity pass and removal of magic numbers
+    - Restyle the shell, header, columns, cards, side panel, and card modal to match `design/kanban-prototype.html` (frosted surfaces, accent bars, card layout, four-row board header, avatar stack); add `BaseAvatar` and `BaseChip` to `components/shared/`; move every size, layer, duration, and opacity into named tokens.
+    - Add a static test that rejects `z-`, `duration-`, `opacity-`, `ring-`, `outline-`, and `border-` utilities with numeric suffixes and colour opacity modifiers.
+    - _Requirements: 14.9, 14.13_
+  - [x] 26.7 Look refresh to the product owner's reference
+    - Retheme `styles/tokens.css` (white surfaces, navy brand, pastel tags, `--tone-*` hues); rebuild the sidebar as an icon rail plus boards panel; flatten the columns; restyle `CardTile`, `BoardHeader`, `BaseChip`, and `BaseBadge`; remove `BackgroundScene` and the `--glass-*`, glow, and column blur tokens.
+    - Keep the static styling test green (no hex, no arbitrary values, no magic numbers).
+    - _Requirements: 14.9, 14.13_
+
+- [x] 27. Trello-style board and card modal (Decision I)
+  - [x] 27.1 Install the new dependencies, set the font, and add the tokens
+    - Install `@fontsource-variable/inter`, `@radix-ui/react-popover`, and `react-day-picker`; import the Inter font once in `app/layout.tsx` and put it first in `--font-stack`.
+    - Add the tokens the new layout needs (modal margin, popover widths, calendar cell size, tooltip offset) and expose them in `globals.css`; keep the static styling test green.
+    - _Requirements: 14.9, 14.17_
+  - [x] 27.2 Add `BasePopover`, `BaseCalendar`, and the `BaseModal` footer slot
+    - Add `components/ui/{popover,calendar}.tsx` and the thin wrappers `BasePopover` and `BaseCalendar`; give `BaseModal` a `footer` prop (bordered bar under a scrolling body) and a `full` size that fills the viewport minus a margin; use the footer in `NewBoardModal` (Cancel, Create).
+    - Add shared-component tests (popover opens and closes with Escape; the footer renders its buttons).
+    - _Requirements: 14.10, 4.35_
+  - [x] 27.3 Rebuild the Sidebar and add the Home page
+    - Remove the logo tile; make Home the first entry and the post-sign-in destination; add `hooks/useSidebarState.ts` and the collapse toggle (expanded with labels, collapsed with tooltips, kept in `localStorage`); show the lock or open lock on each board row with an accessible label; wrap long names with a title tooltip.
+    - Replace the `/boards` redirect with a page that lists every visible board.
+    - _Requirements: 3.20, 3.21, 3.22, 14.7, 14.16_
+  - [x] 27.4 Rework the main panel and the card face
+    - Lock the shell to the viewport; fixed `BoardHeader` with the visibility icon and a wrapping title; columns scroll sideways, each column scrolls inside itself, "Add a card" pinned at the column bottom; slimmer `CardTile` (label chips, a badge row, assignee avatar).
+    - _Requirements: 3.20, 3.21, 14.18_
+  - [x] 27.5 Keep HTML5 drag-and-drop in the scrolling columns
+    - A pointer-event rewrite (`lib/drag.ts`, `hooks/useCardDrag.ts`) was built and then reverted at the product owner's request; `Board` and `CardTile` use the HTML5 API (draggable cards, `dragover` and `drop` on each column body, placeholder, FLIP, one `onMove` call on drop). `lib/ordering.ts` is unchanged.
+    - _Requirements: 5.2, 5.13_
+  - [x] 27.6 Add the date rules and `DateRangePicker`
+    - Add `lib/dates.ts` (`normalizeRange`, `isRangeValid`) and `components/card/DateRangePicker.tsx`: one range calendar, optional Start date and End date fields with checkboxes, the range highlighted as a block, days before the start disabled while picking the end, an inline error for a typed invalid pair.
+    - _Requirements: 4.31, 4.32_
+  - [x]* 27.6.1 Write property tests for the date rules
+    - Property: for any sequence of picks, `normalizeRange` returns a pair where the end is empty or not before the start; a start moved past the end clears the end; equal dates are valid.
+    - _Requirements: 4.32_
+  - [x] 27.7 Add `MemberPicker`
+    - A popover with a search box (case-insensitive over name and login identifier), the board's members with avatars, single choice, and Remove; hidden for a Member.
+    - Test search filtering, choosing, and removing by role and name.
+    - _Requirements: 4.33_
+  - [x] 27.8 Rebuild `CardModal`
+    - Large modal; left pane: three cards, Details (title, `CardChips`, description with an Edit toggle), Attachments, and Subtasks; right pane: one card with the composer, the thread, and the Activity list below; a footer with Delete (second click confirms), Archive, Close, Save changes (disabled while the dates are invalid).
+    - Delete the column select and `moveTo` from the modal.
+    - `CardChips`: category pill, Priority flag chip, date-range chip with a red Overdue state, assignee avatar with an add button, each in a `BasePopover` that edits the draft.
+    - _Requirements: 4.20, 4.21, 4.30, 4.31, 4.32, 4.33, 4.34, 4.35_
+  - [x] 27.9 Checkpoint - Run typecheck, tests, and `next build`
+    - Ensure `tsc --noEmit`, `vitest run`, and `next build` pass, then check the board, the modal, the dates popover, and the member popover in a browser at 1563px and 390px; ask the user if questions arise.
+
+- [x] 28. Owner feedback on the Trello-style UI (Decision I)
+  - [x] 28.1 Return author and actor names from the API
+    - `activity_repository.serialize_many` and `comments_repository.author_names` load `User.full_name` in one query each, whatever the row count; add `actor_name` to `ActivitySchema` and every activity response, and `author_name` to `ReplySchema` and every comment response (list, create, reply, priority); no new relationship on a model.
+    - Add a test that a manager who is not a board member shows by name (`test_comment_and_activity_names`), and update `backend/API.md` and `backend/openapi.json`.
+    - _Requirements: 7.21, 8.8_
+  - [x] 28.2 Frontend: names, brand, radii, and the logo toggle
+    - Read `actor_name` and `author_name` before the member map; rename the app to RevoTask (Sidebar, page titles, sign-in layout); make the logo mark the Sidebar toggle (name beside it when expanded, tooltip when collapsed); set the radius tokens to 4 (small), 6 (medium and card), and 8 (large) pixels and flatten the column and card rounding.
+    - _Requirements: 7.21, 8.8, 14.16, 14.19_
+  - [x] 28.3 Frontend: modal scrolling, attachments, and subtasks
+    - Add `lg:grid-rows-1` so each pane scrolls; split the Attachments and Subtasks cards; show the Attachments card in two columns with a Link or File selector; add a test for the selector and for the two cards.
+    - _Requirements: 4.36, 4.37, 4.38_
+  - [ ] 28.4 Checkpoint - Run backend and frontend tests and `next build`
+    - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass, then check the modal scroll, the logo toggle, drag-and-drop, and the names in a browser; ask the user if questions arise.
+
+- [ ] 29. Modal balance, activity clarity, and board card sizes (Decision I)
+  - [x] 29.1 Record names and changes in the Activity_Log metadata
+    - In `cards/service.py` and `comments/service.py` pass the extra `metadata` keys of Req 8.9 to `activity.add`: `card_title` on every card event, `changes` (`{field: {from, to}}`) on `card.updated`, `from_column_name` and `to_column_name` on `card.moved`, `assignee_name` on `card.assigned`, subtask `title`, and attachment `name`.
+    - Add tests that each action writes its keys (move, update with a priority and a date change, assign, subtask add, attachment add); update `backend/API.md` and regenerate `backend/openapi.json`.
+    - _Requirements: 8.9_
+  - [x] 29.2 Add the control, type, and spacing scale
+    - Add the tokens of the design bullet "Control and type scale" and expose them in `globals.css`; apply `min-h-control` to `Input`, `NativeSelect`, `Button` default, `BaseChip`, and `CardChips`; set the card modal spacing; keep the static styling test green.
+    - _Requirements: 14.20, 4.40_
+  - [x] 29.3 Rework the card modal header, footer, attachments, and cards
+    - Header "card title | board name" that follows the draft title, column badge beside it; footer Archive, Delete, Save changes (right-aligned, no Close); Attachments as bordered tiles with type icons and a small remove icon; Activity in its own card under Comments.
+    - Update the modal tests (header text follows the title field, no Close button in the footer, an Activity region, attachment icons).
+    - _Requirements: 4.20, 4.35, 4.36, 4.39_
+  - [x] 29.4 Rewrite the activity wording
+    - `describeActivity` returns parts; `ActivityList` and the side panel render the actor, action, object, and from-to with badges; generic fallback for old rows. Unit tests for move, change, assign, subtask, attachment, and a legacy row.
+    - _Requirements: 8.10_
+  - [x] 29.5 Fix the tooltip and size the board cards
+    - Tooltip on hover and keyboard focus only; fluid column width; card padding and text tokens; two-line description; wide-screen step.
+    - _Requirements: 14.21, 14.22_
+  - [ ] 29.6 Checkpoint - Run backend and frontend tests and `next build`
+    - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass, then check the modal, the activity log, the tooltip, and the board cards in a browser; ask the user if questions arise.
+
+- [ ] 30. Visual system, searchable selects, and paging (Decisions I and J)
+  - [x] 30.1 Backend: paging and member candidates
+    - `limit` and `before` on `GET /api/notifications`, `GET /api/boards/{id}/activity`, and `GET /api/cards/{id}/activity` (default 20, cap 100, 400 for a bad `limit` or a `before` outside the feed); `GET /api/boards/{id}/candidates?search=` (owner, Manager, Admin; at most 20 non-members; `id` and `full_name` only).
+    - Tests for page sizes, the cursor, the last page, the 400 cases, the candidates filter, and the 403/401 cases; update `backend/API.md` (replace "There is no pagination") and regenerate `backend/openapi.json`.
+    - _Requirements: 3.25, 8.11, 9.11, 13.19_
+  - [x] 30.2 Shared components and tokens
+    - Add `@radix-ui/react-tooltip` and `cmdk`; add `components/ui/{tooltip,command}.tsx`, `BaseTooltip`, `BaseCombobox`, and `BaseConfirm`; add the type and spacing tokens of the design section "Round 4"; tests for the combobox (search shown from six options, keyboard choice) and the confirmation popover.
+    - _Requirements: 14.10, 14.20, 14.23, 14.24, 14.25_
+  - [x] 30.3 Sidebar hierarchy and the Team members section
+    - One `NavItem` for every entry; the type hierarchy; remove the Members nav entry; Team members add button with `MemberSearch` (popover, modal below 960px) and a remove button with confirmation; tooltips through `BaseTooltip`.
+    - _Requirements: 3.24, 14.26_
+  - [x] 30.4 Board header and board cards
+    - One-row header without Add Member and the settings gear; search modal below 960px; bordered filter chips; avatar tooltip on the board Card.
+    - _Requirements: 3.23, 6.13, 14.24_
+  - [x] 30.5 Card modal
+    - Attribute rows with icons and comboboxes; header with the title and close icon only; staged attachment additions and removals applied on Save with uploads at that moment and a "Discard changes?" prompt; confirmation popovers for Subtask, Attachment, and Card deletes; equal tile and button heights; button roles.
+    - Update the modal tests (attribute rows, staged removal not sent before Save, discard prompt, confirmation before delete).
+    - _Requirements: 4.21, 4.35, 4.41, 4.42, 4.43, 4.44, 4.45, 14.25_
+  - [x] 30.6 Comment thread layout
+    - Avatar, name and time, text, small text actions; replies indented with a vertical line; no box per comment.
+    - _Requirements: 7.22_
+  - [x] 30.7 Load more for the Inbox and the activity lists
+    - First page sized to the visible area; Load more with `before`; hide on the last page; tests with a mocked API.
+    - _Requirements: 8.12, 9.12_
+  - [x] 30.8 Categories screen
+    - `app/(app)/boards/[id]/categories/page.tsx` with `CategoriesScreen` (add, rename, recolor, delete) for Supervisor, Manager, Admin, scoped to the current board, using the round 4 components.
+    - _Requirements: 6.11_
+  - [ ] 30.9 Checkpoint - Run backend and frontend tests and `next build`
+    - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass, then check the sidebar, header, modal, comments, selects, and Load more in a browser at desktop and phone width; ask the user if questions arise.
+
+- [ ] 31. Header, Home, and badges (Decision I)
+  - [x] 31.1 Backend: board counts and description
+    - `Board.description` (nullable `Text`, max 500 through the schemas) with an Alembic migration; accept it on `POST /boards` and `PATCH /boards/{id}`; return it on every board response.
+    - `GET /boards` adds `card_count`, `done_count`, `overdue_count`, `member_count` with aggregate queries (one per count kind, independent of the number of boards).
+    - Tests: counts with soft-deleted, archived, Done, and overdue cards; the description round trip and the 400 for 501 characters; the constant query count for the board list. Update `backend/API.md` and regenerate `backend/openapi.json`.
+    - _Requirements: 3.26, 3.27_
+  - [x] 31.2 Two-row board header
+    - Row 1 title and lock, bell and user; row 2 bordered progress, `ChipStrip` with arrow buttons shown only on overflow, and search (modal below 960px).
+    - Tests: the arrows appear only when the strip overflows (mock the sizes) and scroll it.
+    - _Requirements: 3.23_
+  - [x] 31.3 Card modal fixes and badges
+    - Title as text with Edit; date rows on one grid; `FileDropZone` (drag and click) staging the file; close icon inside the header row; `BaseBadge` `outline` shape for Priority with a flag; lowercase Category names everywhere.
+    - Tests: title Edit toggle; a dropped file is staged and not sent before Save; the two badge types render with different shapes.
+    - _Requirements: 4.46, 4.47, 4.48, 4.49, 4.50, 6.14_
+  - [x] 31.4 Home page tiles and the analytics strip
+    - `BoardTile` (plain bordered tile, no cover band) with description, progress, counts, and avatars; the optional Description field in `NewBoardModal`; the analytics strip for Supervisor (owned boards) and Manager, absent for Member and Admin.
+    - Tests: tile content from a board with counts; the strip renders for a Manager and not for an Admin or a Member.
+    - _Requirements: 3.28, 3.29, 10.8_
+  - [ ] 31.5 Checkpoint - Run backend and frontend tests and `next build`
+    - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass, run the migration on the dev database, then check the header, Home, and the card modal in a browser at desktop and phone width; ask the user if questions arise.
+
 ## Notes
 
+- Group 27 (Trello-style board and card modal, Decision I) runs after 26.7 and before the remaining frontend tasks; it changes components built in tasks 16 to 18 without changing the API client. Task 18.4 tests the new modal, and 19.2 adds the Categories, Members, and Users screens on the new shell.
+- Group 26 (Tailwind CSS and shadcn/ui restyle, Decision H) runs after task 15 and before the app shell tasks 16 to 19; the components written before it are restyled in 26.3, with their props, logic, `lib/`, and API client unchanged. It touches no backend code.
 - Google OAuth is out of scope and has no task.
 - Group 24 (flask-smorest and envelope migration) must be done before the frontend group 15, before group 23 (generated documentation), and before test 14.4 (envelope property test). The frontend `lib/api.ts` (task 15.3) reads the boolean `status` and unwraps `data` from the V6 envelope `{ status, message, data }`, and throws `ApiError(httpStatus, code, message, details)` from `{ status: false, message, error: { code, details? } }`.
 - V6 (Decision G) envelope rule for every task: `status` is a boolean true exactly when the HTTP status is 2xx; the message text appears once at the top level; `error` has only `code` and, for `VALIDATION_ERROR`, `details`; mutating endpoints send a descriptive message and reads send "OK".
@@ -499,20 +649,45 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     { "id": 22, "tasks": ["15.1"] },
     { "id": 23, "tasks": ["15.2", "15.3"] },
     { "id": 24, "tasks": ["15.4", "15.5"] },
-    { "id": 25, "tasks": ["16.1"] },
-    { "id": 26, "tasks": ["16.2", "17.1"] },
-    { "id": 27, "tasks": ["17.2"] },
-    { "id": 28, "tasks": ["17.3", "18.1"] },
-    { "id": 29, "tasks": ["18.2", "18.3"] },
-    { "id": 30, "tasks": ["18.4", "19.1", "19.2"] },
-    { "id": 31, "tasks": ["19.3"] },
-    { "id": 32, "tasks": ["20.1", "20.2"] },
-    { "id": 33, "tasks": ["21.1"] },
-    { "id": 34, "tasks": ["22.1"] },
-    { "id": 35, "tasks": ["22.2"] },
-    { "id": 36, "tasks": ["23.1"] },
-    { "id": 37, "tasks": ["23.2"] },
-    { "id": 38, "tasks": ["23.3", "23.4"] }
+    { "id": 25, "tasks": ["26.1"] },
+    { "id": 26, "tasks": ["26.2"] },
+    { "id": 27, "tasks": ["26.3"] },
+    { "id": 28, "tasks": ["26.4"] },
+    { "id": 29, "tasks": ["26.5"] },
+    { "id": 30, "tasks": ["26.6"] },
+    { "id": 31, "tasks": ["26.7"] },
+    { "id": 32, "tasks": ["27.1"] },
+    { "id": 33, "tasks": ["27.2", "27.3", "27.6"] },
+    { "id": 34, "tasks": ["27.4", "27.6.1", "27.7"] },
+    { "id": 35, "tasks": ["27.5", "27.8"] },
+    { "id": 36, "tasks": ["27.9"] },
+    { "id": 37, "tasks": ["28.1"] },
+    { "id": 38, "tasks": ["28.2", "28.3"] },
+    { "id": 39, "tasks": ["28.4"] },
+    { "id": 40, "tasks": ["29.1", "29.2"] },
+    { "id": 41, "tasks": ["29.3", "29.4", "29.5"] },
+    { "id": 42, "tasks": ["29.6"] },
+    { "id": 43, "tasks": ["30.1", "30.2"] },
+    { "id": 44, "tasks": ["30.3", "30.4", "30.6", "30.7", "30.8"] },
+    { "id": 45, "tasks": ["30.5"] },
+    { "id": 46, "tasks": ["30.9"] },
+    { "id": 47, "tasks": ["31.1"] },
+    { "id": 48, "tasks": ["31.2", "31.3", "31.4"] },
+    { "id": 49, "tasks": ["31.5"] },
+    { "id": 50, "tasks": ["16.1"] },
+    { "id": 51, "tasks": ["16.2", "17.1"] },
+    { "id": 52, "tasks": ["17.2"] },
+    { "id": 53, "tasks": ["17.3", "18.1"] },
+    { "id": 54, "tasks": ["18.2", "18.3"] },
+    { "id": 55, "tasks": ["18.4", "19.1", "19.2"] },
+    { "id": 56, "tasks": ["19.3"] },
+    { "id": 57, "tasks": ["20.1", "20.2"] },
+    { "id": 58, "tasks": ["21.1"] },
+    { "id": 59, "tasks": ["22.1"] },
+    { "id": 60, "tasks": ["22.2"] },
+    { "id": 61, "tasks": ["23.1"] },
+    { "id": 62, "tasks": ["23.2"] },
+    { "id": 63, "tasks": ["23.3", "23.4"] }
   ]
 }
 ```

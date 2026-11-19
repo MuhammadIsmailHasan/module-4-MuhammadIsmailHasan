@@ -5,8 +5,9 @@ Coding standards for the Next.js app.
 ---
 
 **Rule:** Build UI only from `components/shared/Base*` (`BaseButton`,
-`BaseBadge`, `BaseModal`); never a raw `<button>`, ad-hoc badge `<span>`, or a
-one-off modal.
+`BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar`); never a raw `<button>`, ad-hoc badge `<span>`, or a
+one-off modal. The `Base*` components wrap the shadcn/ui primitives in
+`components/ui/`; only they import `components/ui/`.
 
 **Rationale:** One place to fix styling, states, and accessibility for every
 button/badge/modal in the app, instead of N near-duplicates.
@@ -75,14 +76,12 @@ assumptions (fixed widths, hover-only menus) that break on a phone; starting
 from mobile avoids that by construction.
 
 **Example:**
-```css
-/* Bad: desktop-first */
-.sidebar { width: 264px; }
-@media (max-width: 960px) { .sidebar { display: none; } }
+```tsx
+// Bad: desktop-first (a max-* variant strips the desktop layout down)
+<aside className="w-64 max-lg:hidden" />
 
-/* Good: mobile-first */
-.sidebar { transform: translateX(-100%); }
-@media (min-width: 960px) { .sidebar { position: static; transform: none; } }
+// Good: mobile-first (unprefixed = phone, lg: = 960px and up)
+<aside className="-translate-x-full lg:static lg:translate-x-0" />
 ```
 
 ---
@@ -149,21 +148,24 @@ const { data: categories } = useCategories(boardId)
 
 ---
 
-**Rule:** Colors, spacing, and radii come only from the design-token CSS
-variables defined once at the root (`--brand`, `--surface-*`, `--space-*`,
-`--radius-*`, the `--label-*` pairs) — never a literal hex code or raw pixel
-value inside a component.
+**Rule:** Colors, spacing, radii, and shadows come only from the design-token
+CSS variables defined once at the root (`--brand`, `--surface-*`, `--space-*`,
+`--radius-*`, `--shadow-*`, the `--label-*` pairs), used through the
+token-backed Tailwind utilities — never Tailwind's default palette, an
+arbitrary value (`bg-[#fff]`, `p-[13px]`), a literal hex code, or a raw pixel
+value inside a component. Sizes, z-index layers, durations, opacities, and the focus ring are named token utilities too (`size-avatar-sm`, `z-modal`, `duration-fast`, `opacity-muted`, `focus-ring`), never `z-50`, `duration-200`, or `opacity-60`.
 
 **Rationale:** Keeps every `Base*` component visually identical to the
-approved prototype, and means a palette tweak is a one-file change.
+reference look, and means a palette tweak is a one-file change.
 
 **Example:**
 ```tsx
 // Bad
-<span style={{ background: "#f6dada", color: "#9a2f2f" }}>High</span>
+<span className="bg-[#f6dada] text-[#9a2f2f]">High</span>
+<span className="bg-red-100 text-red-800">High</span>
 
 // Good
-<BaseBadge style={{ background: "var(--label-red-bg)", color: "var(--label-red-text)" }}>High</BaseBadge>
+<BaseBadge tone="red">High</BaseBadge>   // bg-label-red text-label-red-fg
 ```
 
 ---
@@ -176,10 +178,10 @@ style.
 from the first component.
 
 **Example:**
-```css
-/* Bad */
-button:focus { outline: none; }
+```tsx
+// Bad
+<button className="outline-none" />
 
-/* Good */
-button:focus-visible { outline: 2px solid var(--focus-ring); }
+// Good: ring from the --ring token on keyboard focus
+<BaseButton className="focus-visible:ring-2 focus-visible:ring-ring" />
 ```

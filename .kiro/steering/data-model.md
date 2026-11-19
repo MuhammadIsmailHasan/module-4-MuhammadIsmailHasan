@@ -143,3 +143,11 @@ inclusion: always
   serialization depends on the viewer (guest privacy, `can_create_card`, signed
   URLs), so it belongs to marshmallow schemas, not the model.
   **Example:** `subtasks = db.relationship("Subtask", back_populates="card", lazy="raise", order_by="Subtask.order")`.
+
+- **Rule:** `Board` has a nullable `description` (at most 500 characters,
+  V8 round 5). The board list response carries computed `card_count`,
+  `done_count`, `overdue_count`, and `member_count`; they are never stored.
+  **Rationale:** Home tiles need a short summary per board without a query per
+  board, and derived counts stored as columns would drift.
+  **Example:** `Board(id, name, description, visibility, owner_id, created_at, updated_at, deleted_at, archived_at)`.
+

@@ -83,3 +83,11 @@ inclusion: always
   the other endpoints close gaps the first version left open.
   **Example:** `POST /api/boards/b_1/members { "user_id": "u_2" }` →
   `{ "data": { "board_id": "b_1", "user_id": "u_2" } }`.
+
+- **Rule:** Lists are unpaged, except the Inbox and the two activity feeds, which
+  take `limit` (default 20, at most 100) and `before` (the id of the last row the
+  client has) and keep their response shape (Decision J).
+  **Rationale:** Only these lists grow without bound; a row-id cursor adds paging
+  without changing what existing clients read.
+  **Example:** `GET /api/boards/{id}/activity?limit=20&before=<activity id>`.
+

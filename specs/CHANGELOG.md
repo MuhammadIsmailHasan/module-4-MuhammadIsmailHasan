@@ -56,3 +56,36 @@ Versions match `.kiro/specs/CHANGELOG.md`. Each folder holds requirement domains
 
 ### Impact
 - Breaking: `status` changes from a number to a boolean; `error.message` is removed; validation errors add `error.details`.
+
+## V7 - 2026-11-19
+### Changes
+- `v7/` holds the changed domains: `00-OVERVIEW` (Decision H, glossary: Design_Tokens and shadcn/ui) and `14-NON-FUNCTIONAL` (criteria 5, 9, 10 reworded; 13 to 15 added: Tailwind CSS and shadcn/ui themed from the design tokens, `lg` = 960px, focus ring from `--ring`).
+
+### Reason
+- Style the frontend with Tailwind CSS and the shadcn/ui design system. The visual reference is the product owner's light project-management dashboard (white surfaces, navy brand, pastel tags, icon rail); the prototype stays the reference for behaviour and content.
+
+### Impact
+- Frontend only: no API or schema change. The `Base*` components become wrappers over shadcn/ui; direct imports of shadcn/ui elsewhere and arbitrary Tailwind values are forbidden.
+
+## V8 - 2026-11-19
+### Changes
+- `v8/` holds the changed domains: `00-OVERVIEW` (Decision I, introduction), `03-BOARDS` (criteria 20 to 22: visibility icons, wrapped names, Home page), `04-CARDS` (criteria 20 and 21 reworded; 30 to 38 added: chips and popovers, range calendar, start-not-after-end guard, assignee popover, no column select, footer, two-column attachments, subtasks card, pane scrolling), `05-DRAG-AND-DROP` (criterion 2 reworded; 13 added: HTML5 drag on scrolling column bodies), `07-COMMENTS` (criterion 21: `author_name`), `08-ACTIVITY-LOG` (criterion 8: `actor_name`), `14-NON-FUNCTIONAL` (criteria 7 and 10 reworded; 16 to 19 added: Sidebar collapse with the logo toggle, Inter, viewport-locked board, RevoTask name and small radii).
+
+### Reason
+- The product owner asked for the Trello board and card experience.
+
+### Impact
+- Frontend only: no API or schema change. The Card modal loses its column select; cards move only by drag-and-drop (HTML5 API). The API gains two additive fields: `actor_name` on activity rows and `author_name` on comments and replies.
+
+### V8 round 3 (same version, uncommitted)
+- `v8/04-CARDS` (criteria 20, 35, 36 reworded; 39 and 40 added), `v8/08-ACTIVITY-LOG` (criteria 9 and 10 added: activity metadata and wording), `v8/14-NON-FUNCTIONAL` (criteria 20 to 22 added: control and type scale, tooltip behaviour, board card sizes), `v8/00-OVERVIEW` (Decision I "where applied").
+- Impact: additive `metadata` keys on new Activity_Log rows (backend); the rest is frontend.
+
+### V8 round 4 (same version, uncommitted)
+- `v8/00-OVERVIEW` (Decision J, Decision I "where applied"), `v8/03-BOARDS` (23 to 25), `v8/04-CARDS` (21 and 35 reworded; 41 to 45), `v8/06-CATEGORIES` (13), `v8/07-COMMENTS` (22), `v8/08-ACTIVITY-LOG` (11, 12), `v8/09-NOTIFICATIONS` (11, 12), `v8/13-API-CONVENTIONS` (19), `v8/14-NON-FUNCTIONAL` (10 and 20 reworded; 23 to 26).
+- Impact: paging on three endpoints (additive query parameters, same response shape), a new candidates endpoint, and a frontend visual system pass.
+
+### V8 round 5 (same version, uncommitted)
+- `v8/03-BOARDS` (23 reworded; 26 to 29), `v8/04-CARDS` (46 to 50), `v8/06-CATEGORIES` (14), `v8/10-ANALYTICS` (8), `v8/00-OVERVIEW` (Decision I "where applied").
+- Impact: a migration for `Board.description` and four computed counts on the board list; the rest is frontend.
+- Round 5 amendment: `v8/03-BOARDS` criterion 29 drops the cover band (plain bordered tile).

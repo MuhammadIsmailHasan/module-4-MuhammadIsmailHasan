@@ -30,14 +30,18 @@ overriding any looser prose description elsewhere.
   buried at the bottom of a long scroll; the "+ Add a card" affordance per
   column follows the same rule.
 
-- **Rule:** The app shell has a left `Sidebar` (brand, nav — including
+- **Rule:** The app shell has a left `Sidebar` (nav — **Home** first, then
   **Inbox** and **Activity** links — the **Boards** list, which *is* the
   board switcher, team members, profile) and a center `Main` area (board
   header + columns). Inbox and Activity share one **side panel** sliding in
   from the right, opened from the sidebar's own nav items or the header bell
   — there is no separate floating dock; the sidebar already covers that
   entry point. On mobile the sidebar is an off-canvas drawer behind a scrim;
-  above 960px it's always visible.
+  above 960px it's always visible, either expanded (icons with text labels,
+  then the Boards list and team members) or collapsed to the icon rail (tooltips on hover
+  and focus); a toggle switches the two and the choice is remembered in the
+  browser. Each board row shows a lock (private) or open lock (public) icon and
+  wraps a long name.
   **Rationale:** A floating dock duplicated what the sidebar nav already
   offers — one entry point per feature is simpler to build and to use.
   **Example:** clicking "Inbox" in the sidebar and clicking the header bell
@@ -45,34 +49,112 @@ overriding any looser prose description elsewhere.
 
 - **Rule:** A card drag-and-drop move inserts a placeholder element at the
   drop target, animates siblings into place with a FLIP transform, and on
-  `dragend` calls the backend to persist the new column/order — reconciling
+  drop calls the backend to persist the new column/order — reconciling
   local state with the response.
   **Rationale:** This is the exact pattern already proven in the prototype
   (`makePlaceholder`, `flipBoard`, `syncDataFromDOM`), and it's the only way
   the new position survives a page refresh.
-  **Example:** on `dragend`, `PATCH /api/cards/{id}/move` with the computed
+  **Example:** on drop, `PATCH /api/cards/{id}/move` with the computed
   `Float` order, then re-render from the server response.
 
-- **Rule:** All colors, spacing, and radii are the CSS custom properties
-  already defined in the prototype's `:root` (`--brand`, `--surface-*`,
-  `--ink*`, `--space-*`, `--radius-*`, the `--label-*` pairs) — components
-  consume these variables, never a hard-coded hex or pixel value.
+- **Rule:** All colors, spacing, radii, and shadows are the CSS custom
+  properties defined in `styles/tokens.css` (`--brand`, `--surface-*`, `--ink*`,
+  `--space-*`, `--radius-*`, `--shadow-*`, the `--label-*` pairs), kept in
+  `styles/tokens.css` and exposed to Tailwind through its `@theme` block.
+  Components use the token-backed utilities (`bg-brand`, `p-4`, `rounded-md`),
+  never Tailwind's default palette, an arbitrary value, or a hard-coded hex or
+  pixel value. The look follows the product owner's visual reference (light
+  surfaces, navy brand, pastel tags, icon rail, flat columns); spacing, motion,
+  and hierarchy may be refined without changing that palette or layout.
   **Rationale:** One token set behind `BaseButton`/`BaseBadge`/`BaseModal`
-  keeps the real app visually identical to the approved prototype as it's
-  rebuilt in Next.js.
-  **Example:** `background: var(--label-red-bg); color: var(--label-red-text);`
-  for a high-priority badge.
+  keeps the whole look in one file while Tailwind and
+  shadcn/ui supply the utilities and accessible primitives.
+  **Example:** `<BaseBadge tone="red">High</BaseBadge>` renders
+  `bg-label-red text-label-red-fg`; `bg-[#f6dada]` is a violation.
 
-- **Rule:** The card detail view is one two-pane modal used for **both**
-  viewing and editing: the left pane holds title, description, priority,
-  dates, attachments, the subtask checklist, and the card's own activity log;
-  the right pane holds the comment thread and composer, in the same modal —
-  never a separate screen or a second modal for comments.
+- **Rule:** The card detail view is one large two-pane modal (the viewport
+  minus a margin) used for **both** viewing and editing, with a fixed header,
+  two panes that scroll on their own, and a fixed footer. The header reads
+  "card title | board name" and follows the title field live, with the column as
+  a badge. The left pane has three cards: **Details** (title, attribute chips,
+  description), **Attachments** (bordered tiles with a type icon and a small file
+  name), and **Subtasks**; the right pane has two cards: **Comments** (composer,
+  thread) and **Activity** below it — never a separate screen or a second modal
+  for comments. The footer holds every action, right-aligned: Archive, Delete
+  (second click confirms), Save changes; there is no Close button (the header
+  icon and Escape close). There is no column select; a card changes column only
+  by drag-and-drop.
   **Rationale:** Editing a card and discussing it are the same moment for the
-  person doing it; splitting them across screens would just add navigation for
-  no benefit.
-  **Example:** the modal's `Save changes` button commits the left pane; the
-  comment composer on the right posts independently, without closing the modal.
+  person doing it; one card per kind of content keeps the modal scannable, and
+  one footer means one place to look for actions.
+  **Example:** the footer's `Save changes` commits every pending change in one
+  `PATCH`; the comment composer on the right posts independently.
+
+- **Rule:** Controls share one scale: inputs, selects, buttons, and chips are 40px
+  high (compact buttons 32px); body and control text is 14px, secondary text 13px,
+  labels and tags 12px; cards in the modal are 24px apart with 20px padding and 16px
+  between elements. All of it comes from tokens.
+  **Rationale:** An input beside a button must have the same height, and text sizes
+  picked case by case make a form look unbalanced.
+  **Example:** the "Add link" row uses `min-h-control` on both the input and the button.
+
+- **Rule:** An activity row reads actor, action, object, and where it went: "**Manager**
+  moved “Card title” from [Todo] to [In Progress]". The backend stores the names in
+  `metadata` so the row needs no lookup; rows written before that fall back to generic
+  wording. Sidebar tooltips show on hover and keyboard focus only, never after a click.
+  **Rationale:** A log that says "someone updated a card" cannot be trusted or used.
+  **Example:** `describeActivity(entry)` returns `{ actor, verb, object, detail }`.
+
+- **Rule:** Category, priority, dates, and assignee show in the card modal as
+  chips (label pill, flag chip, one date-range chip with a red Overdue state,
+  avatar with an add button); each opens a popover that edits the modal's draft
+  and sends nothing until Save changes. Dates use one range calendar with
+  optional Start date and End date fields and the range shown as a block; a
+  start later than the end is never accepted (days before the start are disabled
+  while the end is picked; moving the start past the end clears the end). The
+  assignee popover has a search box, the board's members, a single choice, and
+  Remove, and is hidden from a Member.
+  **Rationale:** The Trello-style chip and popover model keeps the card face of
+  the modal compact, and the draft model keeps one save and one activity row.
+  **Example:** `normalizeRange(start, end, picked)` in `lib/dates.ts` holds the
+  date rules so they are tested without a browser.
+
+- **Rule:** The board page does not scroll: the header stays fixed, columns
+  scroll sideways, each column scrolls vertically inside itself, and its "Add a
+  card" action stays pinned at the bottom. Card drag-and-drop uses the HTML5
+  drag-and-drop API (draggable cards, `dragover` and `drop` on each column body);
+  a pointer-event rewrite was tried and reverted at the product owner's request.
+  **Rationale:** The first, simpler drag behaved the way the product owner wants;
+  the column bodies only gained their own scrolling.
+  **Example:** `onDragOver` on a column body finds the target index and shows the
+  placeholder; `onDrop` calls the move once.
+
+- **Rule:** Every card modal pane scrolls vertically on its own when its content
+  is taller than the space between the header and the footer (the pane grid has
+  one row as tall as the body: `lg:grid-rows-1`).
+  **Rationale:** A fixed-height modal that clips its content hides fields.
+  **Example:** a card with many subtasks scrolls inside the left pane.
+
+- **Rule:** The application is named RevoTask. The Sidebar's toggle is the logo
+  mark: expanded it shows the name beside the mark; collapsed it shows the mark
+  alone with the tooltip "RevoTask". Corner radii stay small (Cards, columns,
+  buttons, popovers, modal: 8px or less) through the radius tokens.
+  **Rationale:** The product owner wants the calmer, less rounded look of the
+  reference.
+  **Example:** `--radius-card: 6px` in `styles/tokens.css`.
+
+- **Rule:** Comments and activity rows show the name the API sends
+  (`author_name`, `actor_name`); the board-member map is only a fallback, and
+  "Someone" appears only when no name arrived.
+  **Rationale:** A manager or supervisor who is not a board member is not in the
+  member map, so a map-only lookup showed "Someone" for known people.
+  **Example:** `describeActivity(entry)` reads `entry.actor_name` first.
+
+- **Rule:** The font is Inter, self-hosted through `@fontsource-variable/inter`
+  and the `--font-stack` token; no request goes to a third-party font service.
+  **Rationale:** Atlassian Sans (Trello's font) is proprietary; Inter is the
+  nearest open font and ships with the app.
+  **Example:** `app/layout.tsx` imports `@fontsource-variable/inter` once.
 
 - **Rule:** The comment thread renders priority comments first (with a
   priority indicator), then the remaining top-level comments under a
@@ -162,3 +244,34 @@ overriding any looser prose description elsewhere.
   place (the backend), so the frontend can't drift out of sync with it.
   **Example:** `{card.comments && <CommentThread items={card.comments}/>}` —
   a guest's API response simply omits `comments`/`activity`.
+
+- **Rule:** One visual system: page and modal titles 18px semibold, section
+  headings 14px semibold, body 14px, secondary 13px muted, labels 12px medium
+  muted; an 8px grid with 16px padding in every card, 12px between rows, 24px
+  between sections. Every select is a searchable `BaseCombobox` (search shown from
+  six options); every tooltip is a `BaseTooltip`; every destructive action asks in
+  a `BaseConfirm` popover. Buttons: danger to delete or remove, secondary to
+  archive or cancel, primary to submit, save, or add.
+  **Rationale:** Mixed sizes, ad-hoc selects, and unconfirmed deletes made the UI
+  feel unbalanced and risky.
+  **Example:** the attachment type picker is `<BaseCombobox options={[Link, File]} />`.
+
+- **Rule:** The Sidebar has one Team members section (no separate Members entry);
+  the owner, Managers, and Admins add members from its heading and remove them per
+  row. The Board header is one row with no Add Member button and no settings icon.
+  **Rationale:** One place per feature, and more height for the board.
+  **Example:** the add button opens `MemberSearch` over `GET /boards/{id}/candidates`.
+
+- **Rule:** The Inbox and the activity lists load one screen of rows and a Load
+  more action (Decision J); attachment changes in the card modal wait for Save
+  changes, and closing with unsaved changes asks first.
+  **Rationale:** Long lists stay fast, and nothing in the modal is changed
+  before the user saves.
+  **Example:** `api.notifications.inbox({ limit, before })`.
+
+- **Rule:** Category and Priority look different on every card: the Category is a
+  soft-filled pill with a dot, the Priority an outlined badge with a flag; both
+  in lowercase. Category names always display in lowercase (styling only).
+  **Rationale:** Two pills of the same shape read as one kind of information.
+  **Example:** `<BaseBadge shape="outline" tone="red"><Flag/> high</BaseBadge>`.
+
