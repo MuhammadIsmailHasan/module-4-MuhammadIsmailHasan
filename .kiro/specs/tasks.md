@@ -2,7 +2,9 @@
 
 ## Overview
 
-Version V5. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+Version V6. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+
+V6 applies Decision G to the envelope. `status` is a boolean, true exactly when the HTTP status is 2xx; the numeric HTTP status travels on the HTTP line only. A success body is `{ "status": true, "message", "data" }`. An error body is `{ "status": false, "message", "error": { "code", "details"? } }`: the message text appears once at the top level, `error` has no `message` field, and `error.details` (field name to list of messages) appears only for `VALIDATION_ERROR`. Mutating endpoints pass a short descriptive message (for example "Card moved"); reads default to "OK". V6 edits tasks 1.2, 3.2, 8.1, 14.4, 15.3, 23.3, 24.1, 24.2, and 24.3 and the Notes. Existing checkbox states are unchanged; tasks already ticked that quote the old envelope are brought to the V6 shape by group 24.
 
 V5 adds group 25, which adds the five SQLAlchemy relationships with `lazy="raise"` and moves related-row loading into the repositories with `selectinload` (Decision F). Group 25 runs after group 24 (the marshmallow schemas replace the DTO functions) and before the checkpoint 14.6 and the frontend group 15. It needs no database migration. Existing checkbox states are unchanged.
 
@@ -18,9 +20,9 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - Confirm `backend/.env.example` lists all six variables with empty or placeholder values.
     - _Requirements: 13.1, 13.8, 13.9_
   - [x] 1.2 Add the response envelope and error classes
-    - Create `app/common/responses.py` (`ok(data, status=200)`) and `app/common/errors.py` (`ValidationError` 400, `Unauthorized` 401, `Forbidden` 403, `NotFound` 404, `Conflict` 409, generic 500 handler) rendering `{ "error": { "code", "message" } }`.
+    - Create `app/common/responses.py` (`ok(data, message=None, status=200)`, returning `{ "status": true, "message", "data" }`; `message` defaults to "OK"; the integer `status` only sets the HTTP status) and `app/common/errors.py` (`ValidationError` 400, `Unauthorized` 401, `Forbidden` 403, `NotFound` 404, `Conflict` 409, generic 500 handler) rendering `{ "status": false, "message", "error": { "code", "details"? } }` with no `error.message` (Decision G; group 24 brings the originally built shape to this one).
     - Register one error handler in the factory; routes contain no try/except.
-    - _Requirements: 13.2, 13.3, 13.4_
+    - _Requirements: 13.2, 13.3, 13.4, 13.11_
   - [x] 1.3 Add auth helpers, clock, and blueprint skeletons
     - Create `app/common/auth.py` with `ROLE_RANK`, `Actor(id, role)`, `current_actor()` (None for Guest), and `require_role(*roles)` that reads role only from JWT claims (401 without a valid Token, 403 when the role is not listed).
     - Create `app/common/clock.py` (injectable `now()` and `today(tz)` using `APP_TIMEZONE`).
@@ -66,7 +68,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.12, 1.13, 1.17_
   - [x] 3.2 Implement routes, JWT issuing, and logout
     - `POST /api/auth/register` and `POST /api/auth/login` return `{ user: {id, full_name, login_identifier, avatar_url}, token }`; Token carries user id and role, fixed 24-hour expiry, no revocation list.
-    - `POST /api/auth/logout` returns `{ "data": null }` and revokes nothing.
+    - `POST /api/auth/logout` returns `{ "status": true, "message": "Logged out", "data": null }` and revokes nothing.
     - Defer rate limiting; add no Google OAuth route.
     - _Requirements: 1.1, 1.2, 1.14, 1.15, 1.16, 1.18, 1.11_
   - [x]* 3.3 Write property test for registration and login round trip
@@ -202,7 +204,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
 
 - [x] 8. Comments
   - [x] 8.1 Implement comment creation and replies
-    - `POST /api/cards/{id}/comments` (Member, Supervisor, Manager with `can_access`; Admin 403; blank body 400 with message `content is required`) and `POST /api/comments/{id}/replies` (400 when the target has a non-null `parent_id`; increments the parent's `reply_count` in the same transaction). Provide no like or vote endpoint.
+    - `POST /api/cards/{id}/comments` (Member, Supervisor, Manager with `can_access`; Admin 403; blank body 400 `VALIDATION_ERROR` with `error.details.content` as a list whose first string is `content is required`) and `POST /api/comments/{id}/replies` (400 when the target has a non-null `parent_id`; increments the parent's `reply_count` in the same transaction). Provide no like or vote endpoint.
     - A Guest calling any comment endpoint gets 403 on a public board and 401 on a private board, with no `comments` field.
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.16, 14.3_
   - [x]* 8.2 Write property tests for comment creation
@@ -294,7 +296,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - _Requirements: 15.4, 15.6_
   - [x]* 14.4 Write property test for the response envelope
     - Run against the Flask test client for every registered `/api` route (excluding the documentation routes and the successful bytes of the signed file route), including unknown routes and wrong methods; requires group 24.
-    - Assert success bodies are exactly `{ status, message, data }` and error bodies are exactly `{ status, message, error: { code, message } }`, with `status` equal to the HTTP status, `error.message` equal to `message`, and validation failures returning 400 `VALIDATION_ERROR`, never 422.
+    - Assert success bodies are exactly `{ status: true, message, data }` and error bodies are exactly `{ status: false, message, error: { code, details? } }`, with `status` a boolean that is true exactly when the HTTP status is 2xx (never a number), `message` a non-empty string, no `error.message` field, and `error.details` present only for validation failures, which return 400 `VALIDATION_ERROR` (never 422) with every failing field mapped to a non-empty list of strings.
     - **Property 36: Response envelope**
     - **Validates: Requirements 13.2, 13.3, 13.4, 13.11, 13.13**
   - [x]* 14.5 Write static checks
@@ -311,8 +313,8 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - `BaseButton`, `BaseBadge`, `BaseModal` in `frontend/components/shared/`, styled only from `tokens.css`; all pages import these instead of raw `<button>`, badges, or modals.
     - _Requirements: 14.9, 14.10_
   - [ ] 15.3 Create the API client and session handling
-    - `lib/api.ts`: adds the Bearer token, unwraps `{ data }`, throws a typed `ApiError(code, message, status)`; a 401 clears the stored Token and redirects to login; logout calls `POST /api/auth/logout` then discards the Token.
-    - _Requirements: 1.15, 1.16, 13.2, 13.3_
+    - `lib/api.ts`: adds the Bearer token, reads the boolean `status` of `{ status, message, data }` and returns `data` when it is true; when it is false, throws a typed `ApiError(httpStatus, code, message, details)` where `httpStatus` comes from the `Response`, `code` from `error.code`, `message` from the top-level `message`, and `details` from `error.details` (field to list of messages, present for `VALIDATION_ERROR`; forms map it onto their fields). A 401 clears the stored Token and redirects to login; logout calls `POST /api/auth/logout` then discards the Token.
+    - _Requirements: 1.15, 1.16, 13.2, 13.3, 13.13_
   - [ ] 15.4 Build login and register pages
     - `app/(auth)/login/page.tsx` and `register/page.tsx` using an `AuthSplitLayout` Server Component: brand panel beside an elevated rounded form card on desktop; brand panel hidden at mobile width.
     - Forms submit `login_identifier` and password through the API client and store the returned Token.
@@ -406,7 +408,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - Run `flask export-openapi` and commit the generated `backend/openapi.json`; never edit it by hand.
     - _Requirements: 17.1, 17.3_
   - [x] 23.3 Write `backend/API.md`
-    - Cover the envelope (`status`, `message`), error codes, authentication, the role matrix, signed file URLs, ordering and move semantics, then one table plus an example request and response per blueprint group; state that the generated `openapi.json` is the source of truth and how to enable Swagger locally (`APP_ENV=development`), and that it is off in production.
+    - Cover the envelope (boolean `status`, one top-level `message`, `data`; errors as `error: { code, details? }` with no `error.message`), error codes, authentication, the role matrix, signed file URLs, ordering and move semantics, then one table plus an example request and response per blueprint group. Examples show `{ "status": true, "message": "Card moved", "data": {...} }` for a mutating call, `"message": "OK"` for a read, and a 400 example `{ "status": false, "message": "Validation failed", "error": { "code": "VALIDATION_ERROR", "details": { "content": ["Missing data for required field."] } } }`; state that the generated `openapi.json` is the source of truth and how to enable Swagger locally (`APP_ENV=development`), and that it is off in production.
     - _Requirements: 17.2_
   - [x]* 23.4 Write the drift and production-gate tests
     - **Property 37: Every route is documented** (iterate `app.url_map` under `/api`, excluding `static` and the documentation routes, and assert each method and path has an operation in `api.spec.to_dict()["paths"]`, and the reverse)
@@ -416,20 +418,20 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
 - [x] 24. Migrate the implemented backend to flask-smorest and the status/message envelope
   - [x] 24.1 Add flask-smorest, the envelope, and the error mapping
     - Add `flask-smorest` and `marshmallow` to `backend/requirements.txt`.
-    - Create `backend/app/api.py` with `EnvelopeApi(flask_smorest.Api)`: register every blueprint on it, declare the `bearerAuth` scheme once, and map errors to `{ status, message, error: { code, message } }`: `AppError` to its status and code, smorest/webargs 422 to 400 `VALIDATION_ERROR` (first field message), 404 `NOT_FOUND`, 405 `METHOD_NOT_ALLOWED`, any other exception to 500 `INTERNAL_ERROR` with a generic message, and the JWT missing, invalid, and expired callbacks to the 401 envelope. Set `Api.ERROR_SCHEMA` to the error envelope schema. Remove the old app-level error handler.
+    - Create `backend/app/api.py` with `EnvelopeApi(flask_smorest.Api)`: register every blueprint on it, declare the `bearerAuth` scheme once, and map errors to `{ status: false, message, error: { code, details? } }` (no `error.message`; the text appears once at the top level, defaulting to the HTTP reason phrase when an error has no custom text): `AppError` to its status and code, smorest/webargs 422 to 400 `VALIDATION_ERROR` with top-level message "Validation failed" and `error.details` mapping each field to the list of marshmallow messages (location keys such as `json` or `query` unwrapped), 404 `NOT_FOUND`, 405 `METHOD_NOT_ALLOWED`, any other exception to 500 `INTERNAL_ERROR` with a generic message, and the JWT missing, invalid, and expired callbacks to the 401 envelope. Set `Api.ERROR_SCHEMA` to the error envelope schema. Remove the old app-level error handler.
     - In `api.py`, set `API_TITLE`, `API_VERSION`, `OPENAPI_VERSION`, and, only when `APP_ENV` is `development` or `testing`, the `OPENAPI_*` keys for `/api/openapi.json` and `/api/docs`; add the `flask export-openapi` command that writes `backend/openapi.json` from `api.spec.to_dict()` under any `APP_ENV`.
-    - Create `backend/app/common/envelope.py` with `envelope(DataSchema, many=False)` (cached `<Name>Envelope` / `<Name>ListEnvelope` schema with `status`, `message`, `data`), `NullEnvelopeSchema`, and `ErrorEnvelopeSchema`.
-    - Change `ok(data, message=None, status=200)` in `app/common/responses.py` to return `{ status, message, data }` with the HTTP reason phrase as the default message; update error rendering in `app/common/errors.py` handling to emit `status` and `message`.
+    - Create `backend/app/common/envelope.py` with `envelope(DataSchema, many=False)` (cached `<Name>Envelope` / `<Name>ListEnvelope` schema with `status` as a `Boolean`, `message`, `data`), `NullEnvelopeSchema`, and `ErrorEnvelopeSchema` (`status`, `message`, `error` with `code` and optional `details`, and no `error.message`).
+    - Change `ok(data, message=None, status=200)` in `app/common/responses.py` to return `{ "status": true, "message", "data" }` with "OK" as the default message; the integer argument only sets the HTTP status and is not placed in the body. Update error rendering in `app/common/errors.py` and `EnvelopeApi` to emit `status: false`, the top-level `message`, and `error: { code, details? }`.
     - Keep `AppError` classes free of Flask imports; keep all URLs, status codes, and role rules unchanged.
     - _Requirements: 13.2, 13.3, 13.4, 13.11, 13.12, 13.13, 13.15, 17.3, 17.4, 17.5, 17.6, 17.10_
   - [x] 24.2 Convert each blueprint to flask-smorest with marshmallow schemas
-    - For each of `auth, boards (including members), columns, cards (including subtasks, attachments, and the board cards search/filter), categories, comments, notifications, analytics, users, activity (card and board activity reads)`: replace `flask.Blueprint` with `flask_smorest.Blueprint`; turn `schema.py` into marshmallow request, query, and payload schemas; validate with `@blp.arguments(Schema)` or `@blp.arguments(Schema, location="query")`; declare each success response with `@blp.response(status, envelope(PayloadSchema))` (`NullEnvelopeSchema` for logout); mark protected operations with `@blp.doc(security=[{"bearerAuth": []}])`; return `ok(dto, "<descriptive message>", status)` with the same status as the declaration.
+    - For each of `auth, boards (including members), columns, cards (including subtasks, attachments, and the board cards search/filter), categories, comments, notifications, analytics, users, activity (card and board activity reads)`: replace `flask.Blueprint` with `flask_smorest.Blueprint`; turn `schema.py` into marshmallow request, query, and payload schemas; validate with `@blp.arguments(Schema)` or `@blp.arguments(Schema, location="query")`; declare each success response with `@blp.response(status, envelope(PayloadSchema))` (`NullEnvelopeSchema` for logout); mark protected operations with `@blp.doc(security=[{"bearerAuth": []}])`; return `ok(dto, "<descriptive message>", status)` with the same status as the declaration. Each mutating route (POST, PATCH, PUT, DELETE) passes its own short descriptive message (for example "Card created", "Card moved", "Logged out"); read routes pass none and get "OK".
     - Keep data-dependent rules (uniqueness, access, ordering, ownership) in the service; `service.py` and `repository.py` import none of `flask`, `flask_smorest`, or `marshmallow`. Keep `filter[<field>]` parsing and the `400` for an unsupported filter key, and the signed file route returning raw bytes on success and the error envelope on failure.
     - Keep every URL, HTTP status code, and role rule unchanged.
     - _Requirements: 13.2, 13.3, 13.12, 13.13, 13.14, 13.15_
   - [x] 24.3 Update the existing tests and add envelope tests
-    - Update the 36 existing pytest tests that assert `{ "data": ... }` or `{ "error": ... }` bodies to the new `{ status, message, data }` and `{ status, message, error }` shapes; change no expected HTTP status.
-    - Add tests that: every success body carries `status` equal to the HTTP status and a non-empty `message`; every error body carries `status`, `message`, and `error.message` equal to `message`; body and query validation failures return 400 `VALIDATION_ERROR` and never 422; an unknown route returns the 404 envelope, a wrong method returns the 405 envelope, a forced unhandled exception returns the 500 envelope with a generic message, and a missing or invalid JWT returns the 401 envelope; the signed file route returns the error envelope on failure.
+    - Update the 36 existing pytest tests that assert `{ "data": ... }`, `{ "error": ... }`, a numeric `body["status"]`, or `body["error"]["message"]` to the V6 shapes `{ status: true, message, data }` and `{ status: false, message, error: { code, details? } }`; read the HTTP status from `response.status_code` and the text from `body["message"]`; change no expected HTTP status.
+    - Add tests that: every success body has boolean `status` `true` (never the number 200) and a non-empty `message`, with mutating endpoints returning a descriptive message and reads returning "OK"; every error body has boolean `status` `false`, a single non-empty top-level `message`, an `error.code`, and no `error.message`; `error.details` is absent on every error except `VALIDATION_ERROR`; body and query validation failures return 400 `VALIDATION_ERROR`, never 422, with `error.details` mapping every failing field to a non-empty list of strings (for example a blank comment gives `error.details.content`); an unknown route returns the 404 envelope, a wrong method returns the 405 envelope, a forced unhandled exception returns the 500 envelope with a generic message, and a missing or invalid JWT returns the 401 envelope; the signed file route returns the error envelope on failure.
     - _Requirements: 13.2, 13.3, 13.4, 13.11, 13.13_
   - [x] 24.4 Checkpoint - Run the full pytest suite
     - Run the full backend `pytest` suite and ensure all tests pass, ask the user if questions arise.
@@ -456,7 +458,8 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
 ## Notes
 
 - Google OAuth is out of scope and has no task.
-- Group 24 (flask-smorest and envelope migration) must be done before the frontend group 15, before group 23 (generated documentation), and before test 14.4 (envelope property test). The frontend `lib/api.ts` (task 15.3) unwraps the new `{ status, message, data }` envelope.
+- Group 24 (flask-smorest and envelope migration) must be done before the frontend group 15, before group 23 (generated documentation), and before test 14.4 (envelope property test). The frontend `lib/api.ts` (task 15.3) reads the boolean `status` and unwraps `data` from the V6 envelope `{ status, message, data }`, and throws `ApiError(httpStatus, code, message, details)` from `{ status: false, message, error: { code, details? } }`.
+- V6 (Decision G) envelope rule for every task: `status` is a boolean true exactly when the HTTP status is 2xx; the message text appears once at the top level; `error` has only `code` and, for `VALIDATION_ERROR`, `details`; mutating endpoints send a descriptive message and reads send "OK".
 - Tasks 1 to 13 were built as plain `flask.Blueprint` code with `{ "data": ... }` bodies; their checkboxes stay ticked, and group 24 changes the implementation without changing URLs, status codes, or role rules.
 - Group 25 (relationships and eager loading) runs after group 24, because the marshmallow schemas replace the DTO functions, and before the checkpoint 14.6 and the frontend group 15. It needs no migration. The cross-cutting tests in group 14 run after it.
 - Property 39 (constant query count) is covered by optional task 25.3; Properties 1 to 38 keep their existing tasks.

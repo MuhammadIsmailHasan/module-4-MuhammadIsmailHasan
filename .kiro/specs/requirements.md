@@ -2,9 +2,9 @@
 
 ## Introduction
 
-This document specifies the Kanban Task Management application (Version V5). It is a role-based web app with a Flask REST API backend and a mobile-first Next.js frontend. Teams run day-to-day work on boards, columns, and cards, and supervisors and managers oversee progress through analytics without opening every board.
+This document specifies the Kanban Task Management application (Version V6). It is a role-based web app with a Flask REST API backend and a mobile-first Next.js frontend. Teams run day-to-day work on boards, columns, and cards, and supervisors and managers oversee progress through analytics without opening every board.
 
-The requirements translate decisions already recorded in `specs/project-brief.md` and the steering documents in `.kiro/steering/`. V5 revises V4 and adds no scope beyond the decisions in the Decisions Log. Eleven decisions that resolved gaps in the brief are recorded there: Decisions 1 to 5 (carried from V1), Decisions A to D (carried from V2), Decision E (carried from V4: every response carries `status` and `message`, and the Backend uses flask-smorest with marshmallow schemas and a generated OpenAPI document), and Decision F (new in V5: models declare SQLAlchemy relationships only for real cross-table reads, repositories load related rows explicitly, and serialization belongs to marshmallow schemas). Criteria affected by a decision carry an inline label such as "(Decision A)".
+The requirements translate decisions already recorded in `specs/project-brief.md` and the steering documents in `.kiro/steering/`. V6 revises V5 and adds no scope beyond the decisions in the Decisions Log. Twelve decisions that resolved gaps in the brief are recorded there: Decisions 1 to 5 (carried from V1), Decisions A to D (carried from V2), Decision E (carried from V4: the Backend uses flask-smorest with marshmallow schemas and a generated OpenAPI document; its numeric `status` rule is superseded by Decision G), Decision F (carried from V5: models declare SQLAlchemy relationships only for real cross-table reads, repositories load related rows explicitly, and serialization belongs to marshmallow schemas), and Decision G (new in V6: the Envelope `status` is a boolean, the message text appears once at the top level, and validation errors carry `error.details`). Criteria affected by a decision carry an inline label such as "(Decision A)".
 
 Out of scope for V2: Google OAuth login (post-MVP, added only after login_identifier and password auth is verified end-to-end), rate limiting and server-side token revocation (deferred past MVP), custom per-board workflow templates beyond the five default columns, and subtasks with their own assignee or date. Stretch features (card `progress` meter, `views_count`, decorative Overview/Notes/Questions tabs) are covered in Requirement 16 and are built only after all other requirements work end-to-end.
 
@@ -47,7 +47,7 @@ This feature requires three data-model additions beyond the current `data-model.
 - **Sidebar**: The left navigation holding brand, nav (including Inbox, Activity, and Categories where permitted), the Boards list, team members, and profile.
 - **Analytics_Summary**: A pre-aggregated payload of counts, deltas, and overdue totals for a Board.
 - **Overdue_Card**: A non-soft-deleted Card whose `end_date` is before today and whose Column is not `Done`.
-- **Envelope**: The response shape `{ "status", "message", "data" }` for success and `{ "status", "message", "error": { "code", "message" } }` for failure, where `status` is the HTTP status code as an integer and `message` is a non-empty string.
+- **Envelope**: The response shape `{ "status": true, "message": string, "data": payload }` for success and `{ "status": false, "message": string, "error": { "code": string, "details"?: object } }` for failure, where `status` is a boolean that is true exactly when the HTTP status is 2xx, `message` is a non-empty string stated once at the top level, and `error` has no `message` field (Decision G).
 - **flask-smorest**: The Flask extension through which every blueprint declares request, query, and response marshmallow schemas and from which the OpenAPI 3 document is generated.
 - **Soft_Delete**: Setting `deleted_at` on a row instead of removing the row.
 - **Token**: The JWT returned by register and login, identifying the acting user and role, with a fixed 24-hour expiry.
@@ -70,8 +70,9 @@ Clarification to Decision A (V2): Req 3.4 and 11.2 grant Supervisor writes only 
 | B | Admin is deliberately excluded from commenting and priority flagging (Req 2.5) and from analytics (Req 10.4). Admin is a separate administration track, not a superset of Manager. This is a recorded decision, not an oversight. Future editors must not "fix" it. | Changing it would quietly alter the permission model. | Req 2.5, Req 2 note, 7.3, 10.4 |
 | C | One unified `login_identifier` field replaces separate email and username. Uniqueness and login matching are case-insensitive. | One column means one uniqueness check and one login lookup. | Req 1.1 to 1.5, 1.17, Glossary |
 | D | Uploaded Attachment files are access-gated through an authenticated endpoint or a Signed_File_URL. No permanent public URL. | A permanent public URL bypasses Board_Access and role checks. | Req 4.18, 4.19, 4.24 to 4.27 |
-| E | Every response carries top-level `status` (HTTP status integer) and `message`; the Backend uses flask-smorest with marshmallow schemas, validation failures stay HTTP 400 `VALIDATION_ERROR` (not 422), and the OpenAPI document is generated instead of hand-written. | One declaration per endpoint drives validation, serialization, and documentation, so they cannot drift; the body alone states the outcome. | Req 13.2 to 13.4, 13.11 to 13.15, 17 |
+| E | Every response carries top-level `status` and `message`; the Backend uses flask-smorest with marshmallow schemas, validation failures stay HTTP 400 `VALIDATION_ERROR` (not 422), and the OpenAPI document is generated instead of hand-written. The numeric-`status` and `error.message` parts are superseded by Decision G. | One declaration per endpoint drives validation, serialization, and documentation, so they cannot drift. | Req 13.2 to 13.4, 13.11 to 13.15, 17 |
 | F | Models declare SQLAlchemy relationships only for real cross-table reads (`Board.columns`, `Board.members`, `Card.subtasks`, `Card.attachments`, `Comment.replies`), each with `back_populates` (not `backref`), `lazy="raise"`, and no cascade delete. Repositories load related rows explicitly with `selectinload` or `joinedload`. Models have no `to_dict`; marshmallow schemas serialize, because output depends on the viewer. | An accidental lazy load fails loudly instead of becoming a hidden N+1 query, and viewer-dependent serialization stays in one place. | Req 13.16 to 13.18, 14.12, 15.8, 15.9 |
+| G | The Envelope is `{ "status": true, "message", "data" }` on success and `{ "status": false, "message", "error": { "code", "details"? } }` on failure. `status` is a boolean, true exactly when the HTTP status is 2xx; the numeric HTTP status travels on the HTTP line only. The message text appears once, at the top level, and `error` has no `message` field. For `VALIDATION_ERROR`, `error.details` maps each field name to a list of message strings from marshmallow. Mutating endpoints supply a short descriptive success message (for example "Card moved"); reads default to "OK". Supersedes the status/message part of Decision E. | One shape on both paths gives the frontend one place to unwrap or throw; one message text avoids two strings drifting apart; `error.code` is what code branches on. | Glossary Envelope, Req 1.1, 1.15, 7.2, 10.5, 13.2 to 13.4, 13.11, 13.13 |
 
 Notes on status codes: V2 standardizes "no Token returns 401; valid Token with insufficient role or access returns 403". This changes Req 11.5 (a Guest requesting a private Board) from 403 in V1 to 401 in V2. Guests may still read public Boards without a Token.
 
@@ -90,7 +91,7 @@ Notes on status codes: V2 standardizes "no Token returns 401; valid Token with i
 
 #### Acceptance Criteria
 
-1. WHEN a visitor submits a registration with full name, login_identifier, and password, THE Backend SHALL create a user account with a hashed password and return `{ "status": 201, "message": "...", "data": { "user": { id, full_name, login_identifier, avatar_url }, "token": "..." } }` (Decisions C and E).
+1. WHEN a visitor submits a registration with full name, login_identifier, and password, THE Backend SHALL create a user account with a hashed password and return HTTP 201 with `{ "status": true, "message": "User registered", "data": { "user": { id, full_name, login_identifier, avatar_url }, "token": "..." } }` (Decisions C and G).
 2. WHEN a registered user submits a valid login_identifier and password to login, THE Backend SHALL return the same `user` and `token` shape as registration, matching the login_identifier case-insensitively (Decision C).
 3. IF login credentials are invalid, THEN THE Backend SHALL return HTTP 401 with an error Envelope.
 4. IF a registration uses a login_identifier that already exists when compared case-insensitively, THEN THE Backend SHALL return HTTP 409 with an error Envelope (Decision C).
@@ -104,7 +105,7 @@ Notes on status codes: V2 standardizes "no Token returns 401; valid Token with i
 12. IF a registration password is shorter than 8 characters, THEN THE Backend SHALL return HTTP 400 with the code `VALIDATION_ERROR`.
 13. THE Backend SHALL hash passwords with bcrypt or argon2.
 14. WHEN the Backend issues a Token, THE Backend SHALL set a fixed expiry of 24 hours and keep no server-side revocation list.
-15. WHEN a user calls `POST /api/auth/logout`, THE Backend SHALL return `{ "status": 200, "message": "...", "data": null }`.
+15. WHEN a user calls `POST /api/auth/logout`, THE Backend SHALL return HTTP 200 with `{ "status": true, "message": "Logged out", "data": null }` (Decision G).
 16. WHEN a user logs out, THE Frontend SHALL discard the stored Token, and the issued Token SHALL remain valid until its expiry.
 17. THE Backend SHALL apply no login_identifier format validation beyond trimming, a non-empty value, a maximum of 255 characters, and case-insensitive uniqueness (provisional, see Open Question 1).
 18. THE System SHALL defer rate limiting past the MVP.
@@ -235,7 +236,7 @@ Note (Decision B): Admin is a separate administration track and is deliberately 
 #### Acceptance Criteria
 
 1. WHEN a Member, Supervisor, or Manager posts to `POST /api/cards/{id}/comments` on a Card whose Board the user has Board_Access to, THE Backend SHALL create a top-level Comment (Decision A).
-2. IF a Comment body is missing or empty, THEN THE Backend SHALL return HTTP 400 with the code `VALIDATION_ERROR` and the message `content is required` in both `message` and `error.message` (Decision E).
+2. IF a Comment body is missing or empty, THEN THE Backend SHALL return HTTP 400 with the code `VALIDATION_ERROR`, a top-level `message`, and an `error.details` entry for the field `content` holding a list of message strings, the first being `content is required` (Decision G).
 3. IF an authenticated Admin attempts to create a Comment, THEN THE Backend SHALL return HTTP 403, and IF no Token is present, THEN THE Backend SHALL return HTTP 401 (Decision B).
 4. WHEN a Member, Supervisor, or Manager with Board_Access to the Card's Board posts to `POST /api/comments/{id}/replies` targeting a top-level Comment, THE Backend SHALL create the Reply and increment the parent's Reply_Count in the same transaction (Decision A).
 5. IF the target of a reply request has a non-null `parent_id`, THEN THE Backend SHALL return HTTP 400.
@@ -296,7 +297,7 @@ Note (Decision B): Admin is a separate administration track and is deliberately 
 2. IF a Supervisor requests analytics for a Board whose `owner_id` is not that Supervisor, including a Board where that Supervisor is a BoardMember, THEN THE Backend SHALL return HTTP 403.
 3. WHEN a Manager requests analytics for any Board, THE Backend SHALL return an Analytics_Summary.
 4. IF an authenticated Member or Admin requests analytics, THEN THE Backend SHALL return HTTP 403, and IF no Token is present, THEN THE Backend SHALL return HTTP 401 (Decision B, intentional).
-5. THE Backend SHALL return Analytics_Summary payloads of counts, deltas, and overdue totals, such as `{ "status": 200, "message": "...", "data": { "done": 12, "in_progress": 4, "overdue": 2 } }`, counting an Overdue_Card as a Card whose `end_date` is before today, whose Column is not `Done`, and which is not soft-deleted, and never a raw dump of every Card.
+5. THE Backend SHALL return Analytics_Summary payloads of counts, deltas, and overdue totals, such as `{ "status": true, "message": "OK", "data": { "done": 12, "in_progress": 4, "overdue": 2 } }`, counting an Overdue_Card as a Card whose `end_date` is before today, whose Column is not `Done`, and which is not soft-deleted, and never a raw dump of every Card.
 6. WHEN a Manager requests cross-board analytics, THE Backend SHALL return one Analytics_Summary per Board in a single pre-aggregated response.
 7. THE Backend SHALL grant a Supervisor analytics access only through Board ownership and never through BoardMember (Decision A).
 
@@ -340,18 +341,18 @@ Note (Decision B): Admin is a separate administration track and is deliberately 
 #### Acceptance Criteria
 
 1. THE Backend SHALL serve all endpoints under `/api/...` without a version segment.
-2. WHEN a request succeeds, THE Backend SHALL return `{ "status": <HTTP status integer>, "message": <non-empty string>, "data": <payload> }` with the payload as an object, a list, or null (Decision E).
-3. IF a request fails, THEN THE Backend SHALL return `{ "status": <HTTP status integer>, "message": <non-empty string>, "error": { "code": string, "message": string } }` with the matching HTTP status of 400, 401, 403, 404, 405, 409, or 500, and `error.message` equal to the top-level `message` (Decision E).
-4. THE Backend SHALL return the Envelope shape, including `status` and `message`, on every response except the Swagger UI HTML page, the raw OpenAPI document, and the successful file bytes of the signed file route; error responses of the signed file route SHALL still use the Envelope (Decision E).
+2. WHEN a request succeeds, THE Backend SHALL return `{ "status": true, "message": <non-empty string>, "data": <payload> }` with the payload as an object, a list, or null, using a short descriptive `message` for each mutating endpoint (for example "Card moved") and "OK" for reads (Decision G).
+3. IF a request fails, THEN THE Backend SHALL return `{ "status": false, "message": <non-empty string>, "error": { "code": string, "details"?: object } }` with the matching HTTP status of 400, 401, 403, 404, 405, 409, or 500, stating the message text only at the top level and including no `message` field in `error` (Decision G).
+4. THE Backend SHALL return the Envelope shape, including `status` and `message`, on every response except the Swagger UI HTML page, the raw OpenAPI document, and the successful file bytes of the signed file route; error responses of the signed file route SHALL still use the Envelope (Decision G).
 5. THE Backend SHALL use a UUID primary key on every entity and include `created_at` and `updated_at` on every entity.
 6. THE Backend SHALL include `deleted_at` and `archived_at` on Board and Card.
 7. THE Backend SHALL access the database only through each blueprint's own `repository.py`.
 8. THE Backend SHALL read CORS origins from an environment variable allow-list and never use the wildcard `*`.
 9. THE System SHALL provide a `.env.example` for the Backend and the Frontend and commit no real `.env` file.
 10. IF a request carries no Token on an endpoint that requires one, THEN THE Backend SHALL return HTTP 401, and IF a valid Token lacks the required role or Board_Access, THEN THE Backend SHALL return HTTP 403, except that Guests may read public Boards without a Token.
-11. THE Backend SHALL set the Envelope `status` equal to the HTTP status code of the response on every Envelope response, including 401, 403, 404, 405, 409, and 500 responses and the errors of the signed file route, with the exceptions of the Swagger UI HTML page, the raw OpenAPI document, and the successful file bytes of the signed file route, which carry no Envelope (Decision E).
+11. THE Backend SHALL set the Envelope `status` to true when the HTTP status is 2xx and to false otherwise, on every Envelope response, including 401, 403, 404, 405, 409, and 500 responses and the errors of the signed file route, with the exceptions of the Swagger UI HTML page, the raw OpenAPI document, and the successful file bytes of the signed file route, which carry no Envelope, and THE Backend SHALL carry the numeric HTTP status on the HTTP line only (Decision G).
 12. THE Backend SHALL use flask-smorest, registering every blueprint on one `Api` instance, and SHALL declare request bodies, query arguments, and responses of every endpoint with marshmallow schemas (Decision E).
-13. IF request body or query validation fails, THEN THE Backend SHALL return HTTP 400 with the code `VALIDATION_ERROR` and the Envelope error shape, and SHALL NOT return HTTP 422 (Decision E).
+13. IF request body or query validation fails, THEN THE Backend SHALL return HTTP 400 with the code `VALIDATION_ERROR` and an `error.details` object mapping each failing field name to a list of message strings from marshmallow, and SHALL NOT return HTTP 422 (Decisions E and G).
 14. THE Backend SHALL keep each blueprint layered `routes.py → service.py → repository.py` with the marshmallow schemas in `schema.py` (Decision E).
 15. THE Backend SHALL declare each success response with a schema that wraps the blueprint's payload schema in the Envelope (Decision E).
 16. THE Backend SHALL declare the SQLAlchemy relationships `Board.columns`, `Board.members`, `Card.subtasks`, `Card.attachments`, and `Comment.replies`, each paired with its inverse through `back_populates`, declared with `lazy="raise"`, and without a delete cascade (Decision F).
