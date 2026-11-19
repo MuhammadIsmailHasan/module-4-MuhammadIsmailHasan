@@ -1,46 +1,169 @@
-/* Design tokens copied from design/kanban-prototype.html :root. Components use only these variables. */
+/*
+ * Design tokens: the single source of the look (Decision H, V7 look refresh).
+ * Visual reference: a light project-management dashboard (white surfaces, navy brand,
+ * pastel tags, flat columns, icon rail). Components use only these variables.
+ */
 :root {
-  --surface-100: #f6f8f7;
+  --surface-100: #f3f4fa;
   --surface-200: #ffffff;
-  --ink: #16241f;
-  --ink-muted: #5c6b65;
-  --border: #dce3df;
-  --brand: #2b5748;
-  --brand-strong: #1e3f34;
-  --accent: #c98a2b;
-  --danger: #c23b3b;
-  --ring: #2f6fed;
+  --ink: #101a3d;
+  --ink-muted: #6b7390;
+  --border: #e4e7f1;
+  --brand: #13226b;
+  --brand-strong: #0b1750;
+  --accent: #f4a340;
+  --danger: #d64545;
+  --ring: #3b5bdb;
 
-  --label-green-bg: #dcefe3;
-  --label-green-text: #1f6b45;
-  --label-yellow-bg: #fbefc7;
-  --label-yellow-text: #8a6512;
-  --label-orange-bg: #fbe4d2;
-  --label-orange-text: #9a4a14;
-  --label-red-bg: #f6dada;
-  --label-red-text: #9a2f2f;
-  --label-purple-bg: #e8dff5;
-  --label-purple-text: #5b3a9e;
-  --label-blue-bg: #dce7fb;
-  --label-blue-text: #2452a8;
+  --label-green-bg: #dcf5ea;
+  --label-green-text: #0f7a55;
+  --label-yellow-bg: #fff2d0;
+  --label-yellow-text: #946200;
+  --label-orange-bg: #ffe9d2;
+  --label-orange-text: #b4540a;
+  --label-red-bg: #fde3e3;
+  --label-red-text: #c23a3a;
+  --label-purple-bg: #e8e6fd;
+  --label-purple-text: #4a3db5;
+  --label-blue-bg: #dbe8ff;
+  --label-blue-text: #1d4fb8;
+
+  /* Solid hues for column dots and progress fills. */
+  --tone-green: #22c08b;
+  --tone-blue: #2f54d6;
+  --tone-red: #ef5b5b;
+  --tone-purple: #7a5af8;
+  --tone-orange: #f59a3e;
 
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
   --space-12: 48px;
 
-  --radius-sm: 6px;
-  --radius-md: 12px;
-  --radius-lg: 20px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
   --radius-full: 999px;
+  --radius-card: 6px;
 
-  --shadow-card: 0 1px 2px rgba(22, 36, 31, 0.1);
-  --shadow-dragging: 0 10px 24px rgba(22, 36, 31, 0.2);
-  --shadow-hover: 0 0 0 1px var(--border), 0 4px 12px rgba(22, 36, 31, 0.1), 0 2px 4px rgba(22, 36, 31, 0.06);
-  --surface-hover: #f1f5f3;
+  --shadow-card: 0 1px 2px rgba(16, 26, 61, 0.06);
+  --shadow-dragging: 0 12px 28px rgba(16, 26, 61, 0.16);
+  --shadow-hover: 0 0 0 1px var(--border), 0 6px 16px rgba(16, 26, 61, 0.08);
+  --shadow-modal: 0 24px 64px rgba(16, 26, 61, 0.24);
+  --shadow-panel: -8px 0 24px rgba(16, 26, 61, 0.08);
+  --surface-hover: #f6f7fc;
 
-  --sidebar-w: 264px;
+  --sidebar-w: 304px;
+  --rail-w: 64px;
+}
+
+/* ---- Extension tokens: sizes the reference implied but did not name ---- */
+:root {
+  --on-brand: #ffffff;
+  --on-brand-soft: rgba(255, 255, 255, 0.16);
+  --brand-tint: rgba(19, 34, 107, 0.07);
+  --online: #22c08b;
+  --scrim: rgba(16, 26, 61, 0.35);
+  --scrim-strong: rgba(16, 26, 61, 0.5);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --size-touch: 44px;
+  --size-control: 40px;
+  --size-control-sm: 32px;
+  --size-icon: 18px;
+  --size-icon-sm: 14px;
+  --size-avatar-sm: 24px;
+  --size-avatar-md: 32px;
+  --size-dot: 6px;
+  --size-dot-md: 8px;
+  --size-accent-bar: 3px;
+  --size-progress: 5px;
+  --size-progress-lg: 6px;
+  --size-progress-track: 192px;
+  --size-search: 280px;
+  --size-alert-dot: 8px;
+  --lift: 2px;
+
+  --container-auth: 420px;
+  --column-w: clamp(17rem, 22vw, 20rem);
+  --panel-w: 380px;
+  --panel-w-sm: 320px;
+  --modal-w: 520px;
+  --modal-w-wide: 880px;
+  --popover-w: 288px;
+  --popover-w-wide: 320px;
+  --size-cell: 40px;
+  --size-tooltip-gap: 8px;
+  --size-column-min: 120px;
+  --size-popover-list: 240px;
+  --size-date-label: 88px;
+  --size-checkbox: 18px;
+  --size-dropzone: 96px;
+
+  --border-width-dashed: 1px;
+  --border-width-focus: 2px;
+  --ring-offset: 2px;
+  --blur-overlay: 2px;
+
+  --z-header: 30;
+  --z-scrim: 35;
+  --z-sidebar: 40;
+  --z-panel-scrim: 45;
+  --z-panel: 50;
+  --z-modal: 60;
+
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 260ms;
+  --opacity-glow: 0.22;
+  --opacity-muted: 0.6;
+  --opacity-disabled: 0.55;
+  --opacity-faint: 0.85;
+
+  --font-stack: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --text-2xs: 11px;
+  --text-2xs-lh: 15px;
+  --text-xs: 12px;
+  --text-xs-lh: 16px;
+  --text-meta: 13px;
+  --text-meta-lh: 18px;
+  --text-sm: 14px;
+  --text-sm-lh: 20px;
+  --text-base: 15px;
+  --text-base-lh: 21px;
+  --text-heading: 16px;
+  --text-heading-lh: 22px;
+  --text-lg: 17px;
+  --text-lg-lh: 23px;
+  --text-title: 20px;
+  --text-title-lh: 26px;
+  --text-page-title: 18px;
+  --text-page-title-lh: 24px;
+  --text-xl: 24px;
+  --text-xl-lh: 30px;
+  --text-2xl: 34px;
+  --text-2xl-lh: 42px;
+
+  /* Board card text: grows one step from 1280px wide. */
+  --text-card-title: 15px;
+  --text-card-title-lh: 21px;
+  --text-card-meta: 13px;
+  --text-card-meta-lh: 18px;
+  --text-card-tag: 12px;
+  --text-card-tag-lh: 16px;
+}
+
+@media (min-width: 80rem) {
+  :root {
+    --text-card-title: 16px;
+    --text-card-title-lh: 22px;
+    --text-card-meta: 14px;
+    --text-card-meta-lh: 20px;
+    --text-card-tag: 13px;
+    --text-card-tag-lh: 17px;
+  }
 }

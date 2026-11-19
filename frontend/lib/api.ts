@@ -32,6 +32,7 @@ async function call<T>(method: string, path: string, opts: RequestOptions = {}):
 }
 
 const get = <T>(path: string, query?: RequestOptions["query"]) => call<T>("GET", path, { query });
+const pageQuery = (p: PageQuery) => ({ limit: p.limit === undefined ? undefined : String(p.limit), before: p.before });
 const post = <T>(path: string, body?: unknown) => call<T>("POST", path, { body });
 const patch = <T>(path: string, body?: unknown) => call<T>("PATCH", path, { body });
 const del = <T>(path: string) => call<T>("DELETE", path);
@@ -44,6 +45,17 @@ export interface CardInput {
   end_date?: string | null;
   category_id?: string | null;
   assignee_id?: string | null;
+}
+
+/** Paging for the Inbox and the activity lists (Decision J). */
+export interface PageQuery {
+  limit?: number;
+  before?: string;
+}
+
+export interface Candidate {
+  id: string;
+  full_name: string;
 }
 
 export interface CardFilters {
@@ -64,13 +76,14 @@ export const api = {
   boards: {
     list: () => get<Board[]>("/boards"),
     get: (id: string) => get<Board>(`/boards/${id}`),
-    create: (body: { name: string; visibility?: "public" | "private" }) => post<Board>("/boards", body),
+    create: (body: { name: string; visibility?: "public" | "private"; description?: string }) => post<Board>("/boards", body),
     update: (id: string, body: { name?: string; visibility?: string; owner_id?: string | null }) =>
       patch<Board>(`/boards/${id}`, body),
     members: (id: string) => get<User[]>(`/boards/${id}/members`),
     addMember: (id: string, userId: string) => post<User>(`/boards/${id}/members`, { user_id: userId }),
     removeMember: (id: string, userId: string) => del<null>(`/boards/${id}/members/${userId}`),
-    activity: (id: string) => get<ActivityEntry[]>(`/boards/${id}/activity`),
+    activity: (id: string, page: PageQuery = {}) => get<ActivityEntry[]>(`/boards/${id}/activity`, pageQuery(page)),
+    candidates: (id: string, search: string) => get<Candidate[]>(`/boards/${id}/candidates`, { search: search || undefined }),
     addColumn: (id: string, name: string) => post<Column>(`/boards/${id}/columns`, { name }),
   },
   cards: {
@@ -82,6 +95,7 @@ export const api = {
         "filter[category]": f.category,
       }),
     get: (id: string) => get<Card>(`/cards/${id}`),
+    activity: (id: string, page: PageQuery = {}) => get<ActivityEntry[]>(`/cards/${id}/activity`, pageQuery(page)),
     create: (columnId: string, body: CardInput & { title: string }) => post<Card>(`/columns/${columnId}/cards`, body),
     update: (id: string, body: CardInput) => patch<Card>(`/cards/${id}`, body),
     move: (id: string, body: { column_id: string; prev?: string | null; next?: string | null }) =>
@@ -120,7 +134,7 @@ export const api = {
     togglePriority: (id: string) => patch<Comment>(`/comments/${id}/priority`),
   },
   notifications: {
-    inbox: () => get<Inbox>("/notifications"),
+    inbox: (page: PageQuery = {}) => get<Inbox>("/notifications", pageQuery(page)),
     markRead: (id: string) => patch<Notification>(`/notifications/${id}/read`),
     readAll: () => patch<null>("/notifications/read-all"),
   },

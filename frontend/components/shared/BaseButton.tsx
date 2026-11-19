@@ -1,23 +1,28 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentProps } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
 
-interface BaseButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface BaseButtonProps extends Omit<ComponentProps<"button">, "size"> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   block?: boolean;
 }
 
-/** The only button in the app: styled from tokens.css, with focus and disabled states built in. */
-export function BaseButton({
-  variant = "primary",
-  size = "md",
-  block = false,
-  className = "",
-  type = "button",
-  ...rest
-}: BaseButtonProps) {
-  const classes = ["btn", `btn-${variant}`, `btn-${size}`, block ? "btn-block" : "", className].filter(Boolean).join(" ");
-  return <button type={type} className={classes} {...rest} />;
+const VARIANT = { primary: "default", secondary: "secondary", ghost: "ghost", danger: "destructive" } as const;
+
+/** The only button in the app: a thin wrapper over the shadcn/ui Button, themed from the design tokens. */
+export function BaseButton({ variant = "primary", size = "md", block = false, className, type = "button", ...rest }: BaseButtonProps) {
+  return (
+    <Button
+      type={type}
+      variant={VARIANT[variant]}
+      size={size === "sm" ? "sm" : "default"}
+      data-variant={variant}
+      className={cn(block && "w-full", className)}
+      {...rest}
+    />
+  );
 }

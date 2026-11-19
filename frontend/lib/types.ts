@@ -24,6 +24,12 @@ export interface Column {
 export interface Board {
   id: string;
   name: string;
+  description?: string | null;
+  /** Computed counts: present on the board list only. */
+  card_count?: number;
+  done_count?: number;
+  overdue_count?: number;
+  member_count?: number;
   visibility: "public" | "private";
   owner_id: string | null;
   archived_at: string | null;
@@ -53,6 +59,7 @@ export interface Comment {
   card_id: string;
   author_id: string;
   parent_id: string | null;
+  author_name?: string | null;
   content: string;
   is_priority: boolean;
   reply_count: number;
@@ -64,6 +71,7 @@ export interface Comment {
 export interface ActivityEntry {
   id: string;
   actor_id: string;
+  actor_name?: string | null;
   action: string;
   target_type: string;
   target_id: string;
