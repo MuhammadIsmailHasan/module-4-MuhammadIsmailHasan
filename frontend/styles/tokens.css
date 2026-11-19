@@ -1,0 +1,46 @@
+/* Design tokens copied from design/kanban-prototype.html :root. Components use only these variables. */
+:root {
+  --surface-100: #f6f8f7;
+  --surface-200: #ffffff;
+  --ink: #16241f;
+  --ink-muted: #5c6b65;
+  --border: #dce3df;
+  --brand: #2b5748;
+  --brand-strong: #1e3f34;
+  --accent: #c98a2b;
+  --danger: #c23b3b;
+  --ring: #2f6fed;
+
+  --label-green-bg: #dcefe3;
+  --label-green-text: #1f6b45;
+  --label-yellow-bg: #fbefc7;
+  --label-yellow-text: #8a6512;
+  --label-orange-bg: #fbe4d2;
+  --label-orange-text: #9a4a14;
+  --label-red-bg: #f6dada;
+  --label-red-text: #9a2f2f;
+  --label-purple-bg: #e8dff5;
+  --label-purple-text: #5b3a9e;
+  --label-blue-bg: #dce7fb;
+  --label-blue-text: #2452a8;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  --shadow-card: 0 1px 2px rgba(22, 36, 31, 0.1);
+  --shadow-dragging: 0 10px 24px rgba(22, 36, 31, 0.2);
+  --shadow-hover: 0 0 0 1px var(--border), 0 4px 12px rgba(22, 36, 31, 0.1), 0 2px 4px rgba(22, 36, 31, 0.06);
+  --surface-hover: #f1f5f3;
+
+  --sidebar-w: 264px;
+}
