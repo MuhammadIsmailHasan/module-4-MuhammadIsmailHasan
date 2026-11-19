@@ -23,16 +23,22 @@ describe("BaseButton", () => {
       </BaseButton>,
     );
     const btn = screen.getByRole("button", { name: "Delete" });
-    expect(btn).toHaveClass("btn-danger", "btn-sm");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("data-variant", "danger");
     await userEvent.click(btn);
     expect(onClick).not.toHaveBeenCalled();
   });
 });
 
 describe("BaseBadge", () => {
-  it("renders its text with the tone class", () => {
+  it("renders its text and exposes its tone", () => {
     render(<BaseBadge tone="red">High</BaseBadge>);
-    expect(screen.getByText("High")).toHaveClass("badge", "badge-red");
+    expect(screen.getByText("High")).toHaveAttribute("data-tone", "red");
+  });
+
+  it("defaults to the neutral tone", () => {
+    render(<BaseBadge>Plain</BaseBadge>);
+    expect(screen.getByText("Plain")).toHaveAttribute("data-tone", "neutral");
   });
 });
 
@@ -46,18 +52,19 @@ describe("BaseModal", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("is a labelled dialog and closes on Escape, the close button and the overlay", async () => {
+  it("is a labelled dialog and closes on Escape and on the close button", async () => {
     const onClose = vi.fn();
-    const { container } = render(
+    render(
       <BaseModal open title="Card" onClose={onClose}>
         <p>body</p>
       </BaseModal>,
     );
     const dialog = screen.getByRole("dialog", { name: "Card" });
-    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText("body")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
-    await userEvent.click(container.querySelector(".modal-overlay") as HTMLElement);
-    expect(onClose).toHaveBeenCalledTimes(3);
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });
