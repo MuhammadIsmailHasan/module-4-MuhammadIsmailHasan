@@ -214,7 +214,7 @@ Register:
 POST /api/auth/register
 { "full_name": "Ann", "login_identifier": "ann@example.com", "password": "<at least 8 characters>" }
 
-201 { "status": true, "message": "Registered",
+201 { "status": true, "message": "User registered",
       "data": { "user": { "id": "…", "full_name": "Ann", "login_identifier": "ann@example.com", "avatar_url": null }, "token": "eyJ…" } }
 ```
 
