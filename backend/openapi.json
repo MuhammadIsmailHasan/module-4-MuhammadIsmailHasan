@@ -3569,9 +3569,15 @@
             "type": "string",
             "description": "Machine-readable error code"
           },
-          "message": {
-            "type": "string",
-            "description": "Human-readable error message"
+          "details": {
+            "type": "object",
+            "description": "VALIDATION_ERROR only: field name to list of messages",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         },
         "additionalProperties": false
@@ -3580,8 +3586,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "Always false on errors"
           },
           "message": {
             "type": "string",
@@ -3685,8 +3691,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -3726,8 +3732,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string"
@@ -3812,8 +3818,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -3837,8 +3843,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -3880,8 +3886,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -3913,8 +3919,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -3969,8 +3975,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4002,8 +4008,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4283,8 +4289,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4375,8 +4381,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4408,8 +4414,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4458,8 +4464,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4496,8 +4502,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4541,8 +4547,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4578,8 +4584,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4627,8 +4633,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4652,8 +4658,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4714,8 +4720,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4739,8 +4745,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4793,8 +4799,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4818,8 +4824,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4862,8 +4868,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",
@@ -4916,8 +4922,8 @@
         "type": "object",
         "properties": {
           "status": {
-            "type": "integer",
-            "description": "HTTP status code"
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
           },
           "message": {
             "type": "string",

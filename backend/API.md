@@ -19,25 +19,26 @@ APP_ENV=development flask run     # then open http://localhost:5000/api/docs
 
 ## Response envelope
 
-Every response carries `status` (the HTTP status code, integer) and `message` (string).
+Every response carries a boolean `status` (true exactly when the HTTP status is 2xx) and a `message` string. The numeric HTTP status travels on the HTTP line only, not in the body.
 
-Success:
-
-```json
-{ "status": 200, "message": "Card retrieved", "data": { "id": "…", "title": "Fix login" } }
-```
-
-`data` is an object, a list, or `null`. Create calls return 201. There is no pagination: list endpoints return every row.
-
-Error:
+Success (`status: true`):
 
 ```json
-{ "status": 400, "message": "content is required", "error": { "code": "VALIDATION_ERROR", "message": "content is required" } }
+{ "status": true, "message": "OK", "data": { "id": "…", "title": "Fix login" } }
 ```
 
-`error.message` always equals `message`. The only responses without an envelope are the Swagger page, `/api/openapi.json`, and the successful bytes of `GET /api/attachments/{id}/file`.
+`data` is an object, a list, or `null`. Mutating endpoints send a short descriptive message ("Card moved"); reads send "OK". Create calls return HTTP 201. There is no pagination: list endpoints return every row.
 
-| Status | `error.code` | Meaning |
+Error (`status: false`):
+
+```json
+{ "status": false, "message": "Validation failed",
+  "error": { "code": "VALIDATION_ERROR", "details": { "content": ["content is required"] } } }
+```
+
+The message text appears once, at the top level; `error` holds only the machine-readable `code` and, for `VALIDATION_ERROR` from body or query validation, `details` (field name to a list of messages). Branch on `error.code`. The only responses without an envelope are the Swagger page, `/api/openapi.json`, and the successful bytes of `GET /api/attachments/{id}/file`.
+
+| HTTP | `error.code` | Meaning |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | Bad body or query. marshmallow failures are mapped to 400, never 422 |
 | 401 | `UNAUTHORIZED` | Missing, invalid or expired Token; bad login; Guest on a private board |
@@ -213,7 +214,7 @@ Register:
 POST /api/auth/register
 { "full_name": "Ann", "login_identifier": "ann@example.com", "password": "<at least 8 characters>" }
 
-201 { "status": 201, "message": "Registered",
+201 { "status": true, "message": "Registered",
       "data": { "user": { "id": "…", "full_name": "Ann", "login_identifier": "ann@example.com", "avatar_url": null }, "token": "eyJ…" } }
 ```
 
@@ -223,7 +224,7 @@ Create a board (Manager):
 POST /api/boards
 { "name": "Sprint 1", "visibility": "private" }
 
-201 { "status": 201, "message": "Board created",
+201 { "status": true, "message": "Board created",
       "data": { "id": "…", "name": "Sprint 1", "visibility": "private", "owner_id": null, "archived_at": null,
                 "columns": [ { "id": "…", "name": "Todo", "order": 0.0 }, … ] } }
 ```
@@ -234,7 +235,8 @@ Move a card between two neighbours:
 PATCH /api/cards/{id}/move
 { "column_id": "…", "prev": "<card above>", "next": "<card below>" }
 
-200 { "status": 200, "message": "Card moved", "data": { "id": "…", "column_id": "…", "order": 1.5, … } }
+200 { "status": true, "message": "Card moved",
+      "data": { "id": "…", "column_id": "…", "order": 1.5, … } }
 ```
 
 Add a comment (blank body is rejected):
@@ -243,8 +245,8 @@ Add a comment (blank body is rejected):
 POST /api/cards/{id}/comments
 { "content": "   " }
 
-400 { "status": 400, "message": "content is required",
-      "error": { "code": "VALIDATION_ERROR", "message": "content is required" } }
+400 { "status": false, "message": "Validation failed",
+      "error": { "code": "VALIDATION_ERROR", "details": { "content": ["content is required"] } } }
 ```
 
 Signed file URL:
@@ -252,7 +254,7 @@ Signed file URL:
 ```http
 GET /api/attachments/{id}/url
 
-200 { "status": 200, "message": "File URL issued",
+200 { "status": true, "message": "OK",
       "data": { "file_url": "/api/attachments/{id}/file?exp=1767225600&sig=…", "expires_at": "2026-01-01T00:00:00+00:00" } }
 ```
 
@@ -261,6 +263,6 @@ Analytics (Manager):
 ```http
 GET /api/boards/{id}/analytics
 
-200 { "status": 200, "message": "Analytics retrieved",
+200 { "status": true, "message": "OK",
       "data": { "board_id": "…", "name": "Sprint 1", "total": 12, "done": 4, "in_progress": 3, "overdue": 1, "done_delta": 2 } }
 ```
