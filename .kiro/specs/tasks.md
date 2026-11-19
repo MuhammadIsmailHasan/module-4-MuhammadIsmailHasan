@@ -69,10 +69,10 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - `POST /api/auth/logout` returns `{ "data": null }` and revokes nothing.
     - Defer rate limiting; add no Google OAuth route.
     - _Requirements: 1.1, 1.2, 1.14, 1.15, 1.16, 1.18, 1.11_
-  - [ ]* 3.3 Write property test for registration and login round trip
+  - [x]* 3.3 Write property test for registration and login round trip
     - **Property 1: Registration and login round trip**
     - **Validates: Requirements 1.1, 1.2, 1.3, 1.13**
-  - [ ]* 3.4 Write property test for registration validation and unique identifier
+  - [x]* 3.4 Write property test for registration validation and unique identifier
     - **Property 2: Registration validation and unique login identifier**
     - **Validates: Requirements 1.4, 1.5, 1.12, 1.17**
   - [x]* 3.5 Write unit tests for Token expiry and logout
@@ -84,43 +84,43 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - In `board_service`, add `can_access(user, board)`, `can_write_staff(user, board)`, `is_owner(user, board)`, and `require_access(user, board)` (404 for soft-deleted, 401 for Guest on private, 403 for signed-in without access).
     - Add `board_repository` functions `get_by_id`, `is_member`, `list_visible(user)`; all queries exclude `deleted_at IS NOT NULL` by default.
     - _Requirements: 2.2, 3.4, 3.5, 11.5, 11.6, 11.11, 13.10_
-  - [ ]* 4.2 Write property test for Board_Access
+  - [x]* 4.2 Write property test for Board_Access
     - **Property 4: Board_Access function**
     - **Validates: Requirements 3.4, 6.5, 7.1, 8.3, 8.4, 11.6, 11.11, 12.1, 12.7**
-  - [ ]* 4.3 Write property test for the permission matrix
+  - [x]* 4.3 Write property test for the permission matrix
     - **Property 3: Permission matrix and role source**
     - **Validates: Requirements 1.8, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 3.3, 3.4, 3.5, 3.7, 4.1, 4.4, 4.7, 6.1, 6.4, 7.3, 7.8, 10.4, 11.3, 11.9**
   - [x] 4.4 Implement board creation, listing, and retrieval
     - `POST /api/boards` (manager, admin) inserts the Board and five Default_Columns (`Todo, In Progress, Review, Revision, Done`, `order` 0 to 4) in one transaction.
     - `GET /api/boards` uses `list_visible` (Guest: public non-deleted; signed-in: public plus accessible); `GET /api/boards/{id}` calls `require_access` and `serialize_board` omits `comments` and `activity_log` for a Guest.
     - _Requirements: 2.1, 3.1, 3.3, 3.9, 3.10, 11.4, 11.7, 11.12_
-  - [ ]* 4.5 Write property test for default column seeding
+  - [x]* 4.5 Write property test for default column seeding
     - **Property 6: Board creation seeds default columns**
     - **Validates: Requirements 3.1**
-  - [ ]* 4.6 Write property test for board list visibility
+  - [x]* 4.6 Write property test for board list visibility
     - **Property 34: Board list visibility**
     - **Validates: Requirements 11.4, 11.6, 11.12**
   - [x] 4.7 Implement board update, owner reassignment, visibility, archive, soft delete
     - `PATCH /api/boards/{id}`: `owner_id` change by Manager or Admin only, new owner must have role `supervisor` (400 otherwise), `null` clears; visibility change by Manager, Admin, or owner/BoardMember Supervisor; log `board.owner_changed` and visibility changes in the same transaction.
     - `POST /api/boards/{id}/archive`, `POST /api/boards/{id}/unarchive`, `DELETE /api/boards/{id}` (soft, sets `deleted_at`), all Manager and Admin only; never hard-delete a Board.
     - _Requirements: 3.2, 3.6, 3.7, 3.8, 3.16, 3.17, 3.18, 3.19, 11.2, 11.3, 11.8, 11.9_
-  - [ ]* 4.8 Write property test for owner reassignment
+  - [x]* 4.8 Write property test for owner reassignment
     - **Property 19: Owner reassignment validation**
     - **Validates: Requirements 3.2, 3.16, 3.17, 3.18, 3.19**
-  - [ ]* 4.9 Write property test for soft delete and archive round trip
+  - [x]* 4.9 Write property test for soft delete and archive round trip
     - **Property 8: Soft delete hides without removing** (Board part; the card children part is completed in task 5.7)
     - **Property 9: Archive round trip** (Board part)
     - **Validates: Requirements 3.6, 3.8, 11.8, 11.10**
   - [x] 4.10 Implement board members endpoints
     - `GET /api/boards/{id}/members` (requires `can_access`), `POST /api/boards/{id}/members` body `{ "user_id" }` (owner, Manager, Admin; 409 when the pair exists; 404 when the user does not exist), `DELETE /api/boards/{id}/members/{user_id}` (404 when the pair does not exist); write one `board.member_added` or `board.member_removed` Activity_Log row in the same transaction.
     - _Requirements: 3.11, 3.12, 3.13, 3.14, 3.15_
-  - [ ]* 4.11 Write property test for BoardMember add and remove
+  - [x]* 4.11 Write property test for BoardMember add and remove
     - **Property 18: BoardMember add and remove**
     - **Validates: Requirements 3.11, 3.12, 3.13, 3.14, 3.15**
   - [x] 4.12 Implement column creation
     - `POST /api/boards/{board_id}/columns` guarded by `require_access` then `can_write_staff`; new Column gets `order = max + 1`.
     - _Requirements: 2.6, 3.4, 3.5_
-  - [ ]* 4.13 Write property test for column append order
+  - [x]* 4.13 Write property test for column append order
     - **Property 7: Column append order**
     - **Validates: Requirements 3.4**
 
@@ -128,7 +128,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 5.1 Implement signing and clock-injectable file URL helpers
     - `app/common/signing.py`: `sign_file_url(attachment_id, now)` returns `/api/attachments/{id}/file?exp=&sig=` with `exp = now + 900 s` and HMAC-SHA256 over `"{id}.{exp}"` using `FILE_URL_SECRET`; `verify_file_signature(...)` uses `hmac.compare_digest` and rejects missing, tampered, or expired values.
     - _Requirements: 4.18, 4.24, 4.25_
-  - [ ]* 5.2 Write property test for signed URL validity and expiry
+  - [x]* 5.2 Write property test for signed URL validity and expiry
     - **Property 20: Signed file URL validity and expiry**
     - **Validates: Requirements 4.18, 4.24, 4.25**
   - [x] 5.3 Implement card CRUD, archive, soft delete
@@ -136,12 +136,12 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - Validate priority (high, medium, low) and `end_date >= start_date` (400 `VALIDATION_ERROR`); creation, delete, and archive need `require_access` then `can_write_staff` (Members get 403); edits by a Member only when `assignee_id` equals the Member, by Supervisor/Manager/Admin only with Board_Staff_Access; write one Activity_Log row per change.
     - Child rows (subtasks, attachments, comments) are hidden by joining `Card.deleted_at`; never hard-delete a Card.
     - _Requirements: 2.6, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.23, 4.29, 11.10_
-  - [ ]* 5.4 Write property tests for card validation and edit scope
+  - [x]* 5.4 Write property tests for card validation and edit scope
     - **Property 10: Card field validation**
     - **Validates: Requirements 4.1, 4.2, 4.3**
     - **Property 11: Member edit and move scope** (edit part; move part is completed in task 6.4)
     - **Validates: Requirements 4.8, 4.9, 4.10**
-  - [ ]* 5.5 Write property tests for soft delete of cards and archive round trip
+  - [x]* 5.5 Write property tests for soft delete of cards and archive round trip
     - **Property 8: Soft delete hides without removing** (card and children part)
     - **Validates: Requirements 4.5, 4.23, 4.29, 12.3**
     - **Property 9: Archive round trip** (card part)
@@ -149,13 +149,13 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 5.6 Implement assignment and unassignment
     - `card_service.assign_card`: non-null `assignee_id` inserts an `assigned` Notification (`notify_date` = today in `APP_TIMEZONE`, conflict ignored) and a `card.assigned` Activity_Log row in the same commit; `null` clears the assignee, writes `card.unassigned`, creates no Notification.
     - _Requirements: 4.11, 4.28, 9.1_
-  - [ ]* 5.7 Write property test for assignment effects
+  - [x]* 5.7 Write property test for assignment effects
     - **Property 12: Assignment and unassignment effects**
     - **Validates: Requirements 4.11, 4.28, 9.1**
   - [x] 5.8 Implement subtasks
     - `card_service.add_subtask`, `toggle_subtask`, `reorder_subtasks`, `delete_subtask` with `POST /api/cards/{id}/subtasks`, `PATCH /api/subtasks/{id}` (`title`, `is_done`, `order`), `DELETE /api/subtasks/{id}`; `is_done` defaults to false; edit rights as in task 5.3. Reorder uses `app/common/ordering.py` (created in task 6.1; stub the import here with the same interface or implement 6.1 first).
     - _Requirements: 4.12, 4.13, 4.14_
-  - [ ]* 5.9 Write property test for subtasks
+  - [x]* 5.9 Write property test for subtasks
     - **Property 13: Subtask toggle round trip and deletion**
     - **Validates: Requirements 4.12, 4.13, 4.14**
   - [x] 5.10 Implement attachments and signed file URL endpoints
@@ -164,7 +164,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - `GET /api/attachments/{id}/url` (open to Guests on public boards) re-runs `require_access` and returns `{ file_url, expires_at }`; `GET /api/attachments/{id}/file?exp=&sig=` takes no Token and returns 403 for a bad, tampered, missing, or expired signature, and 404 when the card or board is soft-deleted.
     - `serialize_card(card, viewer)` embeds a fresh signed `file_url` per uploaded attachment, returns link `url` as stored, and omits `comments` and `activity` for a Guest.
     - _Requirements: 4.15, 4.16, 4.17, 4.18, 4.24, 4.25, 4.26, 4.27, 8.5_
-  - [ ]* 5.11 Write property tests for attachments
+  - [x]* 5.11 Write property tests for attachments
     - **Property 14: Attachment validity**
     - **Validates: Requirements 4.15, 4.16, 4.17, 4.27**
     - **Property 21: Attachment access gating**
@@ -173,30 +173,30 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - Cover a permitted viewer, an unrelated Member (403), a Guest on a private board (401), a Guest on a public board (URL issued), an expired signature (403), and a modified `sig` or `exp` (403).
     - _Requirements: 15.7_
 
-- [ ] 6. Ordering and card move
+- [x] 6. Ordering and card move
   - [x] 6.1 Implement ordering helpers
     - `app/common/ordering.py`: `position_for(prev, next, siblings)` (empty list `1.0`, first `min - 1`, last `max + 1`, otherwise average), `needs_rebalance(prev, next)` (gap below `1e-6`), `rebalance(siblings)` renumbering `1.0, 2.0, ...` preserving order.
     - _Requirements: 4.13, 5.1, 5.10, 5.11_
-  - [ ]* 6.2 Write property test for ordering and rebalance
+  - [x]* 6.2 Write property test for ordering and rebalance
     - **Property 15: Drop order and rebalance (cards and subtasks)**
     - **Validates: Requirements 4.13, 5.1, 5.10, 5.11**
   - [x] 6.3 Implement move card
     - `PATCH /api/cards/{id}/move` with `column_id`, `prev`, `next` neighbour ids; `card_service.move_card`: `require_access`; Member only when assigned; Supervisor, Manager, Admin only with `can_write_staff`; 400 when the target column belongs to another board; recompute order server-side (ignore client `order`), renumber the column in the same transaction when the gap is below `1e-6`; write exactly one `card.moved` row with source and target column; commit once.
     - Return 401 without a Token.
     - _Requirements: 5.1, 5.2, 5.4, 5.5, 5.6, 5.7, 5.8, 5.10, 5.11, 5.12_
-  - [ ]* 6.4 Write property tests for move
+  - [x]* 6.4 Write property tests for move
     - **Property 16: Move persists, logs once, and stays on the board**
     - **Validates: Requirements 5.2, 5.8, 5.9, 5.12**
     - **Property 11: Member edit and move scope** (move part)
     - **Validates: Requirements 4.8, 4.9, 4.10, 5.4, 5.5, 5.6**
-  - [ ] 6.5 Checkpoint - Ensure all tests pass, ask the user if questions arise
+  - [x] 6.5 Checkpoint - Ensure all tests pass, ask the user if questions arise
 
 - [x] 7. Categories
   - [x] 7.1 Implement the categories blueprint
     - `GET /api/boards/{board_id}/categories` (`require_access` only, no role check, Guests on public boards allowed, only that board's categories), `POST /api/boards/{board_id}/categories`, `PATCH /api/categories/{id}`, `DELETE /api/categories/{id}` (the last three need `can_write_staff`).
     - Case-insensitive duplicate name on a board returns 409 `CONFLICT` on create and rename; deleting a category nulls `Card.category_id`; categories of a soft-deleted board stay stored and are unreachable.
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.12_
-  - [ ]* 7.2 Write property test for categories
+  - [x]* 7.2 Write property test for categories
     - **Property 17: Categories are board-scoped and name-unique**
     - **Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.12**
 
@@ -205,7 +205,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - `POST /api/cards/{id}/comments` (Member, Supervisor, Manager with `can_access`; Admin 403; blank body 400 with message `content is required`) and `POST /api/comments/{id}/replies` (400 when the target has a non-null `parent_id`; increments the parent's `reply_count` in the same transaction). Provide no like or vote endpoint.
     - A Guest calling any comment endpoint gets 403 on a public board and 401 on a private board, with no `comments` field.
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.16, 14.3_
-  - [ ]* 8.2 Write property tests for comment creation
+  - [x]* 8.2 Write property tests for comment creation
     - **Property 22: Blank comments rejected**
     - **Validates: Requirements 7.1, 7.2**
     - **Property 23: Reply count invariant and depth cap**
@@ -214,7 +214,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - `PATCH /api/comments/{id}/priority` (Manager only toggles `is_priority`; others 403, no Token 401).
     - `GET /api/cards/{id}/comments?sort=latest|popular`: priority comments first (newest first), then others by `created_at DESC` (latest or omitted) or `(reply_count DESC, created_at DESC)` (popular); replies nested oldest-first regardless of sort; each comment has `reply_count`, `is_priority`, `can_create_card = viewer.role in (supervisor, manager, admin) and author.role == "manager"`.
     - _Requirements: 7.7, 7.8, 7.9, 7.10, 7.11, 7.12, 7.13, 7.14, 7.15_
-  - [ ]* 8.4 Write property tests for comment listing
+  - [x]* 8.4 Write property tests for comment listing
     - **Property 24: Priority flag toggle round trip**
     - **Validates: Requirements 7.7, 7.8**
     - **Property 25: Top-level comment ordering**
@@ -233,12 +233,12 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - `GET /api/cards/{id}/activity` returns rows with `target_type = card` and that id; `GET /api/boards/{id}/activity` returns rows for the board's cards, columns, and board-level actions; both require `can_access` and return no `activity`/`activity_log` field to a Guest, even when requested explicitly.
     - Log user management actions (`user.created`, `user.updated`, `user.role_changed`) through the same repository (wired in task 13.1).
     - _Requirements: 1.7, 8.1, 8.2, 8.3, 8.4, 8.5_
-  - [ ]* 9.2 Write property tests for activity
+  - [x]* 9.2 Write property tests for activity
     - **Property 29: One activity row per state change**
     - **Validates: Requirements 1.7, 8.1, 8.2**
     - **Property 30: Activity queries return the right rows**
     - **Validates: Requirements 8.3, 8.4**
-  - [ ]* 9.3 Write property test for guest privacy
+  - [x]* 9.3 Write property test for guest privacy
     - **Property 28: Guest responses never include comments or activity**
     - **Validates: Requirements 7.16, 8.5, 11.7, 12.6, 14.3**
 
@@ -250,7 +250,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 10.2 Implement the deadline job
     - `app/jobs/deadlines.py` `run(now)`: compute `today` in `APP_TIMEZONE`, select cards with `end_date == today`, `deleted_at IS NULL`, and an assignee, insert `deadline` notifications with `INSERT ... ON CONFLICT DO NOTHING`; expose it as `flask notify-deadlines` and a daily schedule.
     - _Requirements: 9.2, 9.3_
-  - [ ]* 10.3 Write property tests for notifications
+  - [x]* 10.3 Write property tests for notifications
     - **Property 31: Deadline job notifies once, in APP_TIMEZONE**
     - **Validates: Requirements 9.2, 9.3**
     - **Property 32: Inbox isolation and read marking**
@@ -262,7 +262,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - `GET /api/analytics/boards` (Manager only) returns one summary per board in one response.
     - Use one grouped query per board returning `done`, `in_progress`, `overdue`, `total`, `done_delta` for the previous 7 days; overdue is a non-deleted card with `end_date < today` (in `APP_TIMEZONE`) not in the `Done` column; no per-card data in the payload.
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7_
-  - [ ]* 11.2 Write property test for analytics
+  - [x]* 11.2 Write property test for analytics
     - **Property 33: Analytics access and correctness**
     - **Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5, 10.7**
 
@@ -270,7 +270,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 12.1 Implement the board cards list
     - `GET /api/boards/{id}/cards?search=&filter[priority]=&filter[assignee]=&filter[category]=`: `require_access` first (403 signed-in, 401 Guest on private); case-insensitive substring match on `title` or `description`; filters combine with AND; unsupported filter key returns 400 `VALIDATION_ERROR`; always exclude soft-deleted cards; Guest results contain card data only.
     - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.6, 12.7_
-  - [ ]* 12.2 Write property test for search and filter
+  - [x]* 12.2 Write property test for search and filter
     - **Property 35: Search and filter correctness**
     - **Validates: Requirements 12.1, 12.2, 12.3, 12.4**
 
@@ -282,14 +282,14 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - Cover Admin success, Member, Supervisor, and Manager 403, no Token 401, and the activity row.
     - _Requirements: 1.7, 1.8_
 
-- [ ] 14. Backend checkpoint and cross-cutting tests
+- [x] 14. Backend checkpoint and cross-cutting tests
   - [x]* 14.1 Write the 401/403 sweep test for every mutating endpoint
     - Enumerate registered POST, PATCH, PUT, DELETE routes; assert 401 with no Token and 403 with an insufficient-role Token, excluding the public auth routes and the signature-gated file route; fail when a mutating route is missing from the list.
     - _Requirements: 2.8, 2.9, 2.10, 15.5_
-  - [ ]* 14.2 Write property test for 401 versus 403 versus 404
+  - [x]* 14.2 Write property test for 401 versus 403 versus 404
     - **Property 5: 401 versus 403 versus 404**
     - **Validates: Requirements 2.8, 2.9, 11.5, 12.7, 13.10**
-  - [ ]* 14.3 Write the Board_Access matrix and private board tests
+  - [x]* 14.3 Write the Board_Access matrix and private board tests
     - Cover {guest, member, supervisor owner, supervisor BoardMember, supervisor unrelated, manager, admin} against {public, private} for columns, cards, categories, comments, activity, search, and attachments, including an unrelated Supervisor getting 403 on public-board writes and an unrelated Member getting 403 on a private board.
     - _Requirements: 15.4, 15.6_
   - [x]* 14.4 Write property test for the response envelope
@@ -300,7 +300,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x]* 14.5 Write static checks
     - Assert no `.query` call outside a `repository.py` file, and that `.env.example` files list the required variables and no real `.env` is tracked.
     - _Requirements: 13.7, 13.9, 15.4_
-  - [ ] 14.6 Checkpoint - Ensure all tests pass, ask the user if questions arise
+  - [x] 14.6 Checkpoint - Ensure all tests pass, ask the user if questions arise
 
 - [ ] 15. Frontend scaffold, tokens, shared components, API client, auth pages
   - [ ] 15.1 Scaffold the Next.js app and design tokens
