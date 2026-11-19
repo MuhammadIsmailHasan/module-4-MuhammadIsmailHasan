@@ -15,9 +15,10 @@ def serialize(n):
     }
 
 
-def inbox(actor):
-    rows = repo.list_for_user(to_uuid(actor.id))
-    return {"items": [serialize(n) for n in rows], "unread_count": sum(1 for n in rows if not n.is_read)}
+def inbox(actor, limit=None, before=None):
+    uid = to_uuid(actor.id)
+    rows = repo.list_for_user(uid, limit, before)
+    return {"items": [serialize(n) for n in rows], "unread_count": repo.unread_count(uid)}
 
 
 def mark_read(actor, notification_id):

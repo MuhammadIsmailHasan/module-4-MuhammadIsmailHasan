@@ -770,6 +770,100 @@
         ]
       }
     },
+    "/api/boards/{board_id}/candidates": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "description": "Case-insensitive match on name or login",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateListEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "boards"
+        ],
+        "summary": "Search users who can be added to a board",
+        "description": "Owner, Manager or Admin. At most 20 non-members matching `search` on name or login; id and name only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "board_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
     "/api/boards/{board_id}/members/{user_id}": {
       "delete": {
         "responses": {
@@ -851,7 +945,34 @@
     },
     "/api/boards/{board_id}/activity": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "description": "Rows per page (default 20, at most 100)",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "description": "Id of the last row already shown; returns the next older rows",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false
+          }
+        ],
         "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
           "200": {
             "description": "OK",
             "content": {
@@ -910,7 +1031,7 @@
           "boards"
         ],
         "summary": "Board activity feed",
-        "description": "Requires board access; Guests get 403 (never activity).",
+        "description": "Requires board access; Guests get 403 (never activity). Paged with `limit` and `before`.",
         "security": [
           {
             "bearerAuth": []
@@ -1569,7 +1690,34 @@
     },
     "/api/cards/{card_id}/activity": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "description": "Rows per page (default 20, at most 100)",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "description": "Id of the last row already shown; returns the next older rows",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false
+          }
+        ],
         "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
           "200": {
             "description": "OK",
             "content": {
@@ -1628,7 +1776,7 @@
           "cards"
         ],
         "summary": "Card activity",
-        "description": "Requires board access; Guests get 403.",
+        "description": "Requires board access; Guests get 403. Paged with `limit` and `before`.",
         "security": [
           {
             "bearerAuth": []
@@ -3019,7 +3167,34 @@
     },
     "/api/notifications": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "description": "Rows per page (default 20, at most 100)",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "description": "Id of the last row already shown; returns the next older rows",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false
+          }
+        ],
         "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
           "200": {
             "description": "OK",
             "content": {
@@ -3040,6 +3215,16 @@
               }
             }
           },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -3048,7 +3233,7 @@
           "notifications"
         ],
         "summary": "List my notifications",
-        "description": "Only the caller's rows.",
+        "description": "Only the caller's rows. Paged with `limit` and `before`; `unread_count` counts all of them.",
         "security": [
           {
             "bearerAuth": []
@@ -3752,6 +3937,11 @@
             "type": "string",
             "maxLength": 255
           },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "nullable": true
+          },
           "visibility": {
             "type": "string",
             "default": "private",
@@ -3794,6 +3984,10 @@
           "name": {
             "type": "string"
           },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
           "visibility": {
             "type": "string"
           },
@@ -3801,6 +3995,22 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "card_count": {
+            "type": "integer",
+            "description": "Cards not deleted and not archived (board list only)"
+          },
+          "done_count": {
+            "type": "integer",
+            "description": "Of those, Cards in the Done column (board list only)"
+          },
+          "overdue_count": {
+            "type": "integer",
+            "description": "Of those, Cards past their end date and not Done (board list only)"
+          },
+          "member_count": {
+            "type": "integer",
+            "description": "Board members (board list only)"
           },
           "archived_at": {
             "type": "string",
@@ -3867,6 +4077,11 @@
             "type": "string",
             "maxLength": 255
           },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "nullable": true
+          },
           "visibility": {
             "type": "string",
             "enum": [
@@ -3897,6 +4112,39 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/User"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Candidate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "full_name": {
+            "type": "string"
+          }
+        }
+      },
+      "CandidateListEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
             },
             "nullable": true
           }
@@ -3951,6 +4199,11 @@
             "type": "string",
             "format": "uuid"
           },
+          "actor_name": {
+            "type": "string",
+            "description": "Display name of the actor",
+            "nullable": true
+          },
           "action": {
             "type": "string",
             "description": "For example card.moved, board.member_added"
@@ -3964,6 +4217,7 @@
             "format": "uuid"
           },
           "metadata": {
+            "description": "Names and changes for reading the row: card_title, changes, from_column_name, to_column_name, assignee_name, title, name",
             "nullable": true
           },
           "created_at": {
@@ -4146,6 +4400,11 @@
             "type": "string",
             "format": "uuid"
           },
+          "author_name": {
+            "type": "string",
+            "description": "Display name of the author",
+            "nullable": true
+          },
           "parent_id": {
             "type": "string",
             "format": "uuid",
@@ -4182,6 +4441,11 @@
           "author_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "author_name": {
+            "type": "string",
+            "description": "Display name of the author",
+            "nullable": true
           },
           "parent_id": {
             "type": "string",

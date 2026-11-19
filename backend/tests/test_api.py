@@ -283,6 +283,158 @@ def test_comments_flow(world):
     assert c.patch(f"/api/comments/{m1['id']}/priority", headers=world.h["manager"]).get_json()["data"]["is_priority"] is False
 
 
+def test_comment_and_activity_names(world):
+    """Comments and activity rows carry the author's display name, even for users who are not board members."""
+    c = world.client
+    card = mkcard(world)
+    url = f"/api/cards/{card['id']}/comments"
+    made = c.post(url, headers=world.h["manager"], json={"content": "hello"}).get_json()["data"]
+    reply = c.post(f"/api/comments/{made['id']}/replies", headers=world.h["member"], json={"content": "hi"}).get_json()["data"]
+    assert made["author_name"] == world.users["manager"].full_name
+    assert reply["author_name"] == world.users["member"].full_name
+    listed = c.get(url, headers=world.h["supervisor"]).get_json()["data"]
+    assert listed[0]["author_name"] == world.users["manager"].full_name
+    assert listed[0]["replies"][0]["author_name"] == world.users["member"].full_name
+    detail = c.get(f"/api/cards/{card['id']}", headers=world.h["supervisor"]).get_json()["data"]
+    assert detail["comments"][0]["author_name"] == world.users["manager"].full_name
+    assert all(r["actor_name"] for r in detail["activity"])
+    rows = c.get(f"/api/boards/{world.board['id']}/activity", headers=world.h["manager"]).get_json()["data"]
+    assert all(r["actor_name"] for r in rows)
+
+
+def test_activity_metadata_carries_names_and_changes(world):
+    """New rows hold the names and old/new values the UI needs (Req 8.9)."""
+    c = world.client
+    h = world.h["supervisor"]
+    card = mkcard(world, "Plan launch")
+    cid = card["id"]
+    cat = c.post(f"/api/boards/{world.board['id']}/categories", headers=world.h["manager"], json={"name": "Design"}).get_json()["data"]
+    c.patch(f"/api/cards/{cid}", headers=h, json={"priority": "high", "end_date": "2026-12-01", "category_id": cat["id"], "description": "x"})
+    c.patch(f"/api/cards/{cid}", headers=h, json={"assignee_id": str(world.users["member"].id)})
+    c.patch(f"/api/cards/{cid}/move", headers=h, json={"column_id": col(world, 1)})
+    sub = c.post(f"/api/cards/{cid}/subtasks", headers=h, json={"title": "Outline"}).get_json()["data"]
+    c.patch(f"/api/subtasks/{sub['id']}", headers=h, json={"is_done": True})
+    att = c.post(f"/api/cards/{cid}/attachments", headers=h, json={"url": "https://example.com/brief", "name": "Brief"}).get_json()["data"]
+    c.delete(f"/api/attachments/{att['id']}", headers=h)
+    rows = c.get(f"/api/cards/{cid}/activity", headers=h).get_json()["data"]
+    by = {}
+    for r in rows:
+        by.setdefault(r["action"], []).append(r["metadata"])
+    assert all(m["card_title"] == "Plan launch" for acts in by.values() for m in acts)
+    changes = by["card.updated"][0]["changes"]
+    assert changes["priority"] == {"from": "medium", "to": "high"}
+    assert changes["end_date"] == {"from": None, "to": "2026-12-01"}
+    assert changes["category"] == {"from": None, "to": "Design"}
+    assert changes["description"] == {}
+    assert by["card.assigned"][0]["assignee_name"] == world.users["member"].full_name
+    moved = by["card.moved"][0]
+    assert (moved["from_column_name"], moved["to_column_name"]) == ("Todo", "In Progress")
+    assert by["subtask.added"][0]["title"] == "Outline"
+    assert by["subtask.updated"][0]["is_done"] is True
+    assert by["attachment.added"][0]["name"] == "Brief" and by["attachment.deleted"][0]["name"] == "Brief"
+
+
+def test_activity_and_inbox_paging_and_candidates(world):
+    c = world.client
+    h = world.h["supervisor"]
+    card = mkcard(world, "Paged")
+    cid = card["id"]
+    for i in range(5):
+        c.post(f"/api/cards/{cid}/subtasks", headers=h, json={"title": f"s{i}"})
+    url = f"/api/cards/{cid}/activity"
+    full = c.get(url + "?limit=100", headers=h).get_json()["data"]
+    assert len(full) == 6
+    p1 = c.get(url + "?limit=4", headers=h).get_json()["data"]
+    p2 = c.get(url + f"?limit=4&before={p1[-1]['id']}", headers=h).get_json()["data"]
+    assert [r["id"] for r in p1 + p2] == [r["id"] for r in full] and len(p2) == 2
+    assert c.get(url, headers=h).get_json()["data"] == full  # default 20 covers all six
+    for bad in ("limit=0", "limit=101", "limit=x"):
+        r = c.get(f"{url}?{bad}", headers=h)
+        assert r.status_code == 400 and r.get_json()["error"]["code"] == "VALIDATION_ERROR"
+    other = mkcard(world, "Other")
+    r = c.get(url + f"?before={c.get(f'/api/cards/{other['id']}/activity', headers=h).get_json()['data'][0]['id']}", headers=h)
+    assert r.status_code == 400
+    board_rows = c.get(f"/api/boards/{world.board['id']}/activity?limit=3", headers=world.h["manager"]).get_json()["data"]
+    assert len(board_rows) == 3
+
+    # inbox: assign the same member three cards; unread_count counts them all
+    for _ in range(3):
+        k = mkcard(world)
+        c.patch(f"/api/cards/{k['id']}", headers=h, json={"assignee_id": str(world.users["member"].id)})
+    mh = world.h["member"]
+    first = c.get("/api/notifications?limit=2", headers=mh).get_json()["data"]
+    assert len(first["items"]) == 2 and first["unread_count"] == 3
+    rest = c.get(f"/api/notifications?limit=2&before={first['items'][-1]['id']}", headers=mh).get_json()["data"]
+    assert len(rest["items"]) == 1 and rest["unread_count"] == 3
+    assert c.get(f"/api/notifications?before={first['items'][0]['id']}", headers=world.h["other_member"]).status_code == 400
+
+    # candidates: non-members only, filtered, id and full_name only, role rules
+    cand = c.get(f"/api/boards/{world.board['id']}/candidates", headers=world.h["manager"]).get_json()["data"]
+    names = {x["full_name"] for x in cand}
+    assert world.users["member"].full_name not in names or world.users["other_member"].full_name in names
+    assert str(world.users["member"].id) not in {x["id"] for x in cand}
+    assert all(set(x) == {"id", "full_name"} for x in cand)
+    q = world.users["other_member"].full_name[:3].lower()
+    assert c.get(f"/api/boards/{world.board['id']}/candidates?search={q}", headers=world.h["manager"]).status_code == 200
+    assert c.get(f"/api/boards/{world.board['id']}/candidates", headers=world.h["member"]).status_code == 403
+    assert c.get(f"/api/boards/{world.board['id']}/candidates", headers=world.h["other_sup"]).status_code == 403
+    assert c.get(f"/api/boards/{world.board['id']}/candidates", headers=h).status_code == 200  # the owner
+    assert c.get(f"/api/boards/{world.board['id']}/candidates").status_code == 401
+
+
+def test_board_list_counts_and_description(world, app):
+    from datetime import date, timedelta
+
+    c = world.client
+    h = world.h["supervisor"]
+    done_card = mkcard(world, "done", i=4)
+    mkcard(world, "todo", i=0)
+    overdue = mkcard(world, "late", i=0, end_date=(date.today() - timedelta(days=3)).isoformat())
+    gone = mkcard(world, "gone", i=0)
+    c.delete(f"/api/cards/{gone['id']}", headers=h)
+    archived = mkcard(world, "old", i=0)
+    db.session.get(Card, __import__("uuid").UUID(archived["id"])).archived_at = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+    db.session.commit()
+    row = next(b for b in c.get("/api/boards", headers=world.h["manager"]).get_json()["data"] if b["id"] == world.board["id"])
+    assert (row["card_count"], row["done_count"], row["overdue_count"], row["member_count"]) == (3, 1, 1, 1)
+    assert row["description"] is None
+    # description round trip, trimmed, empty becomes null, 500 limit, role rules
+    url = f"/api/boards/{world.board['id']}"
+    assert c.patch(url, headers=world.h["manager"], json={"description": "  Launch plan  "}).get_json()["data"]["description"] == "Launch plan"
+    assert c.get(url, headers=world.h["manager"]).get_json()["data"]["description"] == "Launch plan"
+    assert c.patch(url, headers=world.h["manager"], json={"description": "   "}).get_json()["data"]["description"] is None
+    r = c.patch(url, headers=world.h["manager"], json={"description": "x" * 501})
+    assert r.status_code == 400 and r.get_json()["error"]["code"] == "VALIDATION_ERROR"
+    assert c.patch(url, headers=world.h["member"], json={"description": "no"}).status_code == 403
+    made = c.post("/api/boards", headers=world.h["manager"], json={"name": "N", "description": "About"}).get_json()["data"]
+    assert made["description"] == "About"
+    assert c.post("/api/boards", headers=world.h["manager"], json={"name": "N2"}).get_json()["data"]["description"] is None
+    assert c.post("/api/boards", headers=world.h["manager"], json={"name": "N3", "description": "y" * 501}).status_code == 400
+
+
+def test_board_list_query_count_is_constant(world, app):
+    from sqlalchemy import event
+
+    from app.extensions import db
+
+    def count_for(extra):
+        for i in range(extra):
+            world.client.post("/api/boards", headers=world.h["manager"], json={"name": f"X{extra}-{i}"})
+        n = []
+        engine = db.engine
+        listener = lambda *a, **k: n.append(1)
+        event.listen(engine, "before_cursor_execute", listener)
+        try:
+            assert world.client.get("/api/boards", headers=world.h["manager"]).status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", listener)
+        return len(n)
+
+    small = count_for(1)
+    large = count_for(6)
+    assert large == small
+
+
 # ---- activity, search, analytics, users, deadlines ----
 def test_activity_endpoints(world):
     card = mkcard(world)

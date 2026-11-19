@@ -2,7 +2,7 @@ from sqlalchemy.orm import selectinload
 
 from app.common.ids import to_uuid
 from app.extensions import db
-from app.models import Board, BoardMember, Column, User
+from app.models import Board, BoardMember, Card, Column, User
 
 
 def get_by_id(board_id, include_deleted=False):
@@ -38,8 +38,41 @@ def list_visible(actor):
     return q.order_by(Board.created_at, Board.id).all()
 
 
-def create_board(name, visibility, owner_id=None):
-    board = Board(name=name, visibility=visibility, owner_id=owner_id)
+def counts_for(board_ids, today):
+    """card, done, overdue, and member counts for these boards: two grouped queries whatever the number of boards."""
+    if not board_ids:
+        return {}
+    has_card = Card.id.isnot(None)
+    live = db.and_(Card.deleted_at.is_(None), Card.archived_at.is_(None))
+    rows = db.session.execute(
+        db.select(
+            Column.board_id,
+            db.func.count(Card.id),
+            db.func.coalesce(db.func.sum(db.case((db.and_(has_card, Column.name == "Done"), 1), else_=0)), 0),
+            db.func.coalesce(
+                db.func.sum(db.case((db.and_(has_card, Card.end_date < today, Column.name != "Done"), 1), else_=0)), 0
+            ),
+        )
+        .select_from(Column)
+        .outerjoin(Card, db.and_(Card.column_id == Column.id, live))
+        .where(Column.board_id.in_(board_ids))
+        .group_by(Column.board_id)
+    ).all()
+    members = dict(
+        db.session.execute(
+            db.select(BoardMember.board_id, db.func.count(BoardMember.id))
+            .where(BoardMember.board_id.in_(board_ids))
+            .group_by(BoardMember.board_id)
+        ).all()
+    )
+    out = {bid: {"card_count": 0, "done_count": 0, "overdue_count": 0, "member_count": members.get(bid, 0)} for bid in board_ids}
+    for bid, total, done, overdue in rows:
+        out[bid].update(card_count=int(total), done_count=int(done), overdue_count=int(overdue))
+    return out
+
+
+def create_board(name, visibility, owner_id=None, description=None):
+    board = Board(name=name, visibility=visibility, owner_id=owner_id, description=description)
     db.session.add(board)
     db.session.flush()
     return board
@@ -86,3 +119,14 @@ def list_members(board_id):
         .order_by(User.full_name)
         .all()
     )
+
+
+def candidates(board_id, search, limit):
+    """Users who are not members of the board, matched on name or login, ordered by name."""
+    member_ids = db.select(BoardMember.user_id).where(BoardMember.board_id == board_id)
+    query = User.query.filter(User.id.notin_(member_ids))
+    text = (search or "").strip().lower()
+    if text:
+        like = f"%{text}%"
+        query = query.filter(db.or_(db.func.lower(User.full_name).like(like), db.func.lower(User.login_identifier).like(like)))
+    return query.order_by(User.full_name).limit(limit).all()

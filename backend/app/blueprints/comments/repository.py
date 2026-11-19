@@ -47,3 +47,14 @@ def list_for_card(card_id, sort="latest"):
     if reply_authors:
         roles.update(dict(db.session.execute(db.select(User.id, User.role).where(User.id.in_(reply_authors))).all()))
     return comments, roles
+
+
+def author_names(comments):
+    """Display names of the authors of these comments and their replies: one query whatever the row count."""
+    ids = {c.author_id for c in comments}
+    for c in comments:
+        if "replies" in c.__dict__:  # replies are loaded explicitly by list_for_card; never lazy-load here
+            ids |= {r.author_id for r in c.replies}
+    if not ids:
+        return {}
+    return dict(db.session.execute(db.select(User.id, User.full_name).where(User.id.in_(ids))).all())

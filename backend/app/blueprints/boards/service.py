@@ -1,10 +1,12 @@
 from app.blueprints.activity import repository as activity
 from app.blueprints.auth import repository as users
 from app.blueprints.boards import repository as repo
-from app.blueprints.boards.dto import DEFAULT_COLUMNS, clean_name, clean_visibility
+from app.blueprints.boards.dto import DEFAULT_COLUMNS, clean_description, clean_name, clean_visibility
 from app.common import clock
 from app.common.errors import Forbidden, NotFound, Unauthorized, ValidationError
 from app.common.ids import to_uuid
+from flask import current_app
+
 from app.extensions import db
 
 PRIVILEGED = ("manager", "admin")
@@ -72,7 +74,7 @@ def reload_detail(board):
 def create_board(actor, data):
     name = clean_name(data.get("name"))
     visibility = clean_visibility(data.get("visibility", "private"))
-    board = repo.create_board(name, visibility)
+    board = repo.create_board(name, visibility, description=clean_description(data.get("description")))
     for i, col_name in enumerate(DEFAULT_COLUMNS):
         repo.add_column(board.id, col_name, float(i))
     activity.add(to_uuid(actor.id), "board.created", "board", board.id, {"name": name})
@@ -105,11 +107,15 @@ def update_board(actor, board_id, data):
         if visibility != board.visibility:
             board.visibility = visibility
             activity.add(to_uuid(actor.id), "board.visibility_changed", "board", board.id, {"visibility": visibility})
-    if "name" in data:
+    if "name" in data or "description" in data:
         if not (privileged or is_owner(actor, board)):
             raise Forbidden("Not allowed to rename the board")
+    if "name" in data:
         board.name = clean_name(data["name"])
         activity.add(to_uuid(actor.id), "board.updated", "board", board.id, {"name": board.name})
+    if "description" in data:
+        board.description = clean_description(data["description"])
+        activity.add(to_uuid(actor.id), "board.updated", "board", board.id, {"name": board.name, "description_changed": True})
     db.session.commit()
     return board
 
@@ -140,7 +146,10 @@ def soft_delete(actor, board_id):
 
 
 def list_boards(actor):
-    return repo.list_visible(actor)
+    """Visible boards and their counts (a fixed number of queries)."""
+    boards = repo.list_visible(actor)
+    counts = repo.counts_for([b.id for b in boards], clock.today(current_app.config["APP_TIMEZONE"]))
+    return boards, counts
 
 
 def require_manage_members(actor, board):
@@ -151,6 +160,12 @@ def require_manage_members(actor, board):
 def list_members(actor, board_id):
     board = load_board(actor, board_id)
     return repo.list_members(board.id)
+
+
+def member_candidates(actor, board_id, search):
+    board = load_board(actor, board_id)
+    require_manage_members(actor, board)
+    return repo.candidates(board.id, search, 20)
 
 
 def add_member(actor, board_id, data):

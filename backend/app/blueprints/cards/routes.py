@@ -19,6 +19,7 @@ from app.blueprints.cards.schema import (
 )
 from app.common.auth import current_actor, require_role
 from app.common.docs import endpoint
+from app.common.paging import PageQuerySchema
 from app.common.envelope import NullEnvelopeSchema, envelope
 from app.common.errors import Forbidden
 from app.common.http import json_body
@@ -114,14 +115,15 @@ def move(data, card_id):
 
 
 @bp.route("/cards/<card_id>/activity", methods=["GET"])
-@endpoint(bp, "Card activity", "Requires board access; Guests get 403.", auth="optional")
+@endpoint(bp, "Card activity", "Requires board access; Guests get 403. Paged with `limit` and `before`.", auth="optional")
+@bp.arguments(PageQuerySchema, location="query")
 @bp.response(200, envelope(ActivitySchema, many=True))
-def card_activity(card_id):
+def card_activity(page, card_id):
     actor = current_actor()
     card = service.get_card(actor, card_id)
     if actor is None:
         raise Forbidden("Activity is not available to guests")
-    return ok([activity.serialize(r) for r in activity.for_card(card.id)])
+    return ok(activity.serialize_many(activity.for_card(card.id, page["limit"], page.get("before"))))
 
 
 @bp.route("/boards/<board_id>/cards", methods=["GET"])

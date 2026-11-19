@@ -38,7 +38,7 @@ def create_comment(actor, card_id, data):
     card = _load_card(actor, card_id)
     _require_commenter(actor)
     c = repo.add(card.id, to_uuid(actor.id), _content(data))
-    activity.add(to_uuid(actor.id), "comment.added", "card", card.id, {"comment_id": str(c.id)})
+    activity.add(to_uuid(actor.id), "comment.added", "card", card.id, {"comment_id": str(c.id), "card_title": card.title})
     db.session.commit()
     return c
 
@@ -71,11 +71,12 @@ def toggle_priority(actor, comment_id):
     return c
 
 
-def serialize(c, viewer_role, author_roles, replies=None):
+def serialize(c, viewer_role, author_roles, replies=None, names=None):
     data = {
         "id": str(c.id),
         "card_id": str(c.card_id),
         "author_id": str(c.author_id),
+        "author_name": (names or {}).get(c.author_id),
         "parent_id": str(c.parent_id) if c.parent_id else None,
         "content": c.content,
         "is_priority": c.is_priority,
@@ -92,8 +93,9 @@ def list_comments(card, actor, sort="latest"):
     if sort not in ("latest", "popular"):
         raise ValidationError("sort must be latest or popular")
     comments, roles = repo.list_for_card(card.id, sort)
+    names = repo.author_names(comments)
     return [
-        serialize(c, actor.role, roles, [serialize(r, actor.role, roles) for r in c.replies])
+        serialize(c, actor.role, roles, [serialize(r, actor.role, roles, names=names) for r in c.replies], names)
         for c in comments
     ]
 

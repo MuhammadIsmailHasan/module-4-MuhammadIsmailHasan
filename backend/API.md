@@ -27,7 +27,7 @@ Success (`status: true`):
 { "status": true, "message": "OK", "data": { "id": "…", "title": "Fix login" } }
 ```
 
-`data` is an object, a list, or `null`. Mutating endpoints send a short descriptive message ("Card moved"); reads send "OK". Create calls return HTTP 201. There is no pagination: list endpoints return every row.
+`data` is an object, a list, or `null`. Mutating endpoints send a short descriptive message ("Card moved"); reads send "OK". Create calls return HTTP 201. List endpoints return every row, except the Inbox and the two activity feeds, which are paged (see Paging below).
 
 Error (`status: false`):
 
@@ -91,7 +91,8 @@ A private board is visible only to its owner, its members, Managers and Admins. 
 - **Guests.** Card and board responses never include `comments` or `activity` for a Guest; the comment and activity endpoints return 403 on a public board.
 - **Notifications.** Created server-side only: an `assigned` one when a card is assigned, a `deadline` one from the daily `flask notify-deadlines` job (dates in `APP_TIMEZONE`). One per user, card, type and day.
 - **Search.** `GET /api/boards/{id}/cards?search=&filter[priority]=&filter[assignee]=&filter[category]=`. Filters combine with AND; an unsupported `filter[...]` key returns 400.
-- **Comments.** `sort=latest|popular`; priority comments first; replies nested oldest first; replies to replies return 400. `can_create_card` is true when the viewer is a Supervisor, Manager or Admin and the author is a Manager.
+- **Comments.** `sort=latest|popular`; priority comments first; replies nested oldest first; replies to replies return 400. `can_create_card` is true when the viewer is a Supervisor, Manager or Admin and the author is a Manager. Every comment and reply carries `author_name`, and every activity row carries `actor_name` (the user's display name), so a client needs no user lookup.
+- **Activity metadata.** New activity rows keep the names and changes in `metadata`, so a row reads without a lookup: `card_title` on every card event; `changes` on `card.updated` (`{field: {from, to}}` for `title`, `priority`, `start_date`, `end_date`, and `category` by name; a changed `description` is `{}`); `from_column_name` and `to_column_name` on `card.moved`; `assignee_name` on `card.assigned`; `title` on subtask events; `name` on attachment events. Rows written earlier keep their older keys.
 
 ## Endpoints
 
@@ -113,7 +114,7 @@ Boards, visibility, archive, members and the board activity feed.
 | Method | Path | Auth | Success | Errors | Summary |
 |---|---|---|---|---|---|
 | POST | `/api/boards` | Token | 201 | 400, 401, 403, 422 | Create a board |
-| GET | `/api/boards` | Optional | 200 | - | List visible boards |
+| GET | `/api/boards` | Optional | 200 | - | List visible boards, each with `card_count`, `done_count`, `overdue_count`, `member_count` |
 | GET | `/api/boards/{board_id}` | Optional | 200 | 400, 401, 403, 404 | Get a board with its columns |
 | PATCH | `/api/boards/{board_id}` | Token | 200 | 400, 401, 403, 404, 422 | Update name, visibility or owner |
 | DELETE | `/api/boards/{board_id}` | Token | 200 | 401, 403, 404 | Soft-delete a board |
@@ -122,7 +123,8 @@ Boards, visibility, archive, members and the board activity feed.
 | GET | `/api/boards/{board_id}/members` | Optional | 200 | 400, 401, 403, 404 | List board members |
 | POST | `/api/boards/{board_id}/members` | Token | 201 | 400, 401, 403, 404, 409, 422 | Add a board member |
 | DELETE | `/api/boards/{board_id}/members/{user_id}` | Token | 200 | 401, 403, 404 | Remove a board member |
-| GET | `/api/boards/{board_id}/activity` | Optional | 200 | 400, 401, 403, 404 | Board activity feed |
+| GET | `/api/boards/{board_id}/activity` | Optional | 200 | 400, 401, 403, 404 | Board activity feed (paged) |
+| GET | `/api/boards/{board_id}/candidates` | Token | 200 | 400, 401, 403, 404 | Search users who can be added to a board |
 
 ### columns
 
@@ -145,7 +147,7 @@ Cards, move, subtasks, attachments, signed file URLs, card activity, search and 
 | POST | `/api/cards/{card_id}/archive` | Token | 200 | 401, 403, 404 | Archive a card |
 | POST | `/api/cards/{card_id}/unarchive` | Token | 200 | 401, 403, 404 | Unarchive a card |
 | PATCH | `/api/cards/{card_id}/move` | Token | 200 | 400, 401, 403, 404, 422 | Move or reorder a card |
-| GET | `/api/cards/{card_id}/activity` | Optional | 200 | 400, 401, 403, 404 | Card activity |
+| GET | `/api/cards/{card_id}/activity` | Optional | 200 | 400, 401, 403, 404 | Card activity (paged) |
 | GET | `/api/boards/{board_id}/cards` | Optional | 200 | 400, 401, 403, 404, 422 | Search and filter a board's cards |
 | POST | `/api/cards/{card_id}/subtasks` | Token | 201 | 400, 401, 403, 404, 422 | Add a subtask |
 | PATCH | `/api/subtasks/{subtask_id}` | Token | 200 | 400, 401, 403, 404, 422 | Edit, toggle or reorder a subtask |
@@ -183,7 +185,7 @@ The caller's inbox.
 
 | Method | Path | Auth | Success | Errors | Summary |
 |---|---|---|---|---|---|
-| GET | `/api/notifications` | Token | 200 | 401 | List my notifications |
+| GET | `/api/notifications` | Token | 200 | 400, 401 | List my notifications (paged) |
 | PATCH | `/api/notifications/read-all` | Token | 200 | 401 | Mark all my notifications read |
 | PATCH | `/api/notifications/{notification_id}/read` | Token | 200 | 401, 404 | Mark one notification read |
 
@@ -266,3 +268,12 @@ GET /api/boards/{id}/analytics
 200 { "status": true, "message": "OK",
       "data": { "board_id": "…", "name": "Sprint 1", "total": 12, "done": 4, "in_progress": 3, "overdue": 1, "done_delta": 2 } }
 ```
+
+## Paging
+
+The Inbox (`GET /api/notifications`), the board activity feed, and the card activity list take `limit` (default 20, at most 100) and `before` (the id of the last row already shown). They return the next older rows in the same response shape; a response with fewer rows than `limit` is the last page. A `limit` outside 1 to 100, or a `before` that is not a row of that list, returns 400 `VALIDATION_ERROR`. The Inbox `unread_count` always counts all of the caller's notifications, and `GET /api/cards/{id}` embeds the first 20 activity rows. `GET /api/boards/{id}/candidates?search=` returns at most 20 users who are not members of the board, with `id` and `full_name` only (owner, Manager, Admin).
+
+## Board description and counts
+
+A board has a nullable `description` (at most 500 characters, trimmed, empty becomes null), accepted on `POST /api/boards` and `PATCH /api/boards/{id}` (name-change rules) and returned on every board response. `GET /api/boards` also returns four computed integers per board: `card_count` (cards not deleted and not archived), `done_count` (of those, in the `Done` column), `overdue_count` (of those, past their end date and not Done), and `member_count`. They come from two grouped queries whatever the number of boards.
+

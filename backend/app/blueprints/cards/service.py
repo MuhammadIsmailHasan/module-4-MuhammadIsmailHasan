@@ -62,7 +62,7 @@ def present(card, actor):
     comments = activity_rows = None
     if actor is not None:
         comments = comments_service.list_comments(card, actor, "latest")
-        activity_rows = [activity.serialize(r) for r in activity.for_card(card.id)]
+        activity_rows = activity.serialize_many(activity.for_card(card.id, 20))
     detail = repo.get_detail(card.id)
     return serialize_card(detail, actor, detail.subtasks, detail.attachments, comments, activity_rows)
 
@@ -79,7 +79,7 @@ def create_card(actor, column_id, data):
     _apply_category(fields, data, board)
     current = repo.max_order(column.id)
     card = repo.add_card(column_id=column.id, order=1.0 if current is None else current + 1, **fields)
-    activity.add(_aid(actor), "card.created", "card", card.id, {"title": card.title})
+    activity.add(_aid(actor), "card.created", "card", card.id, {"title": card.title, "card_title": card.title})
     if data.get("assignee_id") is not None:
         _assign(actor, card, data["assignee_id"])
     db.session.commit()
@@ -103,7 +103,7 @@ def _assign(actor, card, assignee_id):
     if assignee_id is None:
         if card.assignee_id is not None:
             card.assignee_id = None
-            activity.add(_aid(actor), "card.unassigned", "card", card.id)
+            activity.add(_aid(actor), "card.unassigned", "card", card.id, {"card_title": card.title})
         return
     uid = to_uuid(assignee_id)
     user = users.get_by_id(uid) if uid else None
@@ -111,7 +111,28 @@ def _assign(actor, card, assignee_id):
         raise ValidationError("assignee_id must reference an existing user")
     card.assignee_id = user.id
     notif_repo.insert_ignore(user.id, card.id, "assigned", clock.today(current_app.config["APP_TIMEZONE"]))
-    activity.add(_aid(actor), "card.assigned", "card", card.id, {"assignee_id": str(user.id)})
+    activity.add(
+        _aid(actor),
+        "card.assigned",
+        "card",
+        card.id,
+        {"assignee_id": str(user.id), "assignee_name": user.full_name, "card_title": card.title},
+    )
+
+
+def _category_name(category_id):
+    cat = repo.get_category(category_id) if category_id else None
+    return cat.name if cat is not None else None
+
+
+def _change(key, old, new):
+    """One entry of the `changes` metadata: old and new value, by name for a category, field name only for a description."""
+    if key == "description":
+        return {}
+    if key == "category_id":
+        return {"from": _category_name(old), "to": _category_name(new)}
+    iso = lambda v: v.isoformat() if hasattr(v, "isoformat") else v
+    return {"from": iso(old), "to": iso(new)}
 
 
 def update_card(actor, card_id, data):
@@ -124,12 +145,21 @@ def update_card(actor, card_id, data):
     end = fields.get("end_date", card.end_date) if "end_date" in fields else card.end_date
     check_dates(start, end)
     changed = {}
+    changes = {}
     for key, value in fields.items():
-        if getattr(card, key) != value:
+        old = getattr(card, key)
+        if old != value:
             changed[key] = value if not hasattr(value, "isoformat") else value.isoformat()
+            changes["category" if key == "category_id" else key] = _change(key, old, value)
             setattr(card, key, value)
     if changed:
-        activity.add(_aid(actor), "card.updated", "card", card.id, {"fields": sorted(changed)})
+        activity.add(
+            _aid(actor),
+            "card.updated",
+            "card",
+            card.id,
+            {"fields": sorted(changed), "changes": changes, "card_title": card.title},
+        )
     if assignment and (str(card.assignee_id) if card.assignee_id else None) != (
         str(to_uuid(data["assignee_id"])) if data["assignee_id"] else None
     ):
@@ -142,7 +172,7 @@ def delete_card(actor, card_id):
     card, board = load_card(actor, card_id)
     boards.require_staff(actor, board)
     card.deleted_at = clock.now()
-    activity.add(_aid(actor), "card.deleted", "card", card.id)
+    activity.add(_aid(actor), "card.deleted", "card", card.id, {"card_title": card.title})
     db.session.commit()
 
 
@@ -150,7 +180,9 @@ def set_archived(actor, card_id, archived):
     card, board = load_card(actor, card_id)
     boards.require_staff(actor, board)
     card.archived_at = clock.now() if archived else None
-    activity.add(_aid(actor), "card.archived" if archived else "card.unarchived", "card", card.id)
+    activity.add(
+        _aid(actor), "card.archived" if archived else "card.unarchived", "card", card.id, {"card_title": card.title}
+    )
     db.session.commit()
     return card
 
@@ -185,10 +217,21 @@ def move_card(actor, card_id, data):
         db.session.flush()
     new_order = ordering.position_for(prev.order if prev else None, nxt.order if nxt else None, [s.order for s in siblings])
     source = card.column_id
+    source_column = repo.get_column(source)
     card.column_id = target.id
     card.order = new_order
     activity.add(
-        _aid(actor), "card.moved", "card", card.id, {"from_column_id": str(source), "to_column_id": str(target.id)}
+        _aid(actor),
+        "card.moved",
+        "card",
+        card.id,
+        {
+            "from_column_id": str(source),
+            "to_column_id": str(target.id),
+            "from_column_name": source_column.name if source_column is not None else None,
+            "to_column_name": target.name,
+            "card_title": card.title,
+        },
     )
     db.session.commit()
     return card
@@ -204,7 +247,9 @@ def add_subtask(actor, card_id, data):
         raise ValidationError("title is required")
     current = repo.max_subtask_order(card.id)
     sub = repo.add_subtask(card.id, title.strip(), 1.0 if current is None else current + 1)
-    activity.add(_aid(actor), "subtask.added", "card", card.id, {"subtask_id": str(sub.id)})
+    activity.add(
+        _aid(actor), "subtask.added", "card", card.id, {"subtask_id": str(sub.id), "title": sub.title, "card_title": card.title}
+    )
     db.session.commit()
     return sub
 
@@ -235,7 +280,13 @@ def update_subtask(actor, subtask_id, data):
         sub.order = float(data["order"])
     elif "prev" in data or "next" in data:
         reorder_subtasks(sub, data)
-    activity.add(_aid(actor), "subtask.updated", "card", card.id, {"subtask_id": str(sub.id)})
+    activity.add(
+        _aid(actor),
+        "subtask.updated",
+        "card",
+        card.id,
+        {"subtask_id": str(sub.id), "title": sub.title, "is_done": sub.is_done, "card_title": card.title},
+    )
     db.session.commit()
     return sub
 
@@ -263,7 +314,9 @@ def reorder_subtasks(sub, data):
 def delete_subtask(actor, subtask_id):
     sub, card = _load_subtask(actor, subtask_id)
     repo.delete_subtask(sub)
-    activity.add(_aid(actor), "subtask.deleted", "card", card.id, {"subtask_id": str(sub.id)})
+    activity.add(
+        _aid(actor), "subtask.deleted", "card", card.id, {"subtask_id": str(sub.id), "title": sub.title, "card_title": card.title}
+    )
     db.session.commit()
 
 
@@ -288,7 +341,9 @@ def add_attachment(actor, card_id, json_data, upload):
             raise ValidationError("Provide an http(s) url or a file")
         name = (json_data.get("name") or url).strip()[:255]
         att = repo.add_attachment(card_id=card.id, name=name, url=url.strip())
-    activity.add(_aid(actor), "attachment.added", "card", card.id, {"attachment_id": str(att.id)})
+    activity.add(
+        _aid(actor), "attachment.added", "card", card.id, {"attachment_id": str(att.id), "name": att.name, "card_title": card.title}
+    )
     db.session.commit()
     return att
 
@@ -307,7 +362,9 @@ def delete_attachment(actor, attachment_id):
     _require_edit(actor, card, board)
     path = att.file_path
     repo.delete_attachment(att)
-    activity.add(_aid(actor), "attachment.deleted", "card", card.id, {"attachment_id": str(att.id)})
+    activity.add(
+        _aid(actor), "attachment.deleted", "card", card.id, {"attachment_id": str(att.id), "name": att.name, "card_title": card.title}
+    )
     db.session.commit()
     if path:
         try:

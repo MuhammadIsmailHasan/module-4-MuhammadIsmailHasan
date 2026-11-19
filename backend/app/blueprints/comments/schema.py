@@ -18,6 +18,7 @@ class ReplySchema(BaseSchema):
     id = fields.UUID()
     card_id = fields.UUID()
     author_id = fields.UUID()
+    author_name = fields.String(allow_none=True, metadata={"description": "Display name of the author"})
     parent_id = fields.UUID(allow_none=True)
     content = fields.String()
     is_priority = fields.Boolean()

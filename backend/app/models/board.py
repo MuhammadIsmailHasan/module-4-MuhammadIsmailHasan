@@ -13,6 +13,7 @@ class Board(TimestampMixin, db.Model):
         default="private",
         server_default="private",
     )
+    description = db.Column(db.String(500), nullable=True)
     owner_id = uuid_fk("users.id", nullable=True)
     deleted_at = db.Column(db.DateTime(timezone=True), nullable=True)
     archived_at = db.Column(db.DateTime(timezone=True), nullable=True)

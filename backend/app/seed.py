@@ -64,8 +64,8 @@ def _user(login, role, full_name, password, domain="example.com"):
     return user
 
 
-def _board(name, visibility, owner, members, categories, now):
-    board = Board(name=name, visibility=visibility, owner_id=owner.id)
+def _board(name, visibility, owner, members, categories, now, description=None):
+    board = Board(name=name, visibility=visibility, owner_id=owner.id, description=description)
     db.session.add(board)
     db.session.flush()
     cols = []
@@ -107,6 +107,7 @@ def seed_demo_data(password, tz="UTC"):
     board, cols, cats = _board(
         DEMO_BOARD, "public", sup, [member, member2],
         [("Design", "#8b5cf6"), ("Development", "#3b82f6"), ("Bug", "#ef4444")], now,
+        description="Redesign the marketing site: new landing page, brand colors, and a faster build.",
     )
     todo, doing, review, revision, done = cols
     # (title, column, priority, category, assignee, start offset, end offset, description)
@@ -160,7 +161,8 @@ def seed_demo_data(password, tz="UTC"):
     db.session.add(Comment(card_id=made["Fix login redirect loop"].id, author_id=sup.id, content="Reproduced on Safari only.", created_at=now))
 
     board2, cols2, cats2 = _board(
-        "Demo: Internal Roadmap", "private", sup2, [member2], [("Planning", "#10b981")], now
+        "Demo: Internal Roadmap", "private", sup2, [member2], [("Planning", "#10b981")], now,
+        description="Quarterly goals and hiring plan for the internal team.",
     )
     for i, (title, prio) in enumerate((("Q1 goals", "high"), ("Hiring plan", "medium"))):
         card = Card(column_id=cols2[0].id, title=title, priority=prio, category_id=cats2["Planning"].id, order=float(i + 1))

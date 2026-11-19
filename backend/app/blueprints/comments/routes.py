@@ -16,7 +16,7 @@ bp = Blueprint("comments", __name__, description="Comments, replies and the prio
 @bp.response(201, envelope(ReplySchema))
 def create(data, card_id):
     c = service.create_comment(current_actor(), card_id, data)
-    return ok(service.serialize(c, current_actor().role, {}), "Comment created", 201)
+    return ok(service.serialize(c, current_actor().role, {}, names=service.repo.author_names([c])), "Comment created", 201)
 
 
 @bp.route("/comments/<comment_id>/replies", methods=["POST"])
@@ -25,7 +25,7 @@ def create(data, card_id):
 @bp.response(201, envelope(ReplySchema))
 def reply(data, comment_id):
     c = service.reply(current_actor(), comment_id, data)
-    return ok(service.serialize(c, current_actor().role, {}), "Reply created", 201)
+    return ok(service.serialize(c, current_actor().role, {}, names=service.repo.author_names([c])), "Reply created", 201)
 
 
 @bp.route("/comments/<comment_id>/priority", methods=["PATCH"])
@@ -34,7 +34,7 @@ def reply(data, comment_id):
 @bp.response(200, envelope(ReplySchema))
 def priority(comment_id):
     c = service.toggle_priority(current_actor(), comment_id)
-    return ok(service.serialize(c, "manager", {}), "Priority toggled")
+    return ok(service.serialize(c, "manager", {}, names=service.repo.author_names([c])), "Priority toggled")
 
 
 @bp.route("/cards/<card_id>/comments", methods=["GET"])

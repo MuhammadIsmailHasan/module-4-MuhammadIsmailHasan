@@ -4,6 +4,7 @@ from app.blueprints.notifications import service
 from app.blueprints.notifications.schema import InboxSchema, NotificationSchema
 from app.common.auth import current_actor, require_role
 from app.common.docs import endpoint
+from app.common.paging import PageQuerySchema
 from app.common.envelope import NullEnvelopeSchema, envelope
 from app.common.responses import ok
 
@@ -12,11 +13,12 @@ USERS = ("member", "supervisor", "manager", "admin")
 
 
 @bp.route("/notifications", methods=["GET"])
-@endpoint(bp, "List my notifications", "Only the caller's rows.", errors=(401,))
+@endpoint(bp, "List my notifications", "Only the caller's rows. Paged with `limit` and `before`; `unread_count` counts all of them.", errors=(400, 401))
 @require_role(*USERS)
+@bp.arguments(PageQuerySchema, location="query")
 @bp.response(200, envelope(InboxSchema))
-def inbox():
-    return ok(service.inbox(current_actor()))
+def inbox(page):
+    return ok(service.inbox(current_actor(), page["limit"], page.get("before")))
 
 
 @bp.route("/notifications/read-all", methods=["PATCH"])

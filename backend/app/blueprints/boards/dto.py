@@ -23,15 +23,30 @@ def serialize_column(col):
     return {"id": str(col.id), "board_id": str(col.board_id), "name": col.name, "order": col.order}
 
 
-def serialize_board(board, columns=None, viewer=None):
+def clean_description(value):
+    """Trimmed; empty becomes None; at most 500 characters."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValidationError("description must be text")
+    value = value.strip()
+    if len(value) > 500:
+        raise ValidationError("description must be at most 500 characters")
+    return value or None
+
+
+def serialize_board(board, columns=None, viewer=None, counts=None):
     # Guests never receive comments or activity_log; boards embed neither.
     data = {
         "id": str(board.id),
         "name": board.name,
+        "description": board.description,
         "visibility": board.visibility,
         "owner_id": str(board.owner_id) if board.owner_id else None,
         "archived_at": iso(board.archived_at),
     }
+    if counts is not None:
+        data.update(counts)
     if columns is not None:
         data["columns"] = [serialize_column(c) for c in columns]
     return data
