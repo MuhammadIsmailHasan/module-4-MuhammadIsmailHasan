@@ -6,16 +6,17 @@ from app.models import Board, Card, Column
 
 def summaries(today, week_ago, board_id=None):
     """One grouped query: per-board counts, no per-card data."""
-    done = Column.name == "Done"
+    has_card = Card.id.isnot(None)  # the outer join yields NULL card rows for empty columns
+    done = db.and_(has_card, Column.name == "Done")
     q = (
         db.select(
             Board.id,
             Board.name,
             db.func.count(Card.id),
             db.func.coalesce(db.func.sum(db.case((done, 1), else_=0)), 0),
-            db.func.coalesce(db.func.sum(db.case((Column.name == "In Progress", 1), else_=0)), 0),
+            db.func.coalesce(db.func.sum(db.case((db.and_(has_card, Column.name == "In Progress"), 1), else_=0)), 0),
             db.func.coalesce(
-                db.func.sum(db.case((db.and_(Card.end_date < today, db.not_(done)), 1), else_=0)), 0
+                db.func.sum(db.case((db.and_(has_card, Card.end_date < today, Column.name != "Done"), 1), else_=0)), 0
             ),
             db.func.coalesce(db.func.sum(db.case((db.and_(done, Card.updated_at >= week_ago), 1), else_=0)), 0),
         )

@@ -28,7 +28,9 @@ def list_for_card(card_id, sort="latest"):
     """
     order = [Comment.is_priority.desc()]
     if sort == "popular":
-        order += [Comment.reply_count.desc(), Comment.created_at.desc(), Comment.id.desc()]
+        # priority comments stay newest first: reply_count only ranks the non-priority rest
+        rank = db.case((Comment.is_priority.is_(True), 0), else_=Comment.reply_count)
+        order += [rank.desc(), Comment.created_at.desc(), Comment.id.desc()]
     else:
         order += [Comment.created_at.desc(), Comment.id.desc()]
     rows = db.session.execute(

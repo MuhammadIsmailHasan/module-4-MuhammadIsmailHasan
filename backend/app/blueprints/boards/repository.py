@@ -1,5 +1,6 @@
 from sqlalchemy.orm import selectinload
 
+from app.common.ids import to_uuid
 from app.extensions import db
 from app.models import Board, BoardMember, Column, User
 
@@ -31,8 +32,9 @@ def list_visible(actor):
     if actor is None:
         q = q.filter(Board.visibility == "public")
     elif actor.role not in ("manager", "admin"):
-        member_ids = db.select(BoardMember.board_id).where(BoardMember.user_id == actor.id)
-        q = q.filter(db.or_(Board.visibility == "public", Board.owner_id == actor.id, Board.id.in_(member_ids)))
+        uid = to_uuid(actor.id)
+        member_ids = db.select(BoardMember.board_id).where(BoardMember.user_id == uid)
+        q = q.filter(db.or_(Board.visibility == "public", Board.owner_id == uid, Board.id.in_(member_ids)))
     return q.order_by(Board.created_at, Board.id).all()
 
 
