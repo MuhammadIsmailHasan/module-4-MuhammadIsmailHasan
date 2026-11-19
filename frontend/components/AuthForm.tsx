@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { BaseButton } from "@/components/shared/BaseButton";
+import { BaseAlert, BaseField, BaseInput } from "@/components/shared/BaseField";
 import { api } from "@/lib/api";
 import { ApiError } from "@/lib/http";
 import { setSession } from "@/lib/session";
@@ -53,13 +54,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
   }
 
   const field = (id: keyof typeof values, label: string, type = "text", autoComplete?: string) => (
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
-      <input
+    <BaseField label={label} htmlFor={id} errors={errors[id]}>
+      <BaseInput
         id={id}
         name={id}
         type={type}
-        className="input"
         autoComplete={autoComplete}
         value={values[id]}
         onChange={set(id)}
@@ -67,24 +66,15 @@ export function AuthForm({ mode }: { mode: Mode }) {
         aria-describedby={errors[id] ? `${id}-error` : undefined}
         required
       />
-      {errors[id]?.map((m) => (
-        <span key={m} id={`${id}-error`} className="field-error">
-          {m}
-        </span>
-      ))}
-    </div>
+    </BaseField>
   );
 
   return (
     <>
-      <h1 className="auth-title">{copy.title}</h1>
-      <p className="auth-sub">{copy.sub}</p>
-      <form className="stack" onSubmit={onSubmit} noValidate>
-        {formError && (
-          <div role="alert" className="form-error">
-            {formError}
-          </div>
-        )}
+      <h1 className="text-xl font-bold">{copy.title}</h1>
+      <p className="mt-1 mb-6 text-ink-muted">{copy.sub}</p>
+      <form method="post" className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
+        {formError && <BaseAlert>{formError}</BaseAlert>}
         {mode === "register" && field("full_name", "Full name", "text", "name")}
         {field("login_identifier", "Email or username", "text", "username")}
         {field("password", "Password", "password", mode === "login" ? "current-password" : "new-password")}
@@ -92,8 +82,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
           {busy ? "Please wait…" : copy.cta}
         </BaseButton>
       </form>
-      <p className="auth-switch">
-        {copy.other} <Link href={copy.link}>{copy.linkText}</Link>
+      <p className="mt-4 text-center text-sm text-ink-muted">
+        {copy.other}{" "}
+        <Link href={copy.link} className="font-semibold">
+          {copy.linkText}
+        </Link>
       </p>
     </>
   );
