@@ -12,14 +12,18 @@ UUID0 = "00000000-0000-0000-0000-000000000000"
 def check_envelope(resp):
     body = resp.get_json()
     assert isinstance(body, dict), resp.data
-    assert body["status"] == resp.status_code
+    assert body["status"] is (resp.status_code < 400)
     assert isinstance(body["message"], str) and body["message"]
     if resp.status_code < 400:
         assert set(body) == {"status", "message", "data"}
     else:
         assert set(body) == {"status", "message", "error"}
-        assert set(body["error"]) == {"code", "message"}
-        assert body["error"]["message"] == body["message"]
+        assert "message" not in body["error"] and "code" in body["error"]
+        assert set(body["error"]) <= {"code", "details"}
+        if body["error"]["code"] == "VALIDATION_ERROR" and "details" in body["error"]:
+            assert all(isinstance(v, list) and v and all(isinstance(m, str) for m in v) for v in body["error"]["details"].values())
+        else:
+            assert "details" not in body["error"]
         assert resp.status_code in (400, 401, 403, 404, 405, 409, 500)
     return body
 
@@ -35,7 +39,7 @@ def api_rules(app):
 
 def test_success_and_error_shapes(client, make_user, auth):
     r = client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "a@x.com", "password": TEST_PASSWORD})
-    assert check_envelope(r)["message"] == "Registered"
+    assert check_envelope(r)["message"] == "User registered"
     assert check_envelope(client.post("/api/auth/logout"))["data"] is None
     assert check_envelope(client.get("/api/boards"))["data"] == []
 
@@ -51,7 +55,7 @@ def test_validation_is_400_never_422(client, make_user, auth):
         assert check_envelope(r)["error"]["code"] == "VALIDATION_ERROR"
     manager = make_user("manager")
     r = client.post("/api/boards", headers=auth(manager), json={"name": "B", "visibility": "secret"})
-    assert r.status_code == 400 and check_envelope(r)["message"] == "visibility must be public or private"
+    assert r.status_code == 400 and check_envelope(r)["error"]["details"]["visibility"] == ["visibility must be public or private"]
     # malformed JSON and bad query value
     r = client.post("/api/auth/login", data="{not json", content_type="application/json")
     assert r.status_code == 400

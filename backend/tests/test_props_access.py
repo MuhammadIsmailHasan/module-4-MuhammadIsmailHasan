@@ -74,7 +74,7 @@ def test_board_access_matrix_exhaustive(client, vis):
             r = call(env, action, rel, {"card": card["id"], "att": att["id"]})
             assert r.status_code == oracle(action, rel, vis), (vis, rel, action, r.get_json())
             body = r.get_json()
-            assert body["status"] == r.status_code
+            assert body["status"] is (r.status_code < 400)
 
 
 @PROP

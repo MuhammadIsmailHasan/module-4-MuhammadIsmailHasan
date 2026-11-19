@@ -82,7 +82,7 @@ def test_property_22_blank_comments_rejected(client, content):
     if content.strip():
         assert r.status_code == 201
     else:
-        assert r.status_code == 400 and r.get_json()["message"] == "content is required"
+        assert r.status_code == 400 and r.get_json()["error"]["details"]["content"][0] == "content is required"
         assert Comment.query.count() == 0
     assert client.post(f"/api/cards/{card['id']}/comments", headers=env.h["admin"], json={"content": "x"}).status_code == 403
     assert client.post(f"/api/cards/{card['id']}/comments", json={"content": "x"}).status_code == 401

@@ -46,7 +46,7 @@ def test_register_login_roundtrip(client):
     dup = client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "ANN@x.com", "password": TEST_PASSWORD})
     assert dup.status_code == 409
     assert client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "z", "password": "short"}).status_code == 400
-    assert client.post("/api/auth/logout").get_json() == {"status": 200, "message": "Logged out", "data": None}
+    assert client.post("/api/auth/logout").get_json() == {"status": True, "message": "Logged out", "data": None}
 
 
 def test_token_expiry_24h(app, make_user):
@@ -260,7 +260,7 @@ def test_comments_flow(world):
     c = world.client
     card = mkcard(world)
     url = f"/api/cards/{card['id']}/comments"
-    assert c.post(url, headers=world.h["member"], json={"content": "  "}).get_json()["error"]["message"] == "content is required"
+    assert c.post(url, headers=world.h["member"], json={"content": "  "}).get_json()["error"]["details"]["content"][0] == "content is required"
     assert c.post(url, headers=world.h["admin"], json={"content": "x"}).status_code == 403
     assert c.post(url, json={"content": "x"}).status_code == 401  # private board
     m1 = c.post(url, headers=world.h["manager"], json={"content": "m1"}).get_json()["data"]
@@ -378,7 +378,7 @@ def test_envelope_everywhere(world, app):
         body = c.get(path, headers=world.h["manager"]).get_json()
         assert set(body) in ({"status", "message", "data"}, {"status", "message", "error"})
         if "error" in body:
-            assert set(body["error"]) == {"code", "message"}
+            assert set(body["error"]) <= {"code", "details"} and "code" in body["error"]
 
 
 def test_no_query_outside_repository_and_env_not_tracked():
