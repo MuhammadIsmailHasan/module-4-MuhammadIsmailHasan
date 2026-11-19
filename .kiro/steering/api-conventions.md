@@ -11,19 +11,22 @@ inclusion: always
   of each domain inventing its own.
   **Example:** `PATCH /api/cards/{id}/move` for a drag-and-drop position change.
 
-- **Rule:** Every response carries a top-level `status` (the HTTP status code,
-  integer) and a human-readable `message` (string). A success is
-  `{ "status": 200, "message": "...", "data": <payload> }` where the payload is
-  a single object, a list, or `null`. An error is
-  `{ "status": 404, "message": "...", "error": { "code": string, "message": string } }`
-  with a matching HTTP status (`400`, `401`, `403`, `404`, `405`, `409`, `500`); `error.message`
-  repeats the top-level `message`.
+- **Rule:** Every response carries a top-level boolean `status` (`true` exactly
+  when the HTTP status is 2xx, otherwise `false`) and a human-readable
+  `message`. A success is `{ "status": true, "message": "...", "data": <payload> }`
+  where the payload is a single object, a list, or `null`. An error is
+  `{ "status": false, "message": "...", "error": { "code": string, "details"?: object } }`
+  with a matching HTTP status (`400`, `401`, `403`, `404`, `405`, `409`, `500`).
+  The message text appears once, at the top level; `error` holds only the
+  machine-readable `code` and, for `VALIDATION_ERROR`, a `details` object
+  mapping each field to a list of messages. The HTTP status code travels on
+  the HTTP line only. Mutating endpoints send a short descriptive `message`
+  ("Card moved"); reads default to "OK".
   **Rationale:** One envelope on both paths means the frontend's API client has
-  exactly one place that unwraps a response or throws, and the body alone says
-  what happened without reading the HTTP line. Keeping `error.code` and
-  `error.message` leaves existing error handling intact.
-  **Example:** `GET /api/cards/{id}` → `200 { "status": 200, "message": "Card retrieved", "data": { "id": "...", "title": "..." } }`;
-  a missing comment body → `400 { "status": 400, "message": "content is required", "error": { "code": "VALIDATION_ERROR", "message": "content is required" } }`.
+  exactly one place that unwraps a response or throws. Putting the text once
+  avoids two messages drifting apart, and `error.code` is what code branches on.
+  **Example:** `GET /api/cards/{id}` → `200 { "status": true, "message": "OK", "data": { "id": "...", "title": "..." } }`;
+  a missing comment body → `400 { "status": false, "message": "Validation failed", "error": { "code": "VALIDATION_ERROR", "details": { "content": ["Missing data for required field."] } } }`.
 
 - **Rule:** List endpoints that back a search/filter UI accept `?search=` and
   `?filter[<field>]=` query params.

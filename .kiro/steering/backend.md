@@ -141,7 +141,7 @@ inclusion: always
   `@blp.arguments(Schema)`, and every success response is declared with
   `@blp.response(status, EnvelopeSchema)` where the schema is built from the
   blueprint's marshmallow classes in `schema.py` wrapped by the shared
-  envelope (`status`, `message`, `data`). The OpenAPI document is generated
+  envelope (boolean `status`, `message`, `data`). The OpenAPI document is generated
   from those declarations, never written by hand. Validation failures map to
   `400 VALIDATION_ERROR` (never smorest's default `422`), and every error
   still renders the shared error envelope.
