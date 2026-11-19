@@ -2,9 +2,10 @@ class AppError(Exception):
     status = 500
     code = "INTERNAL_ERROR"
 
-    def __init__(self, message="Internal server error"):
+    def __init__(self, message="Internal server error", details=None):
         super().__init__(message)
         self.message = message
+        self.details = details
 
 
 class ValidationError(AppError):
@@ -32,6 +33,9 @@ class Conflict(AppError):
     code = "CONFLICT"
 
 
-def error_body(status, code, message):
-    """Error envelope: { status, message, error: { code, message } }."""
-    return {"status": status, "message": message, "error": {"code": code, "message": message}}
+def error_body(code, message, details=None):
+    """Error envelope: { status: false, message, error: { code, details? } }."""
+    error = {"code": code}
+    if details:
+        error["details"] = details
+    return {"status": False, "message": message, "error": error}

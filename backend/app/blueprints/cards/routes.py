@@ -63,7 +63,7 @@ def create_card(data, column_id):
 @bp.response(200, envelope(CardSchema))
 def get_card(card_id):
     actor = current_actor()
-    return ok(service.present(service.get_card(actor, card_id), actor), "Card retrieved")
+    return ok(service.present(service.get_card(actor, card_id), actor))
 
 
 @bp.route("/cards/<card_id>", methods=["PATCH"])
@@ -121,7 +121,7 @@ def card_activity(card_id):
     card = service.get_card(actor, card_id)
     if actor is None:
         raise Forbidden("Activity is not available to guests")
-    return ok([activity.serialize(r) for r in activity.for_card(card.id)], "Activity retrieved")
+    return ok([activity.serialize(r) for r in activity.for_card(card.id)])
 
 
 @bp.route("/boards/<board_id>/cards", methods=["GET"])
@@ -129,7 +129,7 @@ def card_activity(card_id):
 @bp.arguments(BoardCardsQuerySchema, location="query")
 @bp.response(200, envelope(CardSchema, many=True))
 def board_cards(args, board_id):
-    return ok(service.list_board_cards(current_actor(), board_id, request.args), "Cards retrieved")
+    return ok(service.list_board_cards(current_actor(), board_id, request.args))
 
 
 @bp.route("/cards/<card_id>/subtasks", methods=["POST"])
@@ -183,7 +183,7 @@ def delete_attachment(attachment_id):
 @endpoint(bp, "Issue a fresh signed file URL", "Re-checks board access; open to Guests on public boards. The URL is valid 15 minutes.", auth="optional")
 @bp.response(200, envelope(AttachmentUrlSchema))
 def attachment_url(attachment_id):
-    return ok(service.attachment_url(current_actor(), attachment_id), "File URL issued")
+    return ok(service.attachment_url(current_actor(), attachment_id))
 
 
 @bp.route("/attachments/<attachment_id>/file", methods=["GET"])

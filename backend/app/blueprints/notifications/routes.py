@@ -16,7 +16,7 @@ USERS = ("member", "supervisor", "manager", "admin")
 @require_role(*USERS)
 @bp.response(200, envelope(InboxSchema))
 def inbox():
-    return ok(service.inbox(current_actor()), "Notifications retrieved")
+    return ok(service.inbox(current_actor()))
 
 
 @bp.route("/notifications/read-all", methods=["PATCH"])

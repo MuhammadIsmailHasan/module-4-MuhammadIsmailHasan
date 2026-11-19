@@ -15,7 +15,7 @@ bp = Blueprint("analytics", __name__, description="Board and cross-board summari
 @require_role("member", "supervisor", "manager", "admin")
 @bp.response(200, envelope(AnalyticsSchema))
 def board_analytics(board_id):
-    return ok(service.board_analytics(current_actor(), board_id), "Analytics retrieved")
+    return ok(service.board_analytics(current_actor(), board_id))
 
 
 @bp.route("/analytics/boards", methods=["GET"])
@@ -23,4 +23,4 @@ def board_analytics(board_id):
 @require_role("manager")
 @bp.response(200, envelope(AnalyticsSchema, many=True))
 def all_boards():
-    return ok(service.all_boards(current_actor()), "Analytics retrieved")
+    return ok(service.all_boards(current_actor()))

@@ -36,7 +36,7 @@ def create_board(data):
 @endpoint(bp, "List visible boards", "Guests see public boards; signed-in users see public plus accessible boards.", auth="optional", errors=())
 @bp.response(200, envelope(BoardSchema, many=True))
 def list_boards():
-    return ok([serialize_board(b) for b in service.list_boards(current_actor())], "Boards retrieved")
+    return ok([serialize_board(b) for b in service.list_boards(current_actor())])
 
 
 @bp.route("/boards/<board_id>", methods=["GET"])
@@ -44,7 +44,7 @@ def list_boards():
 @bp.response(200, envelope(BoardSchema))
 def get_board(board_id):
     board = service.board_detail(current_actor(), board_id)
-    return ok(serialize_board(board, board.columns, current_actor()), "Board retrieved")
+    return ok(serialize_board(board, board.columns, current_actor()))
 
 
 @bp.route("/boards/<board_id>", methods=["PATCH"])
@@ -86,7 +86,7 @@ def delete_board(board_id):
 @endpoint(bp, "List board members", "Requires board access.", auth="optional")
 @bp.response(200, envelope(UserSchema, many=True))
 def members(board_id):
-    return ok([serialize_user(u) for u in service.list_members(current_actor(), board_id)], "Members retrieved")
+    return ok([serialize_user(u) for u in service.list_members(current_actor(), board_id)])
 
 
 @bp.route("/boards/<board_id>/members", methods=["POST"])
@@ -115,4 +115,4 @@ def board_activity(board_id):
     board = service.load_board(actor, board_id)
     if actor is None:
         raise Forbidden("Activity is not available to guests")
-    return ok([activity.serialize(r) for r in activity.for_board(board.id)], "Activity retrieved")
+    return ok([activity.serialize(r) for r in activity.for_board(board.id)])

@@ -14,7 +14,7 @@ bp = Blueprint("auth", __name__, description="Register, log in and log out")
 @bp.arguments(RegisterSchema)
 @bp.response(201, envelope(AuthSchema))
 def register(data):
-    return ok(service.register(data), "Registered", 201)
+    return ok(service.register(data), "User registered", 201)
 
 
 @bp.route("/auth/login", methods=["POST"])

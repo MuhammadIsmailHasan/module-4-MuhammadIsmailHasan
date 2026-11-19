@@ -7,17 +7,21 @@ _cache = {}
 
 class ErrorDetailSchema(ma.Schema):
     code = fields.String(metadata={"description": "Machine-readable error code"})
-    message = fields.String(metadata={"description": "Human-readable error message"})
+    details = fields.Dict(
+        keys=fields.String(),
+        values=fields.List(fields.String()),
+        metadata={"description": "VALIDATION_ERROR only: field name to list of messages"},
+    )
 
 
 class ErrorEnvelopeSchema(ma.Schema):
-    status = fields.Integer(metadata={"description": "HTTP status code"})
+    status = fields.Boolean(metadata={"description": "Always false on errors"})
     message = fields.String(metadata={"description": "Human-readable message"})
     error = fields.Nested(ErrorDetailSchema)
 
 
 class NullEnvelopeSchema(ma.Schema):
-    status = fields.Integer(metadata={"description": "HTTP status code"})
+    status = fields.Boolean(metadata={"description": "True when the HTTP status is 2xx"})
     message = fields.String()
     data = fields.Raw(allow_none=True, metadata={"description": "Always null"})
 
@@ -32,7 +36,7 @@ def envelope(data_schema, many=False):
             name,
             (ma.Schema,),
             {
-                "status": fields.Integer(metadata={"description": "HTTP status code"}),
+                "status": fields.Boolean(metadata={"description": "True when the HTTP status is 2xx"}),
                 "message": fields.String(metadata={"description": "Human-readable message"}),
                 "data": fields.Nested(data_schema, many=many, allow_none=True),
             },

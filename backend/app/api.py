@@ -25,8 +25,8 @@ _CODES = {
 }
 
 
-def render_error(status, code, message):
-    return jsonify(error_body(status, code, message)), status
+def render_error(status, code, message, details=None):
+    return jsonify(error_body(code, message, details)), status
 
 
 def openapi_config(app_env):
@@ -41,23 +41,24 @@ def openapi_config(app_env):
     return config
 
 
-def _first_message(messages):
-    """Flatten webargs/marshmallow messages to 'field: text' for the first problem."""
-    if isinstance(messages, dict):
-        for key, value in messages.items():
-            inner = _first_message(value)
-            if inner is None:
-                continue
-            field, text = inner
-            return (field or (key if key not in ("json", "query", "form", "files") else None), text)
-        return None
-    if isinstance(messages, (list, tuple)):
-        for item in messages:
-            inner = _first_message(item)
-            if inner:
-                return inner
-        return None
-    return (None, str(messages))
+_LOCATIONS = ("json", "query", "form", "files", "headers", "cookies", "path")
+
+
+def _details(messages):
+    """webargs messages ({location: {field: [text]}}) to {field: [text, ...]}."""
+    if not isinstance(messages, dict):
+        return {"_schema": [str(messages)]}
+    flat = {}
+    for key, value in messages.items():
+        if key in _LOCATIONS and isinstance(value, dict):
+            flat.update(_details(value))
+        elif isinstance(value, (list, tuple)):
+            flat[str(key)] = [x if isinstance(x, str) else str(x) for x in value]
+        elif isinstance(value, dict):  # nested field errors: keep the first text per sub-field
+            flat[str(key)] = [f"{k}: {v[0] if isinstance(v, list) and v else v}" for k, v in value.items()]
+        else:
+            flat[str(key)] = [str(value)]
+    return flat
 
 
 class EnvelopeApi(Api):
@@ -71,17 +72,14 @@ class EnvelopeApi(Api):
 
     def handle_app_error(self, err):
         db.session.rollback()
-        return render_error(err.status, err.code, err.message)
+        return render_error(err.status, err.code, err.message, err.details)
 
     def handle_http_exception(self, error):
         status = error.code or 500
         data = getattr(error, "data", None) or {}
         if status == 422:  # smorest/webargs validation failure -> 400, never 422
-            found = _first_message(data.get("messages") or data.get("errors") or data.get("message"))
-            field, text = found if found else (None, "Invalid request")
-            if field and not text.lower().startswith(field.lower()):
-                text = f"{field}: {text}"
-            return render_error(400, "VALIDATION_ERROR", text)
+            raw = data.get("messages") or data.get("errors") or data.get("message") or "Invalid request"
+            return render_error(400, "VALIDATION_ERROR", "Validation failed", _details(raw))
         message = data.get("message") or HTTPStatus(status).phrase
         return render_error(status, _CODES.get(status, "ERROR"), message)
 

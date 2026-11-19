@@ -17,7 +17,7 @@ bp = Blueprint("users", __name__, description="User administration (Admin only)"
 @require_role("admin")
 @bp.response(200, envelope(AdminUserSchema, many=True))
 def list_users():
-    return ok([serialize_user_admin(u) for u in service.list_users()], "Users retrieved")
+    return ok([serialize_user_admin(u) for u in service.list_users()])
 
 
 @bp.route("/users", methods=["POST"])

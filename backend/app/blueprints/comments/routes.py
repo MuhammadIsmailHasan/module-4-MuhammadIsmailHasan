@@ -42,4 +42,4 @@ def priority(comment_id):
 @bp.arguments(CommentListQuerySchema, location="query")
 @bp.response(200, envelope(CommentSchema, many=True))
 def list_comments(args, card_id):
-    return ok(service.list_for_request(current_actor(), card_id, args.get("sort")), "Comments retrieved")
+    return ok(service.list_for_request(current_actor(), card_id, args.get("sort")))

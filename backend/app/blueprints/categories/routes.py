@@ -15,7 +15,7 @@ USERS = ("member", "supervisor", "manager", "admin")
 @endpoint(bp, "List a board's categories", "Board access only; Guests may read public boards.", auth="optional")
 @bp.response(200, envelope(CategorySchema, many=True))
 def list_categories(board_id):
-    return ok([service.serialize(c) for c in service.list_categories(current_actor(), board_id)], "Categories retrieved")
+    return ok([service.serialize(c) for c in service.list_categories(current_actor(), board_id)])
 
 
 @bp.route("/boards/<board_id>/categories", methods=["POST"])
