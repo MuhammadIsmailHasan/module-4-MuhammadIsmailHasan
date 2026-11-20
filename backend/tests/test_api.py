@@ -37,15 +37,25 @@ def mkcard(w, title="t", who="supervisor", i=0, **extra):
 
 # ---- auth ----
 def test_register_login_roundtrip(client):
-    r = client.post("/api/auth/register", json={"full_name": " Ann ", "login_identifier": " Ann@X.com ", "password": TEST_PASSWORD})
+    r = client.post("/api/auth/register", json={"full_name": " Ann ", "username": " Ann_1 ", "email": " Ann@X.com ", "password": TEST_PASSWORD})
     assert r.status_code == 201
     d = r.get_json()["data"]
-    assert d["user"]["full_name"] == "Ann" and d["token"]
-    assert client.post("/api/auth/login", json={"login_identifier": "ann@x.COM", "password": TEST_PASSWORD}).status_code == 200
-    assert client.post("/api/auth/login", json={"login_identifier": "ann@x.com", "password": "bad"}).status_code == 401
-    dup = client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "ANN@x.com", "password": TEST_PASSWORD})
-    assert dup.status_code == 409
-    assert client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "z", "password": "short"}).status_code == 400
+    assert d["user"]["full_name"] == "Ann" and d["user"]["username"] == "ann_1" and d["user"]["email"] == "ann@x.com" and d["token"]
+    for ident in ("ann@x.COM", "ANN_1", " ann_1 "):
+        assert client.post("/api/auth/login", json={"identifier": ident, "password": TEST_PASSWORD}).status_code == 200
+    assert client.post("/api/auth/login", json={"identifier": "ann@x.com", "password": "bad"}).status_code == 401
+    assert client.post("/api/auth/login", json={"identifier": "nobody", "password": "bad"}).status_code == 401
+    assert client.post("/api/auth/login", json={"identifier": "not valid", "password": "x"}).status_code == 400
+    both = client.post("/api/auth/register", json={"full_name": "A", "username": "ANN_1", "email": "ANN@x.com", "password": TEST_PASSWORD})
+    assert both.status_code == 409 and set(both.get_json()["error"]["details"]) == {"username", "email"}
+    one = client.post("/api/auth/register", json={"full_name": "A", "username": "other", "email": "ann@x.com", "password": TEST_PASSWORD})
+    assert one.status_code == 409 and set(one.get_json()["error"]["details"]) == {"email"}
+    bad = client.post("/api/auth/register", json={"full_name": "A", "username": "z", "email": "nope", "password": "short"})
+    assert bad.status_code == 400 and {"username", "email", "password"} <= set(bad.get_json()["error"]["details"])
+    av = client.get("/api/auth/availability?username=ANN_1&email=free@x.com").get_json()["data"]
+    assert av == {"username": {"available": False}, "email": {"available": True}}
+    assert client.get("/api/auth/availability").status_code == 400
+    assert client.get("/api/auth/availability?username=a").status_code == 400
     assert client.post("/api/auth/logout").get_json() == {"status": True, "message": "Logged out", "data": None}
 
 
@@ -369,16 +379,20 @@ def test_activity_and_inbox_paging_and_candidates(world):
     assert c.get(f"/api/notifications?before={first['items'][0]['id']}", headers=world.h["other_member"]).status_code == 400
 
     # candidates: non-members only, filtered, id and full_name only, role rules
-    cand = c.get(f"/api/boards/{world.board['id']}/candidates", headers=world.h["manager"]).get_json()["data"]
+    cand = c.get(f"/api/boards/{world.board['id']}/candidates?search=me", headers=world.h["manager"]).get_json()["data"]
     names = {x["full_name"] for x in cand}
     assert world.users["member"].full_name not in names or world.users["other_member"].full_name in names
     assert str(world.users["member"].id) not in {x["id"] for x in cand}
-    assert all(set(x) == {"id", "full_name"} for x in cand)
+    assert all(set(x) == {"id", "full_name", "username", "email", "avatar_url"} for x in cand)
     q = world.users["other_member"].full_name[:3].lower()
     assert c.get(f"/api/boards/{world.board['id']}/candidates?search={q}", headers=world.h["manager"]).status_code == 200
+    assert c.get(f"/api/boards/{world.board['id']}/candidates?search=a", headers=world.h["manager"]).status_code == 400
+    exact = world.users["other_member"].email
+    hit = c.get(f"/api/boards/{world.board['id']}/candidates?search={exact}", headers=world.h["manager"]).get_json()["data"]
+    assert [x["email"] for x in hit] == [exact]
     assert c.get(f"/api/boards/{world.board['id']}/candidates", headers=world.h["member"]).status_code == 403
     assert c.get(f"/api/boards/{world.board['id']}/candidates", headers=world.h["other_sup"]).status_code == 403
-    assert c.get(f"/api/boards/{world.board['id']}/candidates", headers=h).status_code == 200  # the owner
+    assert c.get(f"/api/boards/{world.board['id']}/candidates?search=me", headers=h).status_code == 200  # the owner
     assert c.get(f"/api/boards/{world.board['id']}/candidates").status_code == 401
 
 
@@ -498,7 +512,7 @@ def test_user_admin(world):
     for who in ("member", "supervisor", "manager"):
         assert c.get("/api/users", headers=world.h[who]).status_code == 403
     assert c.get("/api/users").status_code == 401
-    r = c.post("/api/users", headers=world.h["admin"], json={"full_name": "N", "login_identifier": "n@x.com", "password": TEST_PASSWORD, "role": "supervisor"})
+    r = c.post("/api/users", headers=world.h["admin"], json={"full_name": "N", "username": "nnn", "email": "n@x.com", "password": TEST_PASSWORD, "role": "supervisor"})
     assert r.status_code == 201
     uid = r.get_json()["data"]["id"]
     r = c.patch(f"/api/users/{uid}", headers=world.h["admin"], json={"role": "manager", "full_name": "M"})

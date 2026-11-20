@@ -11,40 +11,47 @@ from app.extensions import db
 from app.models import ActivityLog, Board, BoardMember, Card, Category, Column, Notification, Subtask
 from helpers import PROP, UUID0, Env, hdr, mkuser, reset_db
 
-ident = st.text(alphabet=string.ascii_letters + string.digits + "@._-+", min_size=1, max_size=60)
+uname = st.text(alphabet=string.ascii_letters + string.digits + "_.", min_size=3, max_size=30)
+local = st.text(alphabet=string.ascii_lowercase + string.digits, min_size=1, max_size=20)
+email = st.builds(lambda a, b: f"{a}@{b}.com", local, local)
 name = st.text(alphabet=string.ascii_letters + " ", min_size=1, max_size=30).filter(lambda s: s.strip())
 pw = st.text(min_size=8, max_size=40)
 
 
 # ---- Property 1 and 2: auth ----
 @PROP
-@given(full=name, login=ident, password=pw)
-def test_property_1_register_login_round_trip(client, full, login, password):
+@given(full=name, username=uname, mail=email, password=pw)
+def test_property_1_register_login_round_trip(client, full, username, mail, password):
     reset_db()
-    r = client.post("/api/auth/register", json={"full_name": f" {full} ", "login_identifier": f" {login} ", "password": password})
+    r = client.post("/api/auth/register", json={"full_name": f" {full} ", "username": f" {username} ", "email": f" {mail} ", "password": password})
     assert r.status_code == 201
     data = r.get_json()["data"]
-    assert data["user"]["full_name"] == full.strip() and data["user"]["login_identifier"] == login
+    assert data["user"]["full_name"] == full.strip() and data["user"]["username"] == username.lower() and data["user"]["email"] == mail
     assert "password" not in str(data) and data["token"]
-    again = client.post("/api/auth/login", json={"login_identifier": login.swapcase(), "password": password})
-    assert again.status_code == 200 and again.get_json()["data"]["user"]["id"] == data["user"]["id"]
-    assert client.post("/api/auth/login", json={"login_identifier": login, "password": password + "x"}).status_code == 401
+    for ident in (username.swapcase(), mail.upper()):
+        again = client.post("/api/auth/login", json={"identifier": ident, "password": password})
+        assert again.status_code == 200 and again.get_json()["data"]["user"]["id"] == data["user"]["id"]
+    assert client.post("/api/auth/login", json={"identifier": username, "password": password + "x"}).status_code == 401
 
 
 @PROP
 @given(
     full=st.one_of(st.just(""), st.just("   "), name),
-    login=st.one_of(st.just(""), st.just(" "), ident, st.text(alphabet="a", min_size=256, max_size=300)),
+    username=st.one_of(st.just(""), st.just("ab"), st.just("has space"), uname, st.text(alphabet="a", min_size=31, max_size=60)),
+    mail=st.one_of(st.just(""), st.just("no-at"), email, st.just("a@b")),
     password=st.text(max_size=12),
 )
-def test_property_2_validation_and_unique_identifier(client, full, login, password):
+def test_property_2_validation_and_unique_username_and_email(client, full, username, mail, password):
     reset_db()
-    valid = bool(full.strip()) and 0 < len(login.strip()) <= 255 and len(password) >= 8
-    r = client.post("/api/auth/register", json={"full_name": full, "login_identifier": login, "password": password})
+    valid = bool(full.strip()) and 3 <= len(username) <= 30 and all(ch in string.ascii_letters + string.digits + "_." for ch in username)
+    valid = valid and "@" in mail and "." in mail.split("@")[-1] and len(password) >= 8
+    r = client.post("/api/auth/register", json={"full_name": full, "username": username, "email": mail, "password": password})
     assert r.status_code == (201 if valid else 400)
     if valid:
-        dup = client.post("/api/auth/register", json={"full_name": "x", "login_identifier": login.strip().swapcase(), "password": "abcdefgh"})
-        assert dup.status_code == 409
+        dup = client.post("/api/auth/register", json={"full_name": "x", "username": username.swapcase(), "email": "z-other@x.com", "password": "abcdefgh"})
+        assert dup.status_code == 409 and set(dup.get_json()["error"]["details"]) == {"username"}
+        dup = client.post("/api/auth/register", json={"full_name": "x", "username": "freshname", "email": mail.upper(), "password": "abcdefgh"})
+        assert dup.status_code == 409 and set(dup.get_json()["error"]["details"]) == {"email"}
 
 
 # ---- Property 6, 7: board seeding and column order ----

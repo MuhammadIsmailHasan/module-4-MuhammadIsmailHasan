@@ -112,7 +112,63 @@
           "auth"
         ],
         "summary": "Log in",
-        "description": "login_identifier is matched case-insensitively.",
+        "description": "The identifier is a username or an email, matched case-insensitively. One generic 401 for any mismatch.",
+        "security": []
+      }
+    },
+    "/api/auth/availability": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "username",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "email",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AvailabilityEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "summary": "Check username and email availability",
+        "description": "Reports whether each supplied value is free. No Token needed.",
         "security": []
       }
     },
@@ -607,7 +663,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserListEnvelope"
+                  "$ref": "#/components/schemas/MemberListEnvelope"
                 }
               }
             }
@@ -689,7 +745,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserEnvelope"
+                  "$ref": "#/components/schemas/MemberEnvelope"
                 }
               }
             }
@@ -776,7 +832,7 @@
           {
             "in": "query",
             "name": "search",
-            "description": "Case-insensitive match on name or login",
+            "description": "At least 2 characters. Name substring, username prefix, or exact email (case-insensitive)",
             "schema": {
               "type": "string"
             },
@@ -845,7 +901,7 @@
           "boards"
         ],
         "summary": "Search users who can be added to a board",
-        "description": "Owner, Manager or Admin. At most 20 non-members matching `search` on name or login; id and name only.",
+        "description": "Owner, Manager or Admin. At most 20 non-members matching `search` (at least 2 characters) on name, username prefix or exact email.",
         "security": [
           {
             "bearerAuth": []
@@ -3825,10 +3881,17 @@
             "type": "string",
             "maxLength": 255
           },
-          "login_identifier": {
+          "username": {
             "type": "string",
-            "description": "Case-insensitive, unique",
-            "maxLength": 255
+            "maxLength": 30,
+            "pattern": "^[a-z0-9_.]{3,30}$",
+            "description": "Case-insensitive, unique"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 255,
+            "format": "email",
+            "description": "Case-insensitive, unique"
           },
           "password": {
             "type": "string",
@@ -3836,9 +3899,10 @@
           }
         },
         "required": [
+          "email",
           "full_name",
-          "login_identifier",
-          "password"
+          "password",
+          "username"
         ]
       },
       "User": {
@@ -3851,7 +3915,10 @@
           "full_name": {
             "type": "string"
           },
-          "login_identifier": {
+          "username": {
+            "type": "string"
+          },
+          "email": {
             "type": "string"
           },
           "avatar_url": {
@@ -3900,8 +3967,9 @@
       "Login": {
         "type": "object",
         "properties": {
-          "login_identifier": {
+          "identifier": {
             "type": "string",
+            "description": "Username or email, case-insensitive",
             "maxLength": 255
           },
           "password": {
@@ -3909,9 +3977,53 @@
           }
         },
         "required": [
-          "login_identifier",
+          "identifier",
           "password"
         ]
+      },
+      "AvailabilityEntry": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Availability": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "$ref": "#/components/schemas/AvailabilityEntry"
+          },
+          "email": {
+            "$ref": "#/components/schemas/AvailabilityEntry"
+          }
+        }
+      },
+      "AvailabilityEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/Availability"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "NullEnvelope": {
         "type": "object",
@@ -4097,7 +4209,26 @@
           }
         }
       },
-      "UserListEnvelope": {
+      "Member": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "avatar_url": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "MemberListEnvelope": {
         "type": "object",
         "properties": {
           "status": {
@@ -4111,7 +4242,7 @@
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/User"
+              "$ref": "#/components/schemas/Member"
             },
             "nullable": true
           }
@@ -4127,6 +4258,16 @@
           },
           "full_name": {
             "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "avatar_url": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -4163,7 +4304,7 @@
           "user_id"
         ]
       },
-      "UserEnvelope": {
+      "MemberEnvelope": {
         "type": "object",
         "properties": {
           "status": {
@@ -4181,7 +4322,7 @@
                 "nullable": true
               },
               {
-                "$ref": "#/components/schemas/User"
+                "$ref": "#/components/schemas/Member"
               }
             ]
           }
@@ -5115,7 +5256,10 @@
           "full_name": {
             "type": "string"
           },
-          "login_identifier": {
+          "username": {
+            "type": "string"
+          },
+          "email": {
             "type": "string"
           },
           "avatar_url": {
@@ -5156,10 +5300,17 @@
             "type": "string",
             "maxLength": 255
           },
-          "login_identifier": {
+          "username": {
             "type": "string",
-            "description": "Case-insensitive, unique",
-            "maxLength": 255
+            "maxLength": 30,
+            "pattern": "^[a-z0-9_.]{3,30}$",
+            "description": "Case-insensitive, unique"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 255,
+            "format": "email",
+            "description": "Case-insensitive, unique"
           },
           "password": {
             "type": "string",
@@ -5177,9 +5328,10 @@
           }
         },
         "required": [
+          "email",
           "full_name",
-          "login_identifier",
-          "password"
+          "password",
+          "username"
         ]
       },
       "AdminUserEnvelope": {
@@ -5214,13 +5366,17 @@
             "type": "string",
             "maxLength": 255
           },
-          "login_identifier": {
+          "username": {
             "type": "string",
-            "maxLength": 255
+            "maxLength": 30,
+            "pattern": "^[a-z0-9_.]{3,30}$",
+            "description": "Case-insensitive, unique"
           },
-          "avatar_url": {
+          "email": {
             "type": "string",
-            "nullable": true
+            "maxLength": 255,
+            "format": "email",
+            "description": "Case-insensitive, unique"
           },
           "role": {
             "type": "string",

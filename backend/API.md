@@ -104,7 +104,8 @@ Register, log in, log out.
 | Method | Path | Auth | Success | Errors | Summary |
 |---|---|---|---|---|---|
 | POST | `/api/auth/register` | Public | 201 | 400, 409, 422 | Register an account |
-| POST | `/api/auth/login` | Public | 200 | 400, 401, 422 | Log in |
+| POST | `/api/auth/login` | Public | 200 | 400, 401, 422 | Log in (`identifier` is a username or an email) |
+| GET | `/api/auth/availability` | Public | 200 | 400 | Check whether a `username` or `email` is free |
 | POST | `/api/auth/logout` | Public | 200 | - | Log out |
 
 ### boards
@@ -214,10 +215,10 @@ Register:
 
 ```http
 POST /api/auth/register
-{ "full_name": "Ann", "login_identifier": "ann@example.com", "password": "<at least 8 characters>" }
+{ "full_name": "Ann", "username": "ann", "email": "ann@example.com", "password": "<at least 8 characters>" }
 
 201 { "status": true, "message": "User registered",
-      "data": { "user": { "id": "…", "full_name": "Ann", "login_identifier": "ann@example.com", "avatar_url": null }, "token": "eyJ…" } }
+      "data": { "user": { "id": "…", "full_name": "Ann", "username": "ann", "email": "ann@example.com", "avatar_url": null }, "token": "eyJ…" } }
 ```
 
 Create a board (Manager):
@@ -271,7 +272,7 @@ GET /api/boards/{id}/analytics
 
 ## Paging
 
-The Inbox (`GET /api/notifications`), the board activity feed, and the card activity list take `limit` (default 20, at most 100) and `before` (the id of the last row already shown). They return the next older rows in the same response shape; a response with fewer rows than `limit` is the last page. A `limit` outside 1 to 100, or a `before` that is not a row of that list, returns 400 `VALIDATION_ERROR`. The Inbox `unread_count` always counts all of the caller's notifications, and `GET /api/cards/{id}` embeds the first 20 activity rows. `GET /api/boards/{id}/candidates?search=` returns at most 20 users who are not members of the board, with `id` and `full_name` only (owner, Manager, Admin).
+The Inbox (`GET /api/notifications`), the board activity feed, and the card activity list take `limit` (default 20, at most 100) and `before` (the id of the last row already shown). They return the next older rows in the same response shape; a response with fewer rows than `limit` is the last page. A `limit` outside 1 to 100, or a `before` that is not a row of that list, returns 400 `VALIDATION_ERROR`. The Inbox `unread_count` always counts all of the caller's notifications, and `GET /api/cards/{id}` embeds the first 20 activity rows. `GET /api/boards/{id}/candidates?search=` returns at most 20 users who are not members of the board, with `id`, `full_name`, `username`, `email` and `avatar_url` (owner, Manager, Admin). `search` must be at least 2 characters (400 otherwise) and matches the name by substring, the username by prefix, and the email exactly.
 
 ## Board description and counts
 

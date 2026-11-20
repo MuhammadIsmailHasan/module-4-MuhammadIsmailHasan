@@ -14,6 +14,7 @@ class Board(TimestampMixin, db.Model):
         server_default="private",
     )
     description = db.Column(db.String(500), nullable=True)
+    share_token = db.Column(db.String(64), nullable=True)
     owner_id = uuid_fk("users.id", nullable=True)
     deleted_at = db.Column(db.DateTime(timezone=True), nullable=True)
     archived_at = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -44,3 +45,6 @@ class Column(TimestampMixin, db.Model):
     name = db.Column(db.String(255), nullable=False)
     order = db.Column(db.Float, nullable=False)
     board = db.relationship("Board", back_populates="columns", lazy="raise")
+
+
+db.Index("uq_boards_share_token", Board.share_token, unique=True, postgresql_where=Board.share_token.isnot(None), sqlite_where=Board.share_token.isnot(None))

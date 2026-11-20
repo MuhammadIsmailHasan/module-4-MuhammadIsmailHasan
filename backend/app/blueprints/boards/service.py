@@ -165,6 +165,8 @@ def list_members(actor, board_id):
 def member_candidates(actor, board_id, search):
     board = load_board(actor, board_id)
     require_manage_members(actor, board)
+    if len((search or "").strip()) < 2:
+        raise ValidationError("search must be at least 2 characters", details={"search": ["search must be at least 2 characters"]})
     return repo.candidates(board.id, search, 20)
 
 

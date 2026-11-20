@@ -37,3 +37,35 @@ class Text(fields.String):
         if self.max_length and len(value) > self.max_length:
             raise ma.ValidationError(f"{attr} must be at most {self.max_length} characters")
         return value
+
+
+class Username(Text):
+    """3 to 30 characters of a-z, 0-9, underscore, dot; trimmed and lower-cased."""
+
+    def __init__(self, **kwargs):
+        super().__init__(max_length=30, **kwargs)
+        self.metadata = {**self.metadata, "pattern": "^[a-z0-9_.]{3,30}$", "description": "Case-insensitive, unique"}
+
+    def _deserialize(self, value, attr, data, **kwargs):
+        from app.common.validation import is_username, normalize_username
+
+        value = normalize_username(super()._deserialize(value, attr, data, **kwargs))
+        if not is_username(value):
+            raise ma.ValidationError("username must be 3 to 30 characters: letters, digits, underscore or dot")
+        return value
+
+
+class Email(Text):
+    """Lower-cased, one @, a dotted domain, at most 255 characters."""
+
+    def __init__(self, **kwargs):
+        super().__init__(max_length=255, **kwargs)
+        self.metadata = {**self.metadata, "format": "email", "description": "Case-insensitive, unique"}
+
+    def _deserialize(self, value, attr, data, **kwargs):
+        from app.common.validation import is_email_shape, normalize_email
+
+        value = normalize_email(super()._deserialize(value, attr, data, **kwargs))
+        if not is_email_shape(value):
+            raise ma.ValidationError("email must be a valid email address")
+        return value

@@ -60,8 +60,8 @@ def make_user(app):
     hasher = PasswordHasher()
 
     def _make(role="member", login=None):
-        login = login or f"{role}-{User.query.count()}@example.com"
-        user = User(full_name=role.title(), login_identifier=login, password_hash=hasher.hash(TEST_PASSWORD), role=role)
+        login = login or f"{role}{User.query.count()}"
+        user = User(full_name=role.title(), username=login, email=f"{login}@example.com", password_hash=hasher.hash(TEST_PASSWORD), role=role)
         db.session.add(user)
         db.session.commit()
         return user
@@ -99,4 +99,3 @@ def fast_password_hashing(monkeypatch):
 
     cheap = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
     monkeypatch.setattr("app.blueprints.auth.service._hasher", cheap)
-    monkeypatch.setattr("app.blueprints.users.service._hasher", cheap)

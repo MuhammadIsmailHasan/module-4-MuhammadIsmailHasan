@@ -31,20 +31,23 @@ SEED_ENVS = ("development", "testing")
 _hasher = PasswordHasher()
 
 
+def _get_or_create(username, role, full_name, password, domain="example.com"):
+    """One seeded user: Email is `<username>@<domain>`; an existing user is looked up by `lower(username)`."""
+    user = User.query.filter(db.func.lower(User.username) == username).first()
+    if user is None:
+        user = User(
+            full_name=full_name,
+            username=username,
+            email=f"{username}@{domain}",
+            password_hash=_hasher.hash(password),
+            role=role,
+        )
+        db.session.add(user)
+    return user
+
+
 def create_users_of_each_role(password, domain="example.com"):
-    users = {}
-    for role in ROLES:
-        login = f"{role}@{domain}"
-        user = User.query.filter(db.func.lower(User.login_identifier) == login).first()
-        if user is None:
-            user = User(
-                full_name=role.capitalize(),
-                login_identifier=login,
-                password_hash=_hasher.hash(password),
-                role=role,
-            )
-            db.session.add(user)
-        users[role] = user
+    users = {role: _get_or_create(role, role, f"{role.capitalize()} One", password, domain) for role in ROLES}
     db.session.commit()
     return users
 
@@ -54,13 +57,9 @@ EXTRA_USERS = (("member2", "member", "Member Two"), ("supervisor2", "supervisor"
 DEMO_BOARD = "Demo: Website Redesign"
 
 
-def _user(login, role, full_name, password, domain="example.com"):
-    email = f"{login}@{domain}"
-    user = User.query.filter(db.func.lower(User.login_identifier) == email).first()
-    if user is None:
-        user = User(full_name=full_name, login_identifier=email, password_hash=_hasher.hash(password), role=role)
-        db.session.add(user)
-        db.session.flush()
+def _user(username, role, full_name, password, domain="example.com"):
+    user = _get_or_create(username, role, full_name, password, domain)
+    db.session.flush()
     return user
 
 

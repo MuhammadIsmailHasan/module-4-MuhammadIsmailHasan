@@ -7,15 +7,17 @@ class User(TimestampMixin, db.Model):
 
     id = uuid_pk()
     full_name = db.Column(db.String(255), nullable=False)
-    login_identifier = db.Column(db.String(255), nullable=False)
+    username = db.Column(db.String(30), nullable=False)
+    email = db.Column(db.String(255), nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(
         db.Enum("member", "supervisor", "manager", "admin", name="user_role"),
         nullable=False,
         default="member",
     )
-    avatar_url = db.Column(db.String(1024), nullable=True)
+    avatar_path = db.Column(db.String(64), nullable=True)
 
 
-# Case-insensitive uniqueness (Decision C).
-db.Index("uq_users_login_identifier_lower", db.func.lower(User.login_identifier), unique=True)
+# Case-insensitive uniqueness (Decision M).
+db.Index("uq_users_username_lower", db.func.lower(User.username), unique=True)
+db.Index("uq_users_email_lower", db.func.lower(User.email), unique=True)

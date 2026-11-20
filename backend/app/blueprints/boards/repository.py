@@ -127,6 +127,12 @@ def candidates(board_id, search, limit):
     query = User.query.filter(User.id.notin_(member_ids))
     text = (search or "").strip().lower()
     if text:
-        like = f"%{text}%"
-        query = query.filter(db.or_(db.func.lower(User.full_name).like(like), db.func.lower(User.login_identifier).like(like)))
+        escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.filter(
+            db.or_(
+                db.func.lower(User.full_name).like(f"%{escaped}%", escape="\\"),
+                db.func.lower(User.username).like(f"{escaped}%", escape="\\"),
+                db.func.lower(User.email) == text,
+            )
+        )
     return query.order_by(User.full_name).limit(limit).all()

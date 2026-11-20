@@ -23,7 +23,8 @@ def reset_db():
 
 
 def mkuser(role):
-    u = User(full_name=role, login_identifier=f"{role}-{next(_n)}@t.test", password_hash=_hash, role=role)
+    n = next(_n)
+    u = User(full_name=role, username=f"{role}{n}", email=f"{role}{n}@t.test", password_hash=_hash, role=role)
     db.session.add(u)
     db.session.commit()
     return u

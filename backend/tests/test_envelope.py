@@ -38,7 +38,7 @@ def api_rules(app):
 
 
 def test_success_and_error_shapes(client, make_user, auth):
-    r = client.post("/api/auth/register", json={"full_name": "A", "login_identifier": "a@x.com", "password": TEST_PASSWORD})
+    r = client.post("/api/auth/register", json={"full_name": "A", "username": "aaa", "email": "a@x.com", "password": TEST_PASSWORD})
     assert check_envelope(r)["message"] == "User registered"
     assert check_envelope(client.post("/api/auth/logout"))["data"] is None
     assert check_envelope(client.get("/api/boards"))["data"] == []
@@ -47,8 +47,8 @@ def test_success_and_error_shapes(client, make_user, auth):
 def test_validation_is_400_never_422(client, make_user, auth):
     for path, body in (
         ("/api/auth/register", {}),
-        ("/api/auth/register", {"full_name": "A", "login_identifier": "x", "password": "short"}),
-        ("/api/auth/login", {"login_identifier": "x"}),
+        ("/api/auth/register", {"full_name": "A", "username": "x", "email": "x", "password": "short"}),
+        ("/api/auth/login", {"identifier": "x"}),
     ):
         r = client.post(path, json=body)
         assert r.status_code == 400
@@ -121,7 +121,7 @@ def test_every_route_returns_envelope(app, client, make_user):
 @given(
     body=st.recursive(
         st.none() | st.booleans() | st.integers() | st.text(max_size=20),
-        lambda c: st.lists(c, max_size=3) | st.dictionaries(st.sampled_from(["full_name", "login_identifier", "password", "x"]), c, max_size=4),
+        lambda c: st.lists(c, max_size=3) | st.dictionaries(st.sampled_from(["full_name", "username", "email", "identifier", "password", "x"]), c, max_size=4),
         max_leaves=8,
     )
 )

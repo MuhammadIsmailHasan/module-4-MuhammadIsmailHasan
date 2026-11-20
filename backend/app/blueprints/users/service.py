@@ -1,14 +1,12 @@
-from argon2 import PasswordHasher
-
 from app.blueprints.activity import repository as activity
 from app.blueprints.auth import repository as auth_repo
+from app.blueprints.auth import service as auth_service
 from app.blueprints.users import repository as repo
 from app.blueprints.users.dto import ROLES
 from app.common.errors import Conflict, NotFound, ValidationError
 from app.common.ids import to_uuid
+from app.common.validation import normalize_email, normalize_username
 from app.extensions import db
-
-_hasher = PasswordHasher()
 
 
 def list_users():
@@ -22,11 +20,8 @@ def _role(value):
 
 
 def create_user(actor, data):
-    full_name, login, password = data["full_name"], data["login_identifier"], data["password"]
     role = _role(data.get("role", "member"))
-    if auth_repo.get_by_login(login):
-        raise Conflict("login_identifier already registered")
-    user = auth_repo.create_user(full_name, login, _hasher.hash(password), role)
+    user = auth_service.create_account(data["full_name"], data["username"], data["email"], data["password"], role)
     activity.add(to_uuid(actor.id), "user.created", "user", user.id, {"role": role})
     db.session.commit()
     return user
@@ -43,18 +38,16 @@ def update_user(actor, user_id, data):
             raise ValidationError("full_name is required")
         user.full_name = data["full_name"].strip()
         changed.append("full_name")
-    if "login_identifier" in data:
-        login = data["login_identifier"]
-        if not isinstance(login, str) or not login.strip() or len(login.strip()) > 255:
-            raise ValidationError("login_identifier is invalid")
-        existing = auth_repo.get_by_login(login.strip())
-        if existing is not None and existing.id != user.id:
-            raise Conflict("login_identifier already registered")
-        user.login_identifier = login.strip()
-        changed.append("login_identifier")
-    if "avatar_url" in data:
-        user.avatar_url = data["avatar_url"]
-        changed.append("avatar_url")
+    if "username" in data or "email" in data:
+        username = normalize_username(data.get("username", user.username))
+        email = normalize_email(data.get("email", user.email))
+        details = auth_service.duplicate_details(username, email, exclude_id=user.id)
+        if details:
+            raise Conflict("Username or email already registered", details=details)
+        for field, value in (("username", username), ("email", email)):
+            if getattr(user, field) != value:
+                setattr(user, field, value)
+                changed.append(field)
     if changed:
         activity.add(to_uuid(actor.id), "user.updated", "user", user.id, {"fields": changed})
     if "role" in data:

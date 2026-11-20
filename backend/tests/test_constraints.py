@@ -22,10 +22,13 @@ def base(make_user):
     return u, b, c
 
 
-def test_login_identifier_case_insensitive_unique(app):
-    _add(User(full_name="a", login_identifier="A@x.com", password_hash="h"))
+def test_username_and_email_case_insensitive_unique(app):
+    _add(User(full_name="a", username="Ann", email="A@x.com", password_hash="h"))
     with pytest.raises(IntegrityError):
-        _add(User(full_name="b", login_identifier="a@X.com", password_hash="h"))
+        _add(User(full_name="b", username="ANN", email="b@x.com", password_hash="h"))
+    db.session.rollback()
+    with pytest.raises(IntegrityError):
+        _add(User(full_name="c", username="cat", email="a@X.com", password_hash="h"))
     db.session.rollback()
 
 

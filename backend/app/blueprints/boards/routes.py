@@ -2,8 +2,8 @@ from flask_smorest import Blueprint
 
 from app.blueprints.activity import repository as activity
 from app.blueprints.activity.schema import ActivitySchema
-from app.blueprints.auth.dto import serialize_user
-from app.blueprints.auth.schema import UserSchema
+from app.blueprints.auth.dto import serialize_candidate, serialize_member
+from app.blueprints.auth.schema import MemberSchema
 from app.blueprints.boards import service
 from app.blueprints.boards.dto import serialize_board
 from app.blueprints.boards.schema import (
@@ -88,28 +88,28 @@ def delete_board(board_id):
 
 @bp.route("/boards/<board_id>/members", methods=["GET"])
 @endpoint(bp, "List board members", "Requires board access.", auth="optional")
-@bp.response(200, envelope(UserSchema, many=True))
+@bp.response(200, envelope(MemberSchema, many=True))
 def members(board_id):
-    return ok([serialize_user(u) for u in service.list_members(current_actor(), board_id)])
+    return ok([serialize_member(u) for u in service.list_members(current_actor(), board_id)])
 
 
 @bp.route("/boards/<board_id>/candidates", methods=["GET"])
-@endpoint(bp, "Search users who can be added to a board", "Owner, Manager or Admin. At most 20 non-members matching `search` on name or login; id and name only.")
+@endpoint(bp, "Search users who can be added to a board", "Owner, Manager or Admin. At most 20 non-members matching `search` (at least 2 characters) on name, username prefix or exact email.")
 @require_role("supervisor", "manager", "admin")
 @bp.arguments(CandidateQuerySchema, location="query")
 @bp.response(200, envelope(CandidateSchema, many=True))
 def candidates(query, board_id):
     users = service.member_candidates(current_actor(), board_id, query.get("search"))
-    return ok([{"id": str(u.id), "full_name": u.full_name} for u in users])
+    return ok([serialize_candidate(u) for u in users])
 
 
 @bp.route("/boards/<board_id>/members", methods=["POST"])
 @endpoint(bp, "Add a board member", "Owner, Manager or Admin. 409 when already a member.", errors=(400, 401, 403, 404, 409))
 @require_role(*ANY_USER)
 @bp.arguments(AddMemberSchema)
-@bp.response(201, envelope(UserSchema))
+@bp.response(201, envelope(MemberSchema))
 def add_member(data, board_id):
-    return ok(serialize_user(service.add_member(current_actor(), board_id, data)), "Member added", 201)
+    return ok(serialize_member(service.add_member(current_actor(), board_id, data)), "Member added", 201)
 
 
 @bp.route("/boards/<board_id>/members/<user_id>", methods=["DELETE"])

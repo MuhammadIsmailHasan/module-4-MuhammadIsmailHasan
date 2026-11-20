@@ -48,9 +48,12 @@ class BoardSchema(BaseSchema):
 
 
 class CandidateQuerySchema(BaseSchema):
-    search = fields.String(metadata={"description": "Case-insensitive match on name or login"})
+    search = fields.String(metadata={"description": "At least 2 characters. Name substring, username prefix, or exact email (case-insensitive)"})
 
 
 class CandidateSchema(BaseSchema):
     id = fields.UUID()
     full_name = fields.String()
+    username = fields.String()
+    email = fields.String()
+    avatar_url = fields.String(allow_none=True)
