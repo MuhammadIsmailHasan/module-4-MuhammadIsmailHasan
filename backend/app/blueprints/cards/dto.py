@@ -43,7 +43,7 @@ def serialize_subtask(s):
     return {"id": str(s.id), "card_id": str(s.card_id), "title": s.title, "is_done": s.is_done, "order": s.order}
 
 
-def serialize_attachment(a, now=None):
+def serialize_attachment(a, now=None, scope=None):
     data = {
         "id": str(a.id),
         "card_id": str(a.card_id),
@@ -56,7 +56,7 @@ def serialize_attachment(a, now=None):
     if a.file_path:
         from datetime import datetime, timezone
 
-        path, exp = sign_file_url(a.id, now or clock.now())
+        path, exp = sign_file_url(a.id, now or clock.now(), scope=scope)
         data["file_url"] = path
         data["expires_at"] = datetime.fromtimestamp(exp, timezone.utc).isoformat()
     return data

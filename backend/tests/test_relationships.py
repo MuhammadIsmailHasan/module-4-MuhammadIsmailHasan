@@ -67,14 +67,15 @@ def test_property_39_cards_list_query_count_constant(app, make_user):
     assert counts[0] == counts[1] == 3
 
 
-def test_property_39_endpoint_query_count_constant(app, client, make_user):
+def test_property_39_endpoint_query_count_constant(app, client, make_user, auth):
+    headers = auth(make_user("manager", "mgr1"))
     b5, _ = seed_board(5, make_user)
     b50, _ = seed_board(50, make_user)
     counts = []
     for bid in (b5.id, b50.id):
         db.session.expire_all()
         with count_queries() as q:
-            r = client.get(f"/api/boards/{bid}/cards")
+            r = client.get(f"/api/boards/{bid}/cards", headers=headers)
             assert r.status_code == 200
         counts.append(len(q))
     assert counts[0] == counts[1]

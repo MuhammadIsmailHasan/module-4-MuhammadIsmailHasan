@@ -41,7 +41,7 @@ def test_success_and_error_shapes(client, make_user, auth):
     r = client.post("/api/auth/register", json={"full_name": "A", "username": "aaa", "email": "a@x.com", "password": TEST_PASSWORD})
     assert check_envelope(r)["message"] == "User registered"
     assert check_envelope(client.post("/api/auth/logout"))["data"] is None
-    assert check_envelope(client.get("/api/boards"))["data"] == []
+    assert check_envelope(client.get("/api/boards", headers=auth(make_user("member", "env1"))))["data"] == []
 
 
 def test_validation_is_400_never_422(client, make_user, auth):

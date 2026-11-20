@@ -3,13 +3,15 @@ from flask_smorest import Blueprint
 from app.blueprints.activity import repository as activity
 from app.blueprints.activity.schema import ActivitySchema
 from app.blueprints.auth.dto import serialize_candidate, serialize_member
-from app.blueprints.auth.schema import MemberSchema
+from app.blueprints.auth.schema import MemberSchema, MemberWithEmailSchema
 from app.blueprints.boards import service
 from app.blueprints.boards.dto import serialize_board
 from app.blueprints.boards.schema import (
     AddMemberSchema,
     CandidateQuerySchema,
     CandidateSchema,
+    MembersQuerySchema,
+    ShareSchema,
     BoardSchema,
     CreateBoardSchema,
     UpdateBoardSchema,
@@ -21,6 +23,7 @@ from app.common.envelope import NullEnvelopeSchema, envelope
 from app.common.errors import Forbidden
 from app.common.responses import ok
 
+USERS = ("member", "supervisor", "manager", "admin")
 bp = Blueprint("boards", __name__, description="Boards, visibility, archive and members")
 ANY_USER = ("member", "supervisor", "manager", "admin")
 
@@ -36,7 +39,8 @@ def create_board(data):
 
 
 @bp.route("/boards", methods=["GET"])
-@endpoint(bp, "List visible boards", "Guests see public boards; signed-in users see public plus accessible boards.", auth="optional", errors=())
+@endpoint(bp, "List visible boards", "Signed-in users see public plus accessible boards. No Token: 401.", errors=(401,))
+@require_role(*USERS)
 @bp.response(200, envelope(BoardSchema, many=True))
 def list_boards():
     boards, counts = service.list_boards(current_actor())
@@ -44,7 +48,8 @@ def list_boards():
 
 
 @bp.route("/boards/<board_id>", methods=["GET"])
-@endpoint(bp, "Get a board with its columns", "Guests may read public boards. Private boards: 401 for Guests, 403 without access.", auth="optional")
+@endpoint(bp, "Get a board with its columns", "Requires board access: 401 without a Token, 403 without access.")
+@require_role(*USERS)
 @bp.response(200, envelope(BoardSchema))
 def get_board(board_id):
     board = service.board_detail(current_actor(), board_id)
@@ -87,10 +92,14 @@ def delete_board(board_id):
 
 
 @bp.route("/boards/<board_id>/members", methods=["GET"])
-@endpoint(bp, "List board members", "Requires board access.", auth="optional")
-@bp.response(200, envelope(MemberSchema, many=True))
-def members(board_id):
-    return ok([serialize_member(u) for u in service.list_members(current_actor(), board_id)])
+@endpoint(bp, "List board members", "Requires board access. `?include=email` adds emails and needs board staff access (403 otherwise).")
+@require_role(*USERS)
+@bp.arguments(MembersQuerySchema, location="query")
+@bp.response(200, envelope(MemberWithEmailSchema, many=True))
+def members(args, board_id):
+    with_email = args.get("include") == "email"
+    users = service.list_members(current_actor(), board_id, with_email)
+    return ok([serialize_candidate(u) if with_email else serialize_member(u) for u in users])
 
 
 @bp.route("/boards/<board_id>/candidates", methods=["GET"])
@@ -122,12 +131,46 @@ def remove_member(board_id, user_id):
 
 
 @bp.route("/boards/<board_id>/activity", methods=["GET"])
-@endpoint(bp, "Board activity feed", "Requires board access; Guests get 403 (never activity). Paged with `limit` and `before`.", auth="optional")
+@endpoint(bp, "Board activity feed", "Requires board access. Paged with `limit` and `before`.")
+@require_role(*USERS)
 @bp.arguments(PageQuerySchema, location="query")
 @bp.response(200, envelope(ActivitySchema, many=True))
 def board_activity(page, board_id):
     actor = current_actor()
     board = service.load_board(actor, board_id)
-    if actor is None:
-        raise Forbidden("Activity is not available to guests")
     return ok(activity.serialize_many(activity.for_board(board.id, page["limit"], page.get("before"))))
+
+
+_SHARE_ERRORS = (401, 403, 404)
+
+
+@bp.route("/boards/<board_id>/share", methods=["GET"])
+@endpoint(bp, "Get the share link state", "Board owner, Manager or Admin only.", errors=_SHARE_ERRORS)
+@require_role(*USERS)
+@bp.response(200, envelope(ShareSchema))
+def get_share(board_id):
+    return ok(service.get_share(current_actor(), board_id))
+
+
+@bp.route("/boards/<board_id>/share", methods=["POST"])
+@endpoint(bp, "Enable the share link", "Creates a 256-bit token when sharing is off; returns the existing one otherwise.", errors=_SHARE_ERRORS)
+@require_role(*USERS)
+@bp.response(200, envelope(ShareSchema))
+def enable_share(board_id):
+    return ok(service.enable_share(current_actor(), board_id), "Share link enabled")
+
+
+@bp.route("/boards/<board_id>/share/regenerate", methods=["POST"])
+@endpoint(bp, "Replace the share token", "The previous link stops working at once.", errors=_SHARE_ERRORS)
+@require_role(*USERS)
+@bp.response(200, envelope(ShareSchema))
+def regenerate_share(board_id):
+    return ok(service.regenerate_share(current_actor(), board_id), "Share link replaced")
+
+
+@bp.route("/boards/<board_id>/share", methods=["DELETE"])
+@endpoint(bp, "Disable the share link", "Idempotent: 200 when sharing is already off.", errors=_SHARE_ERRORS)
+@require_role(*USERS)
+@bp.response(200, envelope(ShareSchema))
+def disable_share(board_id):
+    return ok(service.disable_share(current_actor(), board_id), "Share link disabled")

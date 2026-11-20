@@ -7,6 +7,7 @@ _ERR = {
     403: "Role or board access insufficient",
     404: "Resource not found",
     409: "Conflict",
+    429: "Rate limited; see Retry-After and error.details.retry_after",
 }
 
 

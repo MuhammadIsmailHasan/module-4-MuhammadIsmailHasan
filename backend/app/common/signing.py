@@ -10,22 +10,41 @@ def _secret(secret):
     return (secret or current_app.config["FILE_URL_SECRET"]).encode()
 
 
-def _mac(attachment_id, exp, secret):
-    return hmac.new(_secret(secret), f"{attachment_id}.{exp}".encode(), hashlib.sha256).hexdigest()
+def _mac(resource_id, exp, secret, scope=None):
+    """The scope is inside the signed string, so a signature never verifies under another scope."""
+    return hmac.new(_secret(secret), f"{resource_id}.{exp}.{scope or ''}".encode(), hashlib.sha256).hexdigest()
 
 
-def sign_file_url(attachment_id, now, secret=None):
+def share_scope(share_token, secret=None):
+    """Scope of a file URL minted through a Share_Token; the raw token never appears in the URL (Req 18.14)."""
+    return "share:" + hmac.new(_secret(secret), share_token.encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def sign_file_url(attachment_id, now, secret=None, scope=None):
     exp = int(now.timestamp()) + TTL_SECONDS
-    return f"/api/attachments/{attachment_id}/file?exp={exp}&sig={_mac(attachment_id, exp, secret)}", exp
+    path = f"/api/attachments/{attachment_id}/file?exp={exp}&sig={_mac(attachment_id, exp, secret, scope)}"
+    if scope:
+        path += f"&st={scope}"
+    return path, exp
 
 
-def verify_file_signature(attachment_id, exp, sig, now, secret=None):
+def verify_file_signature(attachment_id, exp, sig, now, secret=None, scope=None):
     if not exp or not sig:
         return False
     try:
         exp_i = int(exp)
     except (TypeError, ValueError):
         return False
-    if not hmac.compare_digest(_mac(attachment_id, exp_i, secret), str(sig)):
+    if not hmac.compare_digest(_mac(attachment_id, exp_i, secret, scope), str(sig)):
         return False
     return int(now.timestamp()) <= exp_i
+
+
+def avatar_url(user_id, now, secret=None):
+    """Signed avatar URL; the `avatar` scope is inside the signature, so it never opens an attachment file."""
+    exp = int(now.timestamp()) + TTL_SECONDS
+    return f"/api/users/{user_id}/avatar/file?exp={exp}&sig={_mac(user_id, exp, secret, 'avatar')}"
+
+
+def verify_avatar_signature(user_id, exp, sig, now, secret=None):
+    return verify_file_signature(user_id, exp, sig, now, secret, scope="avatar")

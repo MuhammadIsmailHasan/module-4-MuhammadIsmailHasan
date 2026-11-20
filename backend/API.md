@@ -41,11 +41,12 @@ The message text appears once, at the top level; `error` holds only the machine-
 | HTTP | `error.code` | Meaning |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | Bad body or query. marshmallow failures are mapped to 400, never 422 |
-| 401 | `UNAUTHORIZED` | Missing, invalid or expired Token; bad login; Guest on a private board |
+| 401 | `UNAUTHORIZED` | Missing, invalid or expired Token; bad login; any board route without a Token |
 | 403 | `FORBIDDEN` | Valid Token but role, board access or ownership is not enough; bad file signature |
 | 404 | `NOT_FOUND` | Unknown or soft-deleted resource, unknown route |
 | 405 | `METHOD_NOT_ALLOWED` | Wrong HTTP method |
-| 409 | `CONFLICT` | Duplicate login, board member or category name |
+| 409 | `CONFLICT` | Duplicate username or email (`error.details` names each field), board member or category name |
+| 429 | `RATE_LIMITED` | Too many failed logins, wrong current passwords or availability checks. Body `error.details.retry_after` and header `Retry-After` hold the seconds to wait |
 | 500 | `INTERNAL_ERROR` | Unhandled error; generic message, details only in server logs |
 
 ## Authentication
@@ -56,9 +57,9 @@ The message text appears once, at the top level; `error` holds only the machine-
 Authorization: Bearer <token>
 ```
 
-The Token is a JWT with a fixed 24-hour expiry. It carries the user id and role; the role is read only from the signed Token, never from a request body. `POST /api/auth/logout` revokes nothing: the client discards the Token. Rate limiting and Google login are not implemented.
+The Token is a JWT with a fixed 24-hour expiry. It carries the user id and role; the role is read only from the signed Token, never from a request body. `POST /api/auth/logout` revokes nothing: the client discards the Token. Failed logins (5 per identifier and address, 20 per address), wrong current passwords (5 per user) and availability checks (60 per address) are rate limited in a 15-minute window; registration is not limited. Google login is not implemented.
 
-Auth column in the tables below: **Token** = required, **Optional** = Guests may call it (public boards), **Public** = no Token.
+Auth column in the tables below: **Token** = required, **Public** = no Token. There is no Guest access to boards: without a Token every board, card, comment, activity and search route returns 401. A Guest reads a board only through a share link (`/api/shared/{token}`).
 
 ## Roles
 
@@ -66,9 +67,9 @@ Roles: `guest` (no Token), `member`, `supervisor`, `manager`, `admin`. Admin is 
 
 | Action | Guest | Member | Supervisor | Manager | Admin |
 |---|---|---|---|---|---|
-| Read public board, cards, categories, search | yes | yes | yes | yes | yes |
+| Read public board, cards, categories, search | no (401) | yes | yes | yes | yes |
 | Read private board | no (401) | if owner or member of it | if owner or member of it | yes | yes |
-| Read comments and activity | no | yes | yes | yes | yes |
+| Read comments and activity | no (401) | yes | yes | yes | yes |
 | Create, delete, archive card; add column; manage categories | no | no | board owner or member | yes | yes |
 | Edit or move a card | no | only when assigned | board owner or member | yes | yes |
 | Comment, reply | no | yes | yes | yes | no |
@@ -81,14 +82,15 @@ Roles: `guest` (no Token), `member`, `supervisor`, `manager`, `admin`. Admin is 
 | Cross-board analytics | no | no | no | yes | no |
 | Manage users | no | no | no | no | yes |
 
-A private board is visible only to its owner, its members, Managers and Admins. A Guest on a private board gets 401, a signed-in user without access gets 403.
+A private board is visible only to its owner, its members, Managers and Admins. A request without a Token gets 401, a signed-in user without access gets 403. The board owner, a Manager or an Admin can enable a read-only share link.
 
 ## Behaviours worth knowing
 
 - **Soft delete.** Deleting a board or card sets `deleted_at`; the row stays and is hidden (404). Archive sets `archived_at`.
 - **Ordering and move.** `PATCH /api/cards/{id}/move` takes `column_id` plus the neighbour ids `prev` and `next`. The server computes `order` (empty column `1.0`, first `min - 1`, last `max + 1`, otherwise the average) and ignores any client `order`. When two neighbours are closer than `1e-6` the column is renumbered `1.0, 2.0, …` in the same transaction. Moving to a column of another board returns 400. Subtasks reorder with `prev`/`next` or an explicit `order` on `PATCH /api/subtasks/{id}`.
 - **Attachments.** Add a link (`{ "url": "https://…" }`) or upload a PDF, Word or RAR file as multipart `file`. Uploaded files are stored privately. A card response carries a fresh signed `file_url` (valid 15 minutes) per uploaded attachment; request a new one with `GET /api/attachments/{id}/url`. `GET /api/attachments/{id}/file?exp=&sig=` needs no Token and returns 403 for a missing, altered or expired signature.
-- **Guests.** Card and board responses never include `comments` or `activity` for a Guest; the comment and activity endpoints return 403 on a public board.
+- **Share links.** `POST /api/boards/{id}/share` creates a 256-bit token (owner, Manager, Admin); `POST …/share/regenerate` replaces it and `DELETE …/share` turns it off. `GET /api/shared/{token}` (and `/cards`, `/categories`, `/cards/{id}`, `/attachments/{id}/url`) need no Token, are GET only, never return comments, activity, owner, members, emails or avatars, and answer one 404 for any bad link. Shared file URLs carry a scope that dies with the token. A stale Bearer Token on these routes is ignored. Responses send `Cache-Control: private, no-store`.
+- **Avatars.** `POST /api/users/me/avatar` (multipart `file`, PNG, JPEG or WebP by content, at most 2 MB) and `DELETE /api/users/me/avatar`. `avatar_url` in user payloads is a signed URL (15 minutes) to `GET /api/users/{id}/avatar/file`, or null.
 - **Notifications.** Created server-side only: an `assigned` one when a card is assigned, a `deadline` one from the daily `flask notify-deadlines` job (dates in `APP_TIMEZONE`). One per user, card, type and day.
 - **Search.** `GET /api/boards/{id}/cards?search=&filter[priority]=&filter[assignee]=&filter[category]=`. Filters combine with AND; an unsupported `filter[...]` key returns 400.
 - **Comments.** `sort=latest|popular`; priority comments first; replies nested oldest first; replies to replies return 400. `can_create_card` is true when the viewer is a Supervisor, Manager or Admin and the author is a Manager. Every comment and reply carries `author_name`, and every activity row carries `actor_name` (the user's display name), so a client needs no user lookup.
@@ -106,6 +108,9 @@ Register, log in, log out.
 | POST | `/api/auth/register` | Public | 201 | 400, 409, 422 | Register an account |
 | POST | `/api/auth/login` | Public | 200 | 400, 401, 422 | Log in (`identifier` is a username or an email) |
 | GET | `/api/auth/availability` | Public | 200 | 400 | Check whether a `username` or `email` is free |
+| GET | `/api/auth/me` | Token | 200 | 401 | The signed-in user |
+| PATCH | `/api/auth/me` | Token | 200 | 400, 401 | Update `full_name` (any other field is a 400) |
+| POST | `/api/auth/change-password` | Token | 200 | 400, 401, 429 | Change the password (wrong current password is a 400) |
 | POST | `/api/auth/logout` | Public | 200 | - | Log out |
 
 ### boards
@@ -115,16 +120,20 @@ Boards, visibility, archive, members and the board activity feed.
 | Method | Path | Auth | Success | Errors | Summary |
 |---|---|---|---|---|---|
 | POST | `/api/boards` | Token | 201 | 400, 401, 403, 422 | Create a board |
-| GET | `/api/boards` | Optional | 200 | - | List visible boards, each with `card_count`, `done_count`, `overdue_count`, `member_count` |
-| GET | `/api/boards/{board_id}` | Optional | 200 | 400, 401, 403, 404 | Get a board with its columns |
+| GET | `/api/boards` | Token | 200 | 401 | List visible boards, each with `card_count`, `done_count`, `overdue_count`, `member_count` |
+| GET | `/api/boards/{board_id}` | Token | 200 | 400, 401, 403, 404 | Get a board with its columns |
 | PATCH | `/api/boards/{board_id}` | Token | 200 | 400, 401, 403, 404, 422 | Update name, visibility or owner |
 | DELETE | `/api/boards/{board_id}` | Token | 200 | 401, 403, 404 | Soft-delete a board |
 | POST | `/api/boards/{board_id}/archive` | Token | 200 | 401, 403, 404 | Archive a board |
 | POST | `/api/boards/{board_id}/unarchive` | Token | 200 | 401, 403, 404 | Unarchive a board |
-| GET | `/api/boards/{board_id}/members` | Optional | 200 | 400, 401, 403, 404 | List board members |
+| GET | `/api/boards/{board_id}/members` | Token | 200 | 400, 401, 403, 404 | List board members (`?include=email` for board staff) |
+| GET | `/api/boards/{board_id}/share` | Token | 200 | 401, 403, 404 | Share link state (owner, Manager, Admin) |
+| POST | `/api/boards/{board_id}/share` | Token | 200 | 401, 403, 404 | Enable the share link |
+| POST | `/api/boards/{board_id}/share/regenerate` | Token | 200 | 401, 403, 404 | Replace the share token |
+| DELETE | `/api/boards/{board_id}/share` | Token | 200 | 401, 403, 404 | Disable the share link |
 | POST | `/api/boards/{board_id}/members` | Token | 201 | 400, 401, 403, 404, 409, 422 | Add a board member |
 | DELETE | `/api/boards/{board_id}/members/{user_id}` | Token | 200 | 401, 403, 404 | Remove a board member |
-| GET | `/api/boards/{board_id}/activity` | Optional | 200 | 400, 401, 403, 404 | Board activity feed (paged) |
+| GET | `/api/boards/{board_id}/activity` | Token | 200 | 400, 401, 403, 404 | Board activity feed (paged) |
 | GET | `/api/boards/{board_id}/candidates` | Token | 200 | 400, 401, 403, 404 | Search users who can be added to a board |
 
 ### columns
@@ -142,20 +151,20 @@ Cards, move, subtasks, attachments, signed file URLs, card activity, search and 
 | Method | Path | Auth | Success | Errors | Summary |
 |---|---|---|---|---|---|
 | POST | `/api/columns/{column_id}/cards` | Token | 201 | 400, 401, 403, 404, 422 | Create a card |
-| GET | `/api/cards/{card_id}` | Optional | 200 | 400, 401, 403, 404 | Get a card |
+| GET | `/api/cards/{card_id}` | Token | 200 | 400, 401, 403, 404 | Get a card |
 | PATCH | `/api/cards/{card_id}` | Token | 200 | 400, 401, 403, 404, 422 | Update a card |
 | DELETE | `/api/cards/{card_id}` | Token | 200 | 401, 403, 404 | Soft-delete a card |
 | POST | `/api/cards/{card_id}/archive` | Token | 200 | 401, 403, 404 | Archive a card |
 | POST | `/api/cards/{card_id}/unarchive` | Token | 200 | 401, 403, 404 | Unarchive a card |
 | PATCH | `/api/cards/{card_id}/move` | Token | 200 | 400, 401, 403, 404, 422 | Move or reorder a card |
-| GET | `/api/cards/{card_id}/activity` | Optional | 200 | 400, 401, 403, 404 | Card activity (paged) |
-| GET | `/api/boards/{board_id}/cards` | Optional | 200 | 400, 401, 403, 404, 422 | Search and filter a board's cards |
+| GET | `/api/cards/{card_id}/activity` | Token | 200 | 400, 401, 403, 404 | Card activity (paged) |
+| GET | `/api/boards/{board_id}/cards` | Token | 200 | 400, 401, 403, 404, 422 | Search and filter a board's cards |
 | POST | `/api/cards/{card_id}/subtasks` | Token | 201 | 400, 401, 403, 404, 422 | Add a subtask |
 | PATCH | `/api/subtasks/{subtask_id}` | Token | 200 | 400, 401, 403, 404, 422 | Edit, toggle or reorder a subtask |
 | DELETE | `/api/subtasks/{subtask_id}` | Token | 200 | 401, 403, 404 | Delete a subtask |
 | POST | `/api/cards/{card_id}/attachments` | Token | 201 | 400, 401, 403, 404 | Add an attachment |
 | DELETE | `/api/attachments/{attachment_id}` | Token | 200 | 401, 403, 404 | Delete an attachment |
-| GET | `/api/attachments/{attachment_id}/url` | Optional | 200 | 400, 401, 403, 404 | Issue a fresh signed file URL |
+| GET | `/api/attachments/{attachment_id}/url` | Token | 200 | 400, 401, 403, 404 | Issue a fresh signed file URL |
 | GET | `/api/attachments/{attachment_id}/file` | Public | 200 | 403, 404 | Download an uploaded file |
 
 ### categories
@@ -164,7 +173,7 @@ Board-scoped categories.
 
 | Method | Path | Auth | Success | Errors | Summary |
 |---|---|---|---|---|---|
-| GET | `/api/boards/{board_id}/categories` | Optional | 200 | 400, 401, 403, 404 | List a board's categories |
+| GET | `/api/boards/{board_id}/categories` | Token | 200 | 400, 401, 403, 404 | List a board's categories |
 | POST | `/api/boards/{board_id}/categories` | Token | 201 | 400, 401, 403, 404, 409, 422 | Create a category |
 | PATCH | `/api/categories/{category_id}` | Token | 200 | 400, 401, 403, 404, 409, 422 | Rename or recolor a category |
 | DELETE | `/api/categories/{category_id}` | Token | 200 | 401, 403, 404 | Delete a category |
@@ -175,9 +184,9 @@ Comments, replies and the priority flag.
 
 | Method | Path | Auth | Success | Errors | Summary |
 |---|---|---|---|---|---|
-| POST | `/api/cards/{card_id}/comments` | Optional | 201 | 400, 401, 403, 404, 422 | Add a comment |
-| GET | `/api/cards/{card_id}/comments` | Optional | 200 | 400, 401, 403, 404, 422 | List comments |
-| POST | `/api/comments/{comment_id}/replies` | Optional | 201 | 400, 401, 403, 404, 422 | Reply to a top-level comment |
+| POST | `/api/cards/{card_id}/comments` | Token | 201 | 400, 401, 403, 404, 422 | Add a comment |
+| GET | `/api/cards/{card_id}/comments` | Token | 200 | 400, 401, 403, 404, 422 | List comments |
+| POST | `/api/comments/{comment_id}/replies` | Token | 201 | 400, 401, 403, 404, 422 | Reply to a top-level comment |
 | PATCH | `/api/comments/{comment_id}/priority` | Token | 200 | 401, 403, 404 | Toggle the priority flag |
 
 ### notifications
@@ -199,6 +208,18 @@ Board and cross-board summaries.
 | GET | `/api/boards/{board_id}/analytics` | Token | 200 | 400, 401, 403, 404 | Board analytics |
 | GET | `/api/analytics/boards` | Token | 200 | 401, 403 | Cross-board analytics |
 
+### shared
+
+Read-only board view through a share link. GET only; no Token.
+
+| Method | Path | Auth | Success | Errors | Summary |
+|---|---|---|---|---|---|
+| GET | `/api/shared/{token}` | Public | 200 | 404 | Shared board |
+| GET | `/api/shared/{token}/cards` | Public | 200 | 400, 404 | Shared cards (search and filters) |
+| GET | `/api/shared/{token}/categories` | Public | 200 | 404 | Shared categories |
+| GET | `/api/shared/{token}/cards/{card_id}` | Public | 200 | 404 | Shared card |
+| GET | `/api/shared/{token}/attachments/{attachment_id}/url` | Public | 200 | 404 | Fresh signed file URL |
+
 ### users
 
 User administration (Admin only).
@@ -208,6 +229,9 @@ User administration (Admin only).
 | GET | `/api/users` | Token | 200 | 401, 403 | List users |
 | POST | `/api/users` | Token | 201 | 400, 401, 403, 409, 422 | Create a user |
 | PATCH | `/api/users/{user_id}` | Token | 200 | 400, 401, 403, 404, 409, 422 | Update a user or assign a role |
+| POST | `/api/users/me/avatar` | Token | 200 | 400, 401 | Upload my avatar |
+| DELETE | `/api/users/me/avatar` | Token | 200 | 401 | Remove my avatar |
+| GET | `/api/users/{user_id}/avatar/file` | Public | 200 | 403, 404 | Avatar image (signed URL) |
 
 ## Examples
 

@@ -7,6 +7,7 @@ from app.blueprints.comments.routes import bp as comments_bp
 from app.blueprints.notifications.routes import bp as notifications_bp
 from app.blueprints.analytics.routes import bp as analytics_bp
 from app.blueprints.users.routes import bp as users_bp
+from app.blueprints.shared.routes import bp as shared_bp
 
 BLUEPRINTS = (
     auth_bp,
@@ -18,6 +19,7 @@ BLUEPRINTS = (
     notifications_bp,
     analytics_bp,
     users_bp,
+    shared_bp,
 )
 
 

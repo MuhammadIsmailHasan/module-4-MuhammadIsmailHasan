@@ -2,10 +2,13 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from sqlalchemy.exc import IntegrityError
 
+from app.blueprints.activity import repository as activity
 from app.blueprints.auth import repository as repo
 from app.blueprints.auth.dto import serialize_user
+from app.common import rate_limiter
 from app.common.auth import issue_token
-from app.common.errors import Conflict, Unauthorized, ValidationError
+from app.common.errors import Conflict, NotFound, Unauthorized, ValidationError
+from app.common.ids import to_uuid
 from app.common.validation import classify_identifier, is_email_shape, is_username, normalize_email, normalize_username
 from app.extensions import db
 
@@ -46,8 +49,9 @@ def register(data):
     return {"user": serialize_user(user), "token": issue_token(user.id, user.role)}
 
 
-def login(data):
+def login(data, client_ip=None):
     kind, value = classify_identifier(data["identifier"])
+    rate_limiter.check_login(value, client_ip)
     user = repo.get_by_email(value) if kind == "email" else repo.get_by_username(value)
     password_hash = user.password_hash if user is not None else _DUMMY_HASH
     try:
@@ -55,14 +59,17 @@ def login(data):
     except VerifyMismatchError:
         user = None
     if user is None:
+        rate_limiter.record_login_failure(value, client_ip)
         raise Unauthorized("Invalid credentials")
+    rate_limiter.reset_pair(value, client_ip)
     return {"user": serialize_user(user), "token": issue_token(user.id, user.role)}
 
 
-def availability(username=None, email=None):
+def availability(username=None, email=None, client_ip=None):
     """{ "username": {"available": bool}, "email": {...} } for the supplied parameters only."""
     if username is None and email is None:
         raise ValidationError("Supply a username or an email", details={"username": ["username or email is required"]})
+    rate_limiter.hit_availability(client_ip)
     result, problems = {}, {}
     if username is not None:
         value = normalize_username(username)
@@ -79,3 +86,38 @@ def availability(username=None, email=None):
     if problems:
         raise ValidationError("Validation failed", details=problems)
     return result
+
+
+def _me(actor):
+    user = repo.get_by_id(to_uuid(actor.id))
+    if user is None:
+        raise NotFound("User not found")
+    return user
+
+
+def get_me(actor):
+    return serialize_user(_me(actor))
+
+
+def update_me(actor, data):
+    user = _me(actor)
+    user.full_name = data["full_name"]
+    activity.add(user.id, "user.profile_updated", "user", user.id, {"fields": ["full_name"]})
+    db.session.commit()
+    return serialize_user(user)
+
+
+def change_password(actor, data):
+    user = _me(actor)
+    rate_limiter.check_change_password(user.id)
+    try:
+        _hasher.verify(user.password_hash, data["current_password"])
+    except VerifyMismatchError:
+        rate_limiter.record_change_password_failure(user.id)
+        raise ValidationError(
+            "Current password is incorrect", details={"current_password": ["current password is incorrect"]}
+        )
+    user.password_hash = _hasher.hash(data["new_password"])
+    activity.add(user.id, "user.password_changed", "user", user.id, {})
+    rate_limiter.reset_change_password(user.id)
+    db.session.commit()

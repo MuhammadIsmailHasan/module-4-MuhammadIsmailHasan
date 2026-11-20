@@ -74,6 +74,16 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited; see Retry-After and error.details.retry_after",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid or expired Token",
             "content": {
@@ -150,6 +160,16 @@
               }
             }
           },
+          "429": {
+            "description": "Rate limited; see Retry-After and error.details.retry_after",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
           "400": {
             "description": "Validation error",
             "content": {
@@ -195,6 +215,177 @@
         "summary": "Log out",
         "description": "Revokes nothing; the client discards the Token, which stays valid until expiry.",
         "security": []
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "summary": "Get the signed-in user",
+        "description": "Returns the user shape of register and login.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMe"
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "summary": "Update the profile",
+        "description": "Only `full_name`; any other field is a 400.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/auth/change-password": {
+      "post": {
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NullEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited; see Retry-After and error.details.retry_after",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePassword"
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change the password",
+        "description": "A wrong current password is a 400 (never 401) and is counted; the issued Token stays valid.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/api/boards": {
@@ -280,6 +471,16 @@
               }
             }
           },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
@@ -288,12 +489,11 @@
           "boards"
         ],
         "summary": "List visible boards",
-        "description": "Guests see public boards; signed-in users see public plus accessible boards.",
+        "description": "Signed-in users see public plus accessible boards. No Token: 401.",
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       }
     },
@@ -358,12 +558,11 @@
           "boards"
         ],
         "summary": "Get a board with its columns",
-        "description": "Guests may read public boards. Private boards: 401 for Guests, 403 without access.",
+        "description": "Requires board access: 401 without a Token, 403 without access.",
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       },
       "parameters": [
@@ -657,13 +856,30 @@
     },
     "/api/boards/{board_id}/members": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include",
+            "description": "`email` adds each member's email (board staff only)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "email"
+              ]
+            },
+            "required": false
+          }
+        ],
         "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemberListEnvelope"
+                  "$ref": "#/components/schemas/MemberWithEmailListEnvelope"
                 }
               }
             }
@@ -716,12 +932,11 @@
           "boards"
         ],
         "summary": "List board members",
-        "description": "Requires board access.",
+        "description": "Requires board access. `?include=email` adds emails and needs board staff access (403 otherwise).",
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       },
       "parameters": [
@@ -1087,12 +1302,265 @@
           "boards"
         ],
         "summary": "Board activity feed",
-        "description": "Requires board access; Guests get 403 (never activity). Paged with `limit` and `before`.",
+        "description": "Requires board access. Paged with `limit` and `before`.",
         "security": [
           {
             "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "board_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/boards/{board_id}/share": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareEnvelope"
+                }
+              }
+            }
           },
-          {}
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "boards"
+        ],
+        "summary": "Get the share link state",
+        "description": "Board owner, Manager or Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "board_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "boards"
+        ],
+        "summary": "Enable the share link",
+        "description": "Creates a 256-bit token when sharing is off; returns the existing one otherwise.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "boards"
+        ],
+        "summary": "Disable the share link",
+        "description": "Idempotent: 200 when sharing is already off.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/boards/{board_id}/share/regenerate": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "boards"
+        ],
+        "summary": "Replace the share token",
+        "description": "The previous link stops working at once.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
         ]
       },
       "parameters": [
@@ -1354,12 +1822,11 @@
           "cards"
         ],
         "summary": "Get a card",
-        "description": "Guests may read public boards; comments and activity are omitted for Guests.",
+        "description": "Requires board access.",
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       },
       "parameters": [
@@ -1832,12 +2299,11 @@
           "cards"
         ],
         "summary": "Card activity",
-        "description": "Requires board access; Guests get 403. Paged with `limit` and `before`.",
+        "description": "Requires board access. Paged with `limit` and `before`.",
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       },
       "parameters": [
@@ -1962,8 +2428,7 @@
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       },
       "parameters": [
@@ -2469,12 +2934,11 @@
           "cards"
         ],
         "summary": "Issue a fresh signed file URL",
-        "description": "Re-checks board access; open to Guests on public boards. The URL is valid 15 minutes.",
+        "description": "Re-checks board access. The URL is valid 15 minutes.",
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       },
       "parameters": [
@@ -2607,12 +3071,11 @@
           "categories"
         ],
         "summary": "List a board's categories",
-        "description": "Board access only; Guests may read public boards.",
+        "description": "Requires board access.",
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       },
       "parameters": [
@@ -2951,12 +3414,11 @@
           "comments"
         ],
         "summary": "Add a comment",
-        "description": "Member, Supervisor, Manager with board access. Admin 403. Guest: 403 on a public board, 401 on a private one.",
+        "description": "Member, Supervisor, Manager with board access. Admin 403. No Token: 401.",
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       },
       "parameters": [
@@ -3048,12 +3510,11 @@
           "comments"
         ],
         "summary": "List comments",
-        "description": "Priority comments first, then latest or popular; replies oldest first. Guests get 403.",
+        "description": "Priority comments first, then latest or popular; replies oldest first. Requires board access.",
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       }
     },
@@ -3135,8 +3596,7 @@
         "security": [
           {
             "bearerAuth": []
-          },
-          {}
+          }
         ]
       },
       "parameters": [
@@ -3756,6 +4216,470 @@
           }
         }
       ]
+    },
+    "/api/users/me/avatar": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "summary": "Upload my avatar",
+        "description": "Multipart part `file`: PNG, JPEG or WebP by content, at most 2 MB. Replaces any previous avatar.",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "summary": "Remove my avatar",
+        "description": "Idempotent.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/users/{user_id}/avatar/file": {
+      "get": {
+        "responses": {
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          },
+          "200": {
+            "description": "Image bytes",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "summary": "Download an avatar image",
+        "description": "No Token: access is the HMAC signature (exp and sig). Served inline with nosniff.",
+        "security": []
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "user_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/shared/{token}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedBoardEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "shared"
+        ],
+        "summary": "Shared board",
+        "description": "Board name, description and columns. An unusable Bearer Token is ignored.",
+        "security": []
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "token",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/shared/{token}/cards": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "description": "Case-insensitive match on title or description",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "filter[priority]",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "filter[assignee]",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false
+          },
+          {
+            "in": "query",
+            "name": "filter[category]",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedCardListEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "shared"
+        ],
+        "summary": "Shared cards",
+        "description": "Same search and filters as the board card list; no comments or activity.",
+        "security": []
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "token",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/shared/{token}/categories": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryListEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "shared"
+        ],
+        "summary": "Shared categories",
+        "description": "Shared categories",
+        "security": []
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "token",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/shared/{token}/cards/{card_id}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharedCardEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "shared"
+        ],
+        "summary": "Shared card",
+        "description": "404 when the card is not on the shared board or is deleted.",
+        "security": []
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "token",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        {
+          "in": "path",
+          "name": "card_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/shared/{token}/attachments/{attachment_id}/url": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentUrlEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "shared"
+        ],
+        "summary": "Fresh signed file URL for a shared attachment",
+        "description": "Scoped to the Share_Token; stops working when the link is disabled or replaced.",
+        "security": []
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "token",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        {
+          "in": "path",
+          "name": "attachment_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
     }
   },
   "info": {
@@ -3798,6 +4722,10 @@
     {
       "name": "users",
       "description": "User administration (Admin only)"
+    },
+    {
+      "name": "shared",
+      "description": "Read-only board view through a share link. GET only, no Token needed."
     }
   ],
   "openapi": "3.0.3",
@@ -4042,6 +4970,60 @@
         },
         "additionalProperties": false
       },
+      "UserEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/User"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateMe": {
+        "type": "object",
+        "properties": {
+          "full_name": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "full_name"
+        ],
+        "additionalProperties": false
+      },
+      "ChangePassword": {
+        "type": "object",
+        "properties": {
+          "current_password": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string",
+            "description": "At least 8 characters"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ]
+      },
       "CreateBoard": {
         "type": "object",
         "properties": {
@@ -4209,7 +5191,7 @@
           }
         }
       },
-      "Member": {
+      "MemberWithEmail": {
         "type": "object",
         "properties": {
           "id": {
@@ -4225,10 +5207,14 @@
           "avatar_url": {
             "type": "string",
             "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "description": "Only with ?include=email, for board staff"
           }
         }
       },
-      "MemberListEnvelope": {
+      "MemberWithEmailListEnvelope": {
         "type": "object",
         "properties": {
           "status": {
@@ -4242,7 +5228,7 @@
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Member"
+              "$ref": "#/components/schemas/MemberWithEmail"
             },
             "nullable": true
           }
@@ -4303,6 +5289,25 @@
         "required": [
           "user_id"
         ]
+      },
+      "Member": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "avatar_url": {
+            "type": "string",
+            "nullable": true
+          }
+        }
       },
       "MemberEnvelope": {
         "type": "object",
@@ -4383,6 +5388,49 @@
               "$ref": "#/components/schemas/Activity"
             },
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Share": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string",
+            "description": "Secret; returned only by the share endpoints",
+            "nullable": true
+          },
+          "path": {
+            "type": "string",
+            "description": "/shared/<token> or null",
+            "nullable": true
+          }
+        }
+      },
+      "ShareEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/Share"
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -5332,7 +6380,8 @@
           "full_name",
           "password",
           "username"
-        ]
+        ],
+        "additionalProperties": false
       },
       "AdminUserEnvelope": {
         "type": "object",
@@ -5387,7 +6436,169 @@
               "admin"
             ]
           }
+        },
+        "additionalProperties": false
+      },
+      "SharedBoard": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Column"
+            }
+          },
+          "has_board_access": {
+            "type": "boolean",
+            "description": "True when the optional Bearer Token has Board_Access"
+          }
         }
+      },
+      "SharedBoardEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/SharedBoard"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SharedCard": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "column_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "category_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "assignee_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "assignee_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "priority": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "end_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "order": {
+            "type": "number"
+          },
+          "archived_at": {
+            "type": "string",
+            "nullable": true
+          },
+          "subtasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Subtask"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            }
+          }
+        }
+      },
+      "SharedCardListEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharedCard"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SharedCardEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/SharedCard"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       }
     },
     "responses": {

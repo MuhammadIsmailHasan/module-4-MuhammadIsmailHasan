@@ -77,7 +77,8 @@ def test_board_defaults_and_access(world):
     assert c.get(f"/api/boards/{bid}").status_code == 401  # guest, private
     assert c.get(f"/api/boards/{bid}", headers=world.h["other_member"]).status_code == 403
     assert c.get(f"/api/boards/{bid}", headers=world.h["member"]).status_code == 200
-    assert c.get("/api/boards").get_json()["data"] == []
+    assert c.get("/api/boards").status_code == 401  # a Guest has no board list (V10)
+    assert c.get("/api/boards", headers=world.h["other_member"]).get_json()["data"] == []
     assert len(c.get("/api/boards", headers=world.h["manager"]).get_json()["data"]) == 1
     assert c.post("/api/boards", headers=world.h["member"], json={"name": "x"}).status_code == 403
     assert c.post("/api/boards", json={"name": "x"}).status_code == 401
@@ -89,13 +90,14 @@ def test_owner_reassign_and_visibility_archive_delete(world):
     assert r.status_code == 400
     assert c.patch(f"/api/boards/{bid}", headers=world.h["supervisor"], json={"owner_id": None}).status_code == 403
     assert c.patch(f"/api/boards/{bid}", headers=world.h["supervisor"], json={"visibility": "public"}).status_code == 200
-    assert len(c.get("/api/boards").get_json()["data"]) == 1  # now public for guests
+    assert len(c.get("/api/boards", headers=world.h["other_member"]).get_json()["data"]) == 1  # now public for signed-in users
     assert c.post(f"/api/boards/{bid}/archive", headers=world.h["supervisor"]).status_code == 403
     assert c.post(f"/api/boards/{bid}/archive", headers=world.h["manager"]).status_code == 200
     assert c.post(f"/api/boards/{bid}/unarchive", headers=world.h["manager"]).status_code == 200
     assert c.delete(f"/api/boards/{bid}", headers=world.h["manager"]).status_code == 200
     assert c.get(f"/api/boards/{bid}", headers=world.h["manager"]).status_code == 404
-    assert c.get("/api/boards").get_json()["data"] == []
+    assert c.get("/api/boards").status_code == 401  # a Guest has no board list (V10)
+    assert c.get("/api/boards", headers=world.h["other_member"]).get_json()["data"] == []
 
 
 def test_members_and_columns(world):
@@ -236,13 +238,9 @@ def test_guest_on_public_board(world):
     c, bid = world.client, world.board["id"]
     c.patch(f"/api/boards/{bid}", headers=world.h["manager"], json={"visibility": "public"})
     card = mkcard(world)
-    data = c.get(f"/api/cards/{card['id']}").get_json()["data"]
-    assert "comments" not in data and "activity" not in data
-    assert c.get(f"/api/cards/{card['id']}/comments").status_code == 403
-    assert c.get(f"/api/cards/{card['id']}/activity").status_code == 403
-    assert c.post(f"/api/cards/{card['id']}/comments", json={"content": "hi"}).status_code == 403
-    assert c.get(f"/api/boards/{bid}/categories").status_code == 200
-    assert c.get(f"/api/boards/{bid}/cards").status_code == 200
+    for path in (f"/api/cards/{card['id']}", f"/api/cards/{card['id']}/comments", f"/api/cards/{card['id']}/activity", f"/api/boards/{bid}", f"/api/boards/{bid}/members", f"/api/boards/{bid}/activity", f"/api/boards/{bid}/categories", f"/api/boards/{bid}/cards"):
+        assert c.get(path).status_code == 401, path
+    assert c.post(f"/api/cards/{card['id']}/comments", json={"content": "hi"}).status_code == 401
     assert c.patch(f"/api/cards/{card['id']}", json={"title": "z"}).status_code == 401
     signed = c.get(f"/api/cards/{card['id']}", headers=world.h["member"]).get_json()["data"]
     assert "comments" in signed and "activity" in signed

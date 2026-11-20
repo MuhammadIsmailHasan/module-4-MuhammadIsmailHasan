@@ -47,6 +47,10 @@ class BoardSchema(BaseSchema):
     columns = fields.List(fields.Nested(ColumnSchema))
 
 
+class MembersQuerySchema(BaseSchema):
+    include = fields.String(validate=validate.OneOf(["email"]), metadata={"description": "`email` adds each member's email (board staff only)"})
+
+
 class CandidateQuerySchema(BaseSchema):
     search = fields.String(metadata={"description": "At least 2 characters. Name substring, username prefix, or exact email (case-insensitive)"})
 
@@ -57,3 +61,9 @@ class CandidateSchema(BaseSchema):
     username = fields.String()
     email = fields.String()
     avatar_url = fields.String(allow_none=True)
+
+
+class ShareSchema(BaseSchema):
+    enabled = fields.Boolean()
+    token = fields.String(allow_none=True, metadata={"description": "Secret; returned only by the share endpoints"})
+    path = fields.String(allow_none=True, metadata={"description": "/shared/<token> or null"})

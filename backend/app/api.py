@@ -22,6 +22,7 @@ _CODES = {
     404: "NOT_FOUND",
     405: "METHOD_NOT_ALLOWED",
     409: "CONFLICT",
+    429: "RATE_LIMITED",
 }
 
 
@@ -72,7 +73,11 @@ class EnvelopeApi(Api):
 
     def handle_app_error(self, err):
         db.session.rollback()
-        return render_error(err.status, err.code, err.message, err.details)
+        response, status = render_error(err.status, err.code, err.message, err.details)
+        retry_after = getattr(err, "retry_after", None)
+        if retry_after is not None:
+            response.headers["Retry-After"] = str(retry_after)
+        return response, status
 
     def handle_http_exception(self, error):
         status = error.code or 500

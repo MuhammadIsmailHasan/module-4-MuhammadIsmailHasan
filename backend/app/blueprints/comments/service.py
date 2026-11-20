@@ -23,7 +23,7 @@ def _load_card(actor, card_id):
 
 def _require_commenter(actor):
     # Guest: 403 on public boards (401 on private comes from require_access).
-    if actor is None or actor.role not in WRITERS:
+    if actor.role not in WRITERS:
         raise Forbidden("Comments are not available for this role")
 
 
@@ -102,6 +102,4 @@ def list_comments(card, actor, sort="latest"):
 
 def list_for_request(actor, card_id, sort):
     card = _load_card(actor, card_id)
-    if actor is None:
-        raise Forbidden("Comments are not available to guests")
     return list_comments(card, actor, sort or "latest")

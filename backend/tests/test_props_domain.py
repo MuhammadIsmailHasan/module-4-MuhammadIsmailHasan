@@ -81,13 +81,13 @@ def test_property_8_9_board_soft_delete_and_archive(client, flags):
         if archive:
             assert client.post(f"/api/boards/{b['id']}/archive", headers=env.h["manager"]).get_json()["data"]["archived_at"]
             client.post(f"/api/boards/{b['id']}/unarchive", headers=env.h["manager"])
-            assert client.get(f"/api/boards/{b['id']}").get_json()["data"]["archived_at"] is None
+            assert client.get(f"/api/boards/{b['id']}", headers=env.h["manager"]).get_json()["data"]["archived_at"] is None
         if delete:
             client.delete(f"/api/boards/{b['id']}", headers=env.h["manager"])
     for bid, delete, _ in ids:
         row = db.session.get(Board, uuid.UUID(bid))
         assert row is not None and (row.deleted_at is not None) == delete
-        assert client.get(f"/api/boards/{bid}").status_code == (404 if delete else 200)
+        assert client.get(f"/api/boards/{bid}", headers=env.h["manager"]).status_code == (404 if delete else 200)
 
 
 @PROP
@@ -100,15 +100,15 @@ def test_property_8_9_card_soft_delete_hides_children(client, card_deleted, arch
     if archive:
         client.post(f"/api/cards/{card['id']}/archive", headers=env.h["manager"])
         client.post(f"/api/cards/{card['id']}/unarchive", headers=env.h["manager"])
-        assert client.get(f"/api/cards/{card['id']}").get_json()["data"]["archived_at"] is None
+        assert client.get(f"/api/cards/{card['id']}", headers=env.h["manager"]).get_json()["data"]["archived_at"] is None
     if card_deleted:
         client.delete(f"/api/cards/{card['id']}", headers=env.h["manager"])
-        assert client.get(f"/api/cards/{card['id']}").status_code == 404
+        assert client.get(f"/api/cards/{card['id']}", headers=env.h["manager"]).status_code == 404
         assert client.patch(f"/api/subtasks/{sub['id']}", headers=env.h["manager"], json={"is_done": True}).status_code == 404
         assert client.get(f"/api/cards/{card['id']}/comments", headers=env.h["manager"]).status_code == 404
         assert db.session.get(Card, uuid.UUID(card["id"])) is not None
         assert db.session.get(Subtask, uuid.UUID(sub["id"])) is not None
-        assert client.get(f"/api/boards/{env.bid}/cards").get_json()["data"] == []
+        assert client.get(f"/api/boards/{env.bid}/cards", headers=env.h["manager"]).get_json()["data"] == []
 
 
 # ---- Property 18, 19: members and owner reassignment ----

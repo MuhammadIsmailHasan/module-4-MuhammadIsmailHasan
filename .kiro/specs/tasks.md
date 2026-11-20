@@ -624,7 +624,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [ ] 32.6 Checkpoint - Run the suite against the deployed URL
     - Run `npm run test:e2e` with the three variables set; confirm all non-fixme tests pass and report the two `fixme` tests.
 - [ ] 33. Share links, username and email, header menu, rate limiting, route guard (Decisions K to P, V10)
-  - [ ] 33.1 Update the models and write the V10 migration
+  - [x] 33.1 Update the models and write the V10 migration
     - Models: `User` gets `username` (String(30), lower-case) and `email` (String(255), lower-case, nullable in the database) and loses `login_identifier`; `Board` gets nullable `share_token` (String(64)); new `RateLimitAttempt` (`scope` in `login_pair`, `login_ip`, `availability`, with no `register` value; `key_hash`; `created_at`; index `(scope, key_hash, created_at)`). The avatar column change is part 4 of the same revision, written in 33.28.
     - One Alembic revision `b7d2e4f6a801` in three parts: users (add columns, Python backfill in `created_at, id` order with the two passes and `derive_username` of the design, unique indexes on `lower(username)` and `lower(email)`, `username` NOT NULL, drop the old index and `login_identifier`), boards (`share_token` plus partial unique index), and the table. Print one line per derived or sanitized Username. Write `downgrade()` as in the design.
     - Run it on a copy of the dev database first and keep a dump.
@@ -633,7 +633,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - **Property 45: Migration backfill**
     - Generated legacy rows (email-shaped, username-shaped, other, in any order, with collisions); assert valid and unique Usernames, `email` rules, idempotence, and that downgrade restores a `login_identifier`; integration tests for the two functional unique indexes (case-insensitive, two null Emails allowed) and the unique `share_token`.
     - **Validates: Requirements 1.43, 1.52, 15.18**
-  - [ ] 33.3 Implement the identity changes in the auth and users blueprints
+  - [x] 33.3 Implement the identity changes in the auth and users blueprints
     - `common/validation.py`: `normalize_username`, `normalize_email`, `is_email_shape`, `classify_identifier`, `USERNAME_RE`.
     - `auth`: register with `username` and `email` (field-level 400, 409 with `details` per field, `IntegrityError` mapped to the same 409), login with `identifier` (classification, one generic 401, dummy hash for unknown users), `GET /auth/availability`, the `{ id, full_name, username, email, avatar_url }` user shape; `users` create and edit accept the two fields; `GET /boards/{id}/candidates` matches `full_name`, `username` prefix, `email` exact (the response carries `email` from round 2, built in 33.35); update `app/seed.py`.
     - Update the existing backend tests that used `login_identifier`.
@@ -641,33 +641,33 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [ ]* 33.4 Write the identity property tests
     - **Property 1: Registration and login round trip** (revised), **Property 2: Registration validation and unique username and email** (revised), **Property 42: Login identifier classification**, **Property 43: Username and Email normalisation and uniqueness**
     - **Validates: Requirements 1.1 to 1.5, 1.43 to 1.49**
-  - [ ] 33.5 Implement the Rate_Limiter and wire it into login and availability (not register, Decision Q)
+  - [x] 33.5 Implement the Rate_Limiter and wire it into login and availability (not register, Decision Q)
     - `common/rate_limiter.py` (pure `blocked_until`, store with advisory lock and separate-commit failure record, `check_login`, `record_login_failure`, `reset_pair`, `hit` for availability only), `RateLimited` (429, `RATE_LIMITED`, `details.retry_after`), `Retry-After` header in `EnvelopeApi`, CORS `expose_headers`, `ProxyFix` from `TRUSTED_PROXY_COUNT`, the five settings in config (`RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_LOGIN_PAIR_MAX`, `RATE_LIMIT_LOGIN_IP_MAX`, `RATE_LIMIT_AVAILABILITY_MAX`, `TRUSTED_PROXY_COUNT`; no `RATE_LIMIT_REGISTER_MAX`), `create_app(config_overrides)`, and `backend/.env.example` placeholders. `auth_service.register` makes no limiter call (Req 20.18).
     - Routes pass `client_ip` to the service; services stay free of Flask imports.
     - _Requirements: 20.1 to 20.14, 20.17, 13.3, 13.11_
   - [ ]* 33.6 Write the Rate_Limiter tests
     - **Property 44: Rate limit window** (fake clock, small thresholds through `create_app`, PostgreSQL, two app instances on one table); example tests for the 429 body and header, a blocked correct password, success reset, independent pairs, and that register is never answered with 429 (Req 20.18).
     - **Validates: Requirements 20.1 to 20.14, 15.16**
-  - [ ] 33.7 Implement the profile endpoints
+  - [x] 33.7 Implement the profile endpoints
     - `GET /auth/me`, `PATCH /auth/me` (`unknown=RAISE`, so `avatar_url` returns 400; email only while null, 409 `details.email`), `POST /auth/change-password` (400 `details.current_password`), one Activity_Log row per success with no secret in `metadata`.
     - _Requirements: 19.8 to 19.16_
   - [ ]* 33.8 Write the profile property test
     - **Property 46: Profile update rules**
     - **Validates: Requirements 19.9 to 19.16**
-  - [ ] 33.9 Remove Guest access to Boards
+  - [x] 33.9 Remove Guest access to Boards
     - `can_access(None, board)` returns false; `GET /boards` without a Token returns 401; remove the Guest branches in board, card, column, category, comment, activity, search, and attachment services and serializers (a Guest gets 401 everywhere outside `/api/shared`; the comment endpoints return 401 instead of 403 on a public Board); update `list_visible`.
     - Update the existing tests that expected Guest access (tasks 4, 5, 7, 8, 9, 12, 14.1 fixtures).
     - _Requirements: 7.16, 8.5, 11.4, 11.5, 11.7, 11.12, 11.13, 12.6, 12.7, 13.10, 14.3_
-  - [ ] 33.10 Implement the share endpoints
+  - [x] 33.10 Implement the share endpoints
     - `board_service.get_share`, `enable_share`, `regenerate_share`, `disable_share`; routes `GET`, `POST`, `POST .../regenerate`, `DELETE` under `/boards/{id}/share`; owner, Manager, Admin only; one activity row per change, no token in `metadata`.
     - _Requirements: 18.1 to 18.8_
-  - [ ] 33.11 Implement the `shared` blueprint and token-scoped file URLs
+  - [x] 33.11 Implement the `shared` blueprint and token-scoped file URLs
     - `blueprints/shared/` with `routes.py`, `service.py`, `repository.py`, `schema.py` (board, cards, categories, card detail, attachment URL; GET only; shared schemas without comments, activity, owner, members, token; `has_board_access` from an optional Bearer; `Cache-Control: private, no-store`); extend `common/signing.py` with the `scope` and `st` parameter and the file route check against the Board's current token.
     - _Requirements: 18.9 to 18.19, 12.6, 6.6, 4.26_
   - [ ]* 33.12 Write the share and guest tests
     - **Property 40: Share_Token lifecycle**, **Property 41: Shared routes stay inside the token's board**, **Property 28: Guest responses never include comments or activity** (revised), **Property 34: Board list visibility** (revised), **Property 4** and **Property 5** (revised); a static test that `/api/shared` has no non-GET route and no comment or activity route.
     - **Validates: Requirements 18.1 to 18.17, 7.16, 8.5, 11.4 to 11.7, 11.13, 15.17**
-  - [ ] 33.13 Update the generated OpenAPI document and `backend/API.md`
+  - [x] 33.13 Update the generated OpenAPI document and `backend/API.md`
     - Document the new and changed endpoints, the 429 response, the `identifier` field, and the user shape; run `flask export-openapi`; keep the "every route is documented" test (Property 37) green.
     - _Requirements: 17.1, 17.2, 17.3_
   - [ ] 33.14 Update the Frontend API client and helpers
@@ -715,7 +715,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - `common/file_store.py` (`FileStore(upload_dir)`: `save`, `delete`, `path`, bare-name check) extracted from the inline code in `cards/service.py` (write, `os.remove`, file route path); attachments call it with `subdir=""`, behaviour unchanged. `common/images.py` with `MAX_AVATAR_BYTES` and `detect_image_type`. `common/signing.py` takes `scope` and a route name (shared with 33.11) so the avatar scope reuses the one signing and verification code. `User.avatar_path` (String(64), nullable) replaces `avatar_url`; add part 4 to revision `b7d2e4f6a801` (add column, print and drop the old non-null `avatar_url` values, drop the column; `downgrade()` re-adds `avatar_url` empty). Create `UPLOAD_DIR/avatars/` on first write.
   - Risks to record in the PR: Werkzeug buffers the multipart body (cap the body at the reverse proxy, about 3 MB); the file keeps EXIF data and no image library re-encodes it.
   - _Requirements: 19.21, 19.24, 13.14, 1.6_
-- [ ] 33.29 Implement the avatar endpoints (Decision R)
+- [x] 33.29 Implement the avatar endpoints (Decision R)
   - `auth_service.set_avatar`, `clear_avatar`, `open_avatar`; routes `POST` and `DELETE /auth/me/avatar` and `GET /auth/avatars/{user_id}/file`; `user_repository.get_for_update`; write-commit-delete order with cleanup on failure; `UserSchema.avatar_url` as a signed-URL method that is null without a file; one `user.profile_updated` row with `{ "fields": ["avatar"] }`; remove `avatar_url` from the `PATCH /auth/me` and admin `POST|PATCH /users` schemas (400); response headers `nosniff`, `inline`, `Cache-Control: private, max-age=300`; update the OpenAPI document and `backend/API.md`.
   - _Requirements: 19.18, 19.19, 19.20, 19.21, 19.22, 19.23, 19.24, 19.25, 19.26, 19.27, 19.32, 19.33, 13.10_
 - [ ]* 33.30 Write the avatar tests
@@ -734,7 +734,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
 - [ ]* 33.34 Write the invalid-Token tests
   - **Property 48: Safe return path and usable Token** (fast-check); vitest for `proxy.ts` (no cookie, malformed, expired, valid, public paths, cookie removed on redirect); pytest that a malformed or expired Bearer Token on each shared route returns the Guest response.
   - **Validates: Requirements 1.57, 1.59, 1.60, 15.23, 18.24**
-- [ ] 33.35 Return the Email to staff in candidates and in the members list (Decision S)
+- [x] 33.35 Return the Email to staff in candidates and in the members list (Decision S)
   - `CandidateSchema` gains `email`; `GET /boards/{id}/members` accepts `include=email` (403 without Board_Staff_Access, 401 without a Token) and the default path never reads `User.email`; confirm no Comment, activity, Notification, shared, or default member schema declares `email`; update the OpenAPI document.
   - _Requirements: 3.25, 3.30, 3.31_
 - [ ] 33.36 Show the Email in `MemberSearch` and `MemberPicker`

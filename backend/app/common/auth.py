@@ -28,6 +28,17 @@ def current_actor():
     return Actor(id=claims["sub"], role=claims["role"])
 
 
+def optional_actor():
+    """Like current_actor, but a malformed, expired or otherwise unusable Token reads as a Guest (Req 18.24)."""
+    from flask_jwt_extended.exceptions import JWTExtendedException
+    from jwt.exceptions import PyJWTError
+
+    try:
+        return current_actor()
+    except (JWTExtendedException, PyJWTError):
+        return None
+
+
 def require_role(*roles):
     """Role comes only from the signed Token claims, never the request body."""
 

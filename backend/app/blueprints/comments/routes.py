@@ -7,11 +7,13 @@ from app.common.docs import endpoint
 from app.common.envelope import envelope
 from app.common.responses import ok
 
+USERS = ("member", "supervisor", "manager", "admin")
 bp = Blueprint("comments", __name__, description="Comments, replies and the priority flag")
 
 
 @bp.route("/cards/<card_id>/comments", methods=["POST"])
-@endpoint(bp, "Add a comment", "Member, Supervisor, Manager with board access. Admin 403. Guest: 403 on a public board, 401 on a private one.", auth="optional")
+@endpoint(bp, "Add a comment", "Member, Supervisor, Manager with board access. Admin 403. No Token: 401.")
+@require_role(*USERS)
 @bp.arguments(CreateCommentSchema)
 @bp.response(201, envelope(ReplySchema))
 def create(data, card_id):
@@ -20,7 +22,8 @@ def create(data, card_id):
 
 
 @bp.route("/comments/<comment_id>/replies", methods=["POST"])
-@endpoint(bp, "Reply to a top-level comment", "400 when the target is itself a reply. Increments the parent's reply_count.", auth="optional")
+@endpoint(bp, "Reply to a top-level comment", "400 when the target is itself a reply. Increments the parent's reply_count.")
+@require_role(*USERS)
 @bp.arguments(CreateCommentSchema)
 @bp.response(201, envelope(ReplySchema))
 def reply(data, comment_id):
@@ -38,7 +41,8 @@ def priority(comment_id):
 
 
 @bp.route("/cards/<card_id>/comments", methods=["GET"])
-@endpoint(bp, "List comments", "Priority comments first, then latest or popular; replies oldest first. Guests get 403.", auth="optional")
+@endpoint(bp, "List comments", "Priority comments first, then latest or popular; replies oldest first. Requires board access.")
+@require_role(*USERS)
 @bp.arguments(CommentListQuerySchema, location="query")
 @bp.response(200, envelope(CommentSchema, many=True))
 def list_comments(args, card_id):

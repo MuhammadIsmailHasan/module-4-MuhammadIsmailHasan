@@ -12,6 +12,15 @@ def get_by_id(board_id, include_deleted=False):
     return board
 
 
+def get_by_share_token(token):
+    """Equality lookup on the unique index; a deleted board counts as not found."""
+    if not token:
+        return None
+    return db.session.scalars(
+        db.select(Board).where(Board.share_token == token, Board.deleted_at.is_(None)).options(selectinload(Board.columns))
+    ).first()
+
+
 def get_detail(board_id):
     """One board with its columns loaded (Req 3.10)."""
     board = db.session.scalars(
@@ -29,9 +38,7 @@ def is_member(board_id, user_id):
 
 def list_visible(actor):
     q = Board.query.filter(Board.deleted_at.is_(None))
-    if actor is None:
-        q = q.filter(Board.visibility == "public")
-    elif actor.role not in ("manager", "admin"):
+    if actor.role not in ("manager", "admin"):
         uid = to_uuid(actor.id)
         member_ids = db.select(BoardMember.board_id).where(BoardMember.user_id == uid)
         q = q.filter(db.or_(Board.visibility == "public", Board.owner_id == uid, Board.id.in_(member_ids)))

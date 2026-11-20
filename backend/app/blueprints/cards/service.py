@@ -59,10 +59,8 @@ def get_card(actor, card_id):
 def present(card, actor):
     from app.blueprints.comments import service as comments_service
 
-    comments = activity_rows = None
-    if actor is not None:
-        comments = comments_service.list_comments(card, actor, "latest")
-        activity_rows = activity.serialize_many(activity.for_card(card.id, 20))
+    comments = comments_service.list_comments(card, actor, "latest")
+    activity_rows = activity.serialize_many(activity.for_card(card.id, 20))
     detail = repo.get_detail(card.id)
     return serialize_card(detail, actor, detail.subtasks, detail.attachments, comments, activity_rows)
 
@@ -381,15 +379,19 @@ def attachment_url(actor, attachment_id):
     return {"file_url": data["file_url"], "expires_at": data["expires_at"]}
 
 
-def attachment_file_path(attachment_id, exp, sig):
-    from app.common.signing import verify_file_signature
+def attachment_file_path(attachment_id, exp, sig, st=None):
+    from app.common.signing import share_scope, verify_file_signature
 
     aid = to_uuid(attachment_id)
     att = repo.get_attachment(aid) if aid else None
-    if att is None or not verify_file_signature(att.id, exp, sig, clock.now()):
+    if att is None or not verify_file_signature(att.id, exp, sig, clock.now(), scope=st or None):
         raise Forbidden("Invalid or expired file link")
     card = repo.get_card(att.card_id)
     board = boards_repo.get_by_id(repo.board_id_of_card(card)) if card else None
+    if st:
+        # A shared URL dies the moment the Share_Token is disabled or replaced (Req 18.16).
+        if board is None or not board.share_token or st != share_scope(board.share_token):
+            raise Forbidden("Invalid or expired file link")
     if board is None or not att.file_path:
         raise NotFound("File not found")
     return os.path.join(current_app.config["UPLOAD_DIR"], att.file_path), att
@@ -397,8 +399,8 @@ def attachment_file_path(attachment_id, exp, sig):
 
 # ---- listing -----------------------------------------------------------------
 
-def list_board_cards(actor, board_id, args):
-    board = boards.load_board(actor, board_id)
+def parse_card_filters(args):
+    """Search and filter[...] query values as the repository filter dict; 400 on a bad value or an unknown key."""
     priority = assignee = category = None
     for key, value in args.items():
         if key == "search":
@@ -418,7 +420,10 @@ def list_board_cards(actor, board_id, args):
         elif key.startswith("filter["):
             raise ValidationError(f"Unsupported filter: {key}")
     search = (args.get("search") or "").strip()
-    cards = repo.list_for_board(
-        board.id, {"search": search or None, "priority": priority, "assignee": assignee, "category": category}
-    )
+    return {"search": search or None, "priority": priority, "assignee": assignee, "category": category}
+
+
+def list_board_cards(actor, board_id, args):
+    board = boards.load_board(actor, board_id)
+    cards = repo.list_for_board(board.id, parse_card_filters(args))
     return [serialize_card(c, actor, c.subtasks, c.attachments) for c in cards]

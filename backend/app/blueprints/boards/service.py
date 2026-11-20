@@ -1,3 +1,5 @@
+import secrets
+
 from app.blueprints.activity import repository as activity
 from app.blueprints.auth import repository as users
 from app.blueprints.boards import repository as repo
@@ -23,10 +25,10 @@ def is_board_member(actor, board):
 def can_access(actor, board):
     if board is None or board.deleted_at is not None:
         return False
+    if actor is None:  # a Guest sees nothing here; shared links use /api/shared (V10, Decision K)
+        return False
     if board.visibility == "public":
         return True
-    if actor is None:
-        return False
     return actor.role in PRIVILEGED or is_owner(actor, board) or is_board_member(actor, board)
 
 
@@ -39,11 +41,11 @@ def can_write_staff(actor, board):
 
 
 def require_access(actor, board):
+    if actor is None:
+        raise Unauthorized("Authentication required")
     if board is None or board.deleted_at is not None:
         raise NotFound("Board not found")
     if not can_access(actor, board):
-        if actor is None:
-            raise Unauthorized("Authentication required")
         raise Forbidden("No access to this board")
     return board
 
@@ -157,8 +159,10 @@ def require_manage_members(actor, board):
         raise Forbidden("Owner, Manager or Admin only")
 
 
-def list_members(actor, board_id):
+def list_members(actor, board_id, with_email=False):
     board = load_board(actor, board_id)
+    if with_email and not can_write_staff(actor, board):
+        raise Forbidden("Staff access required")
     return repo.list_members(board.id)
 
 
@@ -209,3 +213,47 @@ def add_column(actor, board_id, data):
     activity.add(to_uuid(actor.id), "column.created", "column", col.id, {"board_id": str(board.id), "name": name})
     db.session.commit()
     return col
+
+
+# ---- share links (V10, Decision K) -------------------------------------------------------------------
+
+def _share_manager(actor, board_id):
+    board = load_board(actor, board_id)
+    if not (actor.role in PRIVILEGED or is_owner(actor, board)):
+        raise Forbidden("Only the board owner, a Manager or an Admin can manage the share link")
+    return board
+
+
+def _share_view(board):
+    token = board.share_token
+    return {"enabled": token is not None, "token": token, "path": f"/shared/{token}" if token else None}
+
+
+def get_share(actor, board_id):
+    return _share_view(_share_manager(actor, board_id))
+
+
+def enable_share(actor, board_id):
+    board = _share_manager(actor, board_id)
+    if board.share_token is None:
+        board.share_token = secrets.token_urlsafe(32)
+        activity.add(to_uuid(actor.id), "board.share_enabled", "board", board.id, {"board_name": board.name})
+        db.session.commit()
+    return _share_view(board)
+
+
+def regenerate_share(actor, board_id):
+    board = _share_manager(actor, board_id)
+    board.share_token = secrets.token_urlsafe(32)
+    activity.add(to_uuid(actor.id), "board.share_regenerated", "board", board.id, {"board_name": board.name})
+    db.session.commit()
+    return _share_view(board)
+
+
+def disable_share(actor, board_id):
+    board = _share_manager(actor, board_id)
+    if board.share_token is not None:
+        board.share_token = None
+        activity.add(to_uuid(actor.id), "board.share_disabled", "board", board.id, {"board_name": board.name})
+        db.session.commit()
+    return _share_view(board)

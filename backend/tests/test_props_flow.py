@@ -226,17 +226,12 @@ def test_property_28_guest_never_sees_comments_or_activity(client, who, fields):
     env = Env(client, "public")
     card = env.card()
     client.post(f"/api/cards/{card['id']}/comments", headers=env.h["manager"], json={"content": "c"})
-    body = client.get(f"/api/cards/{card['id']}{fields}", headers=env.h[who]).get_json()["data"]
-    board = client.get(f"/api/boards/{env.bid}{fields}", headers=env.h[who]).get_json()["data"]
-    cards = client.get(f"/api/boards/{env.bid}/cards{fields}", headers=env.h[who]).get_json()["data"]
     if who == "guest":
-        assert "comments" not in body and "activity" not in body
-        assert "comments" not in board and "activity_log" not in board and "activity" not in board
-        assert all("comments" not in c and "activity" not in c for c in cards)
-        for path in (f"/api/cards/{card['id']}/comments", f"/api/cards/{card['id']}/activity", f"/api/boards/{env.bid}/activity"):
+        for path in (f"/api/cards/{card['id']}", f"/api/cards/{card['id']}/comments", f"/api/cards/{card['id']}/activity", f"/api/boards/{env.bid}/activity", f"/api/boards/{env.bid}/cards"):
             r = client.get(path)
-            assert r.status_code == 403 and "data" not in r.get_json()
+            assert r.status_code == 401 and "data" not in r.get_json()
     else:
+        body = client.get(f"/api/cards/{card['id']}{fields}", headers=env.h[who]).get_json()["data"]
         assert "comments" in body and "activity" in body
 
 

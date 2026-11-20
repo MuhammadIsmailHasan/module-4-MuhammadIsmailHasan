@@ -12,6 +12,19 @@ from app.extensions import db, jwt, migrate
 REQUIRED_ENV = ("ALLOWED_ORIGINS", "JWT_SECRET", "FILE_URL_SECRET", "APP_TIMEZONE")
 
 
+def _int(env, name, default):
+    raw = (env.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a whole number") from exc
+    if value < 0:
+        raise RuntimeError(f"{name} must not be negative")
+    return value
+
+
 def _load_config(overrides):
     env = os.environ
     missing = [k for k in REQUIRED_ENV if not env.get(k, "").strip()]
@@ -37,6 +50,12 @@ def _load_config(overrides):
         "UPLOAD_DIR": env.get("UPLOAD_DIR") or "uploads",
         "ALLOWED_ORIGINS": origins,
         "APP_ENV": (env.get("APP_ENV") or "production").strip().lower(),
+        "RATE_LIMIT_WINDOW_SECONDS": _int(env, "RATE_LIMIT_WINDOW_SECONDS", 900),
+        "RATE_LIMIT_LOGIN_PAIR_MAX": _int(env, "RATE_LIMIT_LOGIN_PAIR_MAX", 5),
+        "RATE_LIMIT_LOGIN_IP_MAX": _int(env, "RATE_LIMIT_LOGIN_IP_MAX", 20),
+        "RATE_LIMIT_AVAILABILITY_MAX": _int(env, "RATE_LIMIT_AVAILABILITY_MAX", 60),
+        "RATE_LIMIT_CHANGE_PASSWORD_MAX": _int(env, "RATE_LIMIT_CHANGE_PASSWORD_MAX", 5),
+        "TRUSTED_PROXY_COUNT": _int(env, "TRUSTED_PROXY_COUNT", 0),
     }
     config.update(overrides)
     config.update(openapi_config(config["APP_ENV"]))
@@ -50,7 +69,12 @@ def create_app(config_overrides=None):
         raise RuntimeError("DATABASE_URL is required")
 
     # One app-wide CORS policy; no cookies are used, so credentials stay off.
-    CORS(app, origins=app.config["ALLOWED_ORIGINS"], supports_credentials=False)
+    CORS(app, origins=app.config["ALLOWED_ORIGINS"], supports_credentials=False, expose_headers=["Retry-After"])
+
+    if app.config["TRUSTED_PROXY_COUNT"] > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=app.config["TRUSTED_PROXY_COUNT"])
 
     db.init_app(app)
     from app import models  # noqa: F401  (register models for migrations)

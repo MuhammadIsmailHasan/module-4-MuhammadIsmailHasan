@@ -6,6 +6,8 @@ from helpers import PROP, RELATIONS, STAFF, UUID0, Env
 
 
 def can_access(rel, vis):
+    if rel == "guest":  # V10 (Decision K): a Guest reads nothing here; shared links use /api/shared
+        return False
     return vis == "public" or rel in {"manager", "admin", "owner", "sup_member", "member"}
 
 
@@ -91,12 +93,13 @@ def test_property_4_board_access_function(client, rel, vis, action):
 def test_property_5_401_vs_403_vs_404(client, rel, vis):
     env = Env(client, vis)
     # unknown or malformed ids are 404 for any caller who passes the role gate
+    expected = 401 if rel == "guest" else 404  # a Guest has no Token: 401 comes before any lookup (V10)
     for path in (f"/api/boards/{UUID0}", "/api/boards/not-a-uuid"):
         r = client.get(path, headers=env.h[rel])
-        assert r.status_code == 404
+        assert r.status_code == expected
     # a soft-deleted board is 404 for everyone, including its owner and managers
     client.delete(f"/api/boards/{env.bid}", headers=env.h["manager"])
-    assert client.get(f"/api/boards/{env.bid}", headers=env.h[rel]).status_code == 404
+    assert client.get(f"/api/boards/{env.bid}", headers=env.h[rel]).status_code == expected
     # no Token on a protected endpoint is 401, a Token without the role is 403
     assert client.get("/api/notifications").status_code == 401
     assert client.get("/api/users", headers=env.h["manager"]).status_code == 403
@@ -110,7 +113,11 @@ def test_property_34_board_list_visibility(client, rel, vis):
     other = client.post("/api/boards", headers=env.h["manager"], json={"name": "P", "visibility": "public"}).get_json()["data"]
     gone = client.post("/api/boards", headers=env.h["manager"], json={"name": "G", "visibility": "public"}).get_json()["data"]
     client.delete(f"/api/boards/{gone['id']}", headers=env.h["manager"])
-    ids = {b["id"] for b in client.get("/api/boards", headers=env.h[rel]).get_json()["data"]}
+    listing = client.get("/api/boards", headers=env.h[rel])
+    if rel == "guest":
+        assert listing.status_code == 401
+        return
+    ids = {b["id"] for b in listing.get_json()["data"]}
     expected = {other["id"]}
     if can_access(rel, vis):
         expected.add(env.bid)

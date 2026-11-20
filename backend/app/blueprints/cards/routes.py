@@ -60,7 +60,8 @@ def create_card(data, column_id):
 
 
 @bp.route("/cards/<card_id>", methods=["GET"])
-@endpoint(bp, "Get a card", "Guests may read public boards; comments and activity are omitted for Guests.", auth="optional")
+@endpoint(bp, "Get a card", "Requires board access.")
+@require_role(*USERS)
 @bp.response(200, envelope(CardSchema))
 def get_card(card_id):
     actor = current_actor()
@@ -115,19 +116,19 @@ def move(data, card_id):
 
 
 @bp.route("/cards/<card_id>/activity", methods=["GET"])
-@endpoint(bp, "Card activity", "Requires board access; Guests get 403. Paged with `limit` and `before`.", auth="optional")
+@endpoint(bp, "Card activity", "Requires board access. Paged with `limit` and `before`.")
+@require_role(*USERS)
 @bp.arguments(PageQuerySchema, location="query")
 @bp.response(200, envelope(ActivitySchema, many=True))
 def card_activity(page, card_id):
     actor = current_actor()
     card = service.get_card(actor, card_id)
-    if actor is None:
-        raise Forbidden("Activity is not available to guests")
     return ok(activity.serialize_many(activity.for_card(card.id, page["limit"], page.get("before"))))
 
 
 @bp.route("/boards/<board_id>/cards", methods=["GET"])
-@endpoint(bp, "Search and filter a board's cards", "Filters combine with AND; an unsupported filter[...] key returns 400. Soft-deleted cards are excluded.", auth="optional")
+@endpoint(bp, "Search and filter a board's cards", "Filters combine with AND; an unsupported filter[...] key returns 400. Soft-deleted cards are excluded.")
+@require_role(*USERS)
 @bp.arguments(BoardCardsQuerySchema, location="query")
 @bp.response(200, envelope(CardSchema, many=True))
 def board_cards(args, board_id):
@@ -182,7 +183,8 @@ def delete_attachment(attachment_id):
 
 
 @bp.route("/attachments/<attachment_id>/url", methods=["GET"])
-@endpoint(bp, "Issue a fresh signed file URL", "Re-checks board access; open to Guests on public boards. The URL is valid 15 minutes.", auth="optional")
+@endpoint(bp, "Issue a fresh signed file URL", "Re-checks board access. The URL is valid 15 minutes.")
+@require_role(*USERS)
 @bp.response(200, envelope(AttachmentUrlSchema))
 def attachment_url(attachment_id):
     return ok(service.attachment_url(current_actor(), attachment_id))
@@ -198,5 +200,5 @@ def attachment_url(attachment_id):
     responses={"200": {"description": "File bytes", "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}}},
 )
 def attachment_file(attachment_id):
-    path, att = service.attachment_file_path(attachment_id, request.args.get("exp"), request.args.get("sig"))
+    path, att = service.attachment_file_path(attachment_id, request.args.get("exp"), request.args.get("sig"), request.args.get("st"))
     return send_file(path, mimetype=att.mime_type, as_attachment=True, download_name=att.name)
