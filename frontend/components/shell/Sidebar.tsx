@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Bell, Home, LayoutGrid, LogIn, LogOut, Plus, Tags, UserCog, X, type LucideIcon } from "lucide-react";
+import { Activity, Bell, Home, LayoutGrid, LogIn, Plus, Tags, UserCog, X, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -14,8 +14,7 @@ import { BaseVisibility } from "@/components/shared/BaseVisibility";
 import { useDesktop } from "@/hooks/useDesktop";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { api } from "@/lib/api";
-import { clearSession } from "@/lib/session";
-import type { Board, User } from "@/lib/types";
+import type { Board, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { MemberSearch } from "./MemberSearch";
 import { NewBoardModal } from "./NewBoardModal";
@@ -88,7 +87,7 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const desktop = useDesktop();
   const [collapsed, toggleCollapsed] = useSidebarState();
-  const [members, setMembers] = useState<User[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [creating, setCreating] = useState(false);
   const [adding, setAdding] = useState(false);
   const [membersVersion, setMembersVersion] = useState(0);
@@ -112,16 +111,6 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
       live = false;
     };
   }, [boardId, membersVersion]);
-
-  async function logout() {
-    try {
-      await api.auth.logout();
-    } finally {
-      clearSession();
-      router.push("/login");
-      router.refresh();
-    }
-  }
 
   const search = boardId && <MemberSearch boardId={boardId} onAdded={() => { setAdding(false); setMembersVersion((v) => v + 1); }} />;
   const addButton = (
@@ -224,7 +213,7 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
                 <BaseAvatar name={m.full_name} size="md" />
                 <div className="min-w-0 flex-1">
                   <div className="text-meta font-medium break-words">{m.full_name}</div>
-                  <div className="truncate text-xs text-ink-muted">{m.login_identifier}</div>
+                  <div className="truncate text-xs text-ink-muted">{m.username}</div>
                 </div>
                 {canManageMembers && (
                   <BaseConfirm
@@ -254,11 +243,6 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
         )}
       </div>
 
-      {session && (
-        <div className="shrink-0 border-t border-line p-3">
-          <NavItem label={`Log out${user?.full_name ? ` (${user.full_name})` : ""}`} icon={LogOut} collapsed={collapsed} onClick={logout} />
-        </div>
-      )}
       <NewBoardModal open={creating} onClose={() => setCreating(false)} />
     </aside>
   );

@@ -1,5 +1,5 @@
 /** Server Component data access: forwards the Token cookie, redirects to login on 401. */
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ApiError, request } from "./http";
 import { TOKEN_COOKIE } from "./session";
@@ -13,7 +13,10 @@ export async function serverGet<T>(path: string, query?: Record<string, string |
   try {
     return await request<T>("GET", path, { token, query });
   } catch (err) {
-    if (err instanceof ApiError && err.httpStatus === 401 && token) redirect("/login");
+    if (err instanceof ApiError && err.httpStatus === 401) {
+      const back = (await headers()).get("x-return-path");
+      redirect(back ? `/session-expired?next=${encodeURIComponent(back)}` : "/session-expired");
+    }
     throw err;
   }
 }

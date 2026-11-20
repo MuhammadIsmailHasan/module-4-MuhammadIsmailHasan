@@ -7,7 +7,7 @@ import { useShell } from "@/components/shell/ShellContext";
 import { api } from "@/lib/api";
 import { ApiError } from "@/lib/http";
 import { computeDropOrder, needsRebalance } from "@/lib/ordering";
-import type { Board as BoardT, Card, Category, Comment, User } from "@/lib/types";
+import type { Board as BoardT, Card, Category, Comment, Member } from "@/lib/types";
 import { Board } from "./Board";
 import { BoardHeader } from "./BoardHeader";
 
@@ -22,7 +22,7 @@ export function BoardView({ board, initialCards, initialCategories }: BoardViewP
   const columns = board.columns ?? [];
   const [cards, setCards] = useState(initialCards);
   const [categories, setCategories] = useState(initialCategories);
-  const [members, setMembers] = useState<User[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);

@@ -1,12 +1,13 @@
 import { AuthForm } from "@/components/AuthForm";
 import { AuthSplitLayout } from "@/components/AuthSplitLayout";
 
-export const metadata = { title: "Log in · Kanban" };
+export const metadata = { title: "Log in · RevoTask" };
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const { next } = await searchParams;
   return (
     <AuthSplitLayout>
-      <AuthForm mode="login" />
+      <AuthForm mode="login" next={next} />
     </AuthSplitLayout>
   );
 }

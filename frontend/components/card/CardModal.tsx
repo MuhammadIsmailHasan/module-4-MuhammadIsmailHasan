@@ -10,7 +10,7 @@ import { useShell } from "@/components/shell/ShellContext";
 import { api, type CardInput } from "@/lib/api";
 import { isRangeValid } from "@/lib/dates";
 import { ApiError } from "@/lib/http";
-import type { Board, Card, Category, Column, Comment, Priority, User } from "@/lib/types";
+import type { Board, Card, Category, Column, Comment, Priority, Member } from "@/lib/types";
 import { CardActivity } from "./CardActivity";
 import { AttachmentList, type StagedAttachment } from "./AttachmentList";
 import { CardAttributes } from "./CardAttributes";
@@ -55,7 +55,7 @@ export function CardModal({ cardId, board, columns, categories, onClose, onChang
   const { session } = useShell();
   const [card, setCard] = useState<Card | null>(null);
   const [form, setForm] = useState<Form | null>(null);
-  const [members, setMembers] = useState<User[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [sort, setSort] = useState<CommentSort>("latest");
   const [comments, setComments] = useState<Comment[] | undefined>(undefined);
   const [errors, setErrors] = useState<Record<string, string[]>>({});

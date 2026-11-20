@@ -1,12 +1,23 @@
 export type Role = "member" | "supervisor" | "manager" | "admin";
 export type Priority = "high" | "medium" | "low";
 
+/** The signed-in user, and Admin user rows. */
 export interface User {
   id: string;
   full_name: string;
-  login_identifier: string;
+  username: string;
+  email: string;
   avatar_url: string | null;
   role?: Role;
+}
+
+/** A person as other users see them: never an email, except to board staff (members?include=email, candidates). */
+export interface Member {
+  id: string;
+  full_name: string;
+  username: string;
+  avatar_url: string | null;
+  email?: string;
 }
 
 export interface AuthResult {
@@ -127,4 +138,17 @@ export interface Analytics {
   in_progress: number;
   overdue: number;
   done_delta: number;
+}
+
+export interface SharedBoard {
+  id: string;
+  name: string;
+  description: string | null;
+  columns: Column[];
+  has_board_access: boolean;
+}
+
+/** A card as the Shared_View gets it: no comments or activity, assignee by name only. */
+export interface SharedCard extends Omit<Card, "comments" | "activity"> {
+  assignee_name: string | null;
 }

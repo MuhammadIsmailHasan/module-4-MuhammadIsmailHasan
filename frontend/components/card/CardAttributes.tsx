@@ -7,7 +7,7 @@ import { BaseButton } from "@/components/shared/BaseButton";
 import { BaseCombobox, type ComboOption } from "@/components/shared/BaseCombobox";
 import { BasePopover } from "@/components/shared/BasePopover";
 import { shortDate } from "@/lib/format";
-import type { Category, Priority, User } from "@/lib/types";
+import type { Category, Priority, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { DateRangePicker } from "./DateRangePicker";
 
@@ -23,7 +23,7 @@ interface CardAttributesProps {
   value: AttributeValues;
   onChange: (patch: Partial<AttributeValues>) => void;
   categories: Category[];
-  members: User[];
+  members: Member[];
   columnName?: string;
   /** May change category, priority, and dates. */
   canEdit: boolean;
@@ -87,7 +87,7 @@ export function CardAttributes({ value, onChange, categories, members, columnNam
     ...members.map((m) => ({
       value: m.id,
       label: m.full_name,
-      keywords: [m.login_identifier],
+      keywords: m.email ? [m.username, m.email] : [m.username],
       render: (
         <span className="flex items-center gap-2">
           <BaseAvatar name={m.full_name} />

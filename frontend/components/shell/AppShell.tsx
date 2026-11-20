@@ -1,13 +1,12 @@
 "use client";
 
-import { Bell, Menu } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { BaseButton } from "@/components/shared/BaseButton";
 import { api } from "@/lib/api";
-import { getSession, getStoredUser, type Session } from "@/lib/session";
+import { getSession, getStoredUser, storeUser, type Session } from "@/lib/session";
 import type { Board, Inbox, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { AppHeader } from "./AppHeader";
 import { ShellContext, type PanelView } from "./ShellContext";
 import { SidePanel } from "./SidePanel";
 import { Sidebar } from "./Sidebar";
@@ -40,6 +39,23 @@ export function AppShell({ boards, children }: { boards: Board[]; children: Reac
     if (session) void refreshInbox();
   }, [session, refreshInbox]);
 
+  // The stored user can be stale (a signed avatar URL lives 15 minutes), so load it fresh once per session.
+  useEffect(() => {
+    if (!session) return;
+    let live = true;
+    api.auth
+      .me()
+      .then((fresh) => {
+        if (!live) return;
+        storeUser(fresh);
+        setUser(fresh);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [session]);
+
   const toggleSidePanel = useCallback((view: PanelView) => setPanel((cur) => (cur === view ? null : view)), []);
   const state = useMemo(
     () => ({ session, user, boardId, inbox, refreshInbox, toggleSidePanel }),
@@ -49,7 +65,9 @@ export function AppShell({ boards, children }: { boards: Board[]; children: Reac
 
   return (
     <ShellContext.Provider value={state}>
-      <div className="relative flex h-screen overflow-hidden">
+      <div className="relative flex h-screen flex-col overflow-hidden">
+        <AppHeader board={current ?? null} drawerOpen={drawer} onToggleDrawer={() => setDrawer((d) => !d)} />
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <div
           aria-hidden="true"
           onClick={() => setDrawer(false)}
@@ -57,22 +75,10 @@ export function AppShell({ boards, children }: { boards: Board[]; children: Reac
         />
         <Sidebar boards={boards} open={drawer} onNavigate={() => setDrawer(false)} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {/* Persistent mobile header: menu, title, inbox. From lg the board header and sidebar carry these. */}
-          <header className="z-header flex min-h-touch shrink-0 items-center gap-2 border-b border-line bg-surface-raised px-2 py-1 lg:hidden">
-            <BaseButton variant="secondary" size="sm" className="size-control-sm" aria-label="Open menu" aria-expanded={drawer} onClick={() => setDrawer((d) => !d)}>
-              <Menu aria-hidden="true" />
-            </BaseButton>
-            <h1 className="min-w-0 flex-1 py-1 text-heading font-semibold break-words">{current?.name ?? "Boards"}</h1>
-            {session && (
-              <BaseButton variant="secondary" size="sm" className="relative size-control-sm" aria-label="Open inbox" onClick={() => toggleSidePanel("inbox")}>
-                <Bell aria-hidden="true" />
-                {!!inbox?.unread_count && <span className="absolute -top-1 -right-1 size-alert-dot rounded-full border border-surface-raised bg-danger" />}
-              </BaseButton>
-            )}
-          </header>
           <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">{children}</main>
         </div>
         <SidePanel view={panel} onClose={() => setPanel(null)} />
+        </div>
       </div>
     </ShellContext.Provider>
   );

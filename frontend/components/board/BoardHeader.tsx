@@ -1,20 +1,17 @@
 "use client";
 
-import { Bell, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useState } from "react";
-import { BaseAvatar } from "@/components/shared/BaseAvatar";
 import { BaseButton } from "@/components/shared/BaseButton";
 import { BaseInput } from "@/components/shared/BaseField";
 import { BaseModal } from "@/components/shared/BaseModal";
-import { BaseVisibility } from "@/components/shared/BaseVisibility";
-import { useShell } from "@/components/shell/ShellContext";
-import type { Board, Card, Category, User } from "@/lib/types";
+import type { Board, Card, Category, Member } from "@/lib/types";
 import { FilterRow } from "./FilterRow";
 
 interface BoardHeaderProps {
   board: Board;
   cards: Card[];
-  members: User[];
+  members: Member[];
   categories: Category[];
   categoryId: string | null;
   search: string;
@@ -22,9 +19,8 @@ interface BoardHeaderProps {
   onCategory: (id: string | null) => void;
 }
 
-/** One row: board name and progress, the category filter, then search, the Inbox bell, and the signed-in user. */
+/** The Board's second row: progress, the category filter, and search. The name, Share, bell and User menu live in the App_Header. */
 export function BoardHeader({ board, cards, categories, categoryId, search, onSearch, onCategory }: BoardHeaderProps) {
-  const { session, user, inbox, toggleSidePanel } = useShell();
   const [searching, setSearching] = useState(false);
   const doneId = board.columns?.find((c) => c.name === "Done")?.id;
   const done = doneId ? cards.filter((c) => c.column_id === doneId).length : 0;
@@ -41,23 +37,6 @@ export function BoardHeader({ board, cards, categories, categoryId, search, onSe
 
   return (
     <header className="relative z-header flex shrink-0 flex-col gap-3 border-b border-line bg-surface-raised px-4 py-3 lg:px-8">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <BaseVisibility visibility={board.visibility} className="size-icon text-ink-muted" />
-          <h1 className="min-w-0 text-page-title font-semibold break-words">{board.name}</h1>
-        </div>
-        {session && (
-          <div className="hidden items-center gap-2 lg:flex">
-            <BaseButton variant="ghost" size="sm" className="relative size-control px-0" aria-label="Notifications" onClick={() => toggleSidePanel("inbox")}>
-              <Bell aria-hidden="true" />
-              {!!inbox?.unread_count && <span aria-hidden="true" className="absolute top-2 right-2 size-alert-dot rounded-full border border-surface-raised bg-danger" />}
-            </BaseButton>
-            <BaseAvatar name={user?.full_name ?? "Signed in"} size="md" />
-            <span className="text-sm font-medium whitespace-nowrap">{user?.full_name ?? "Signed in"}</span>
-          </div>
-        )}
-      </div>
-
       <div className="flex flex-wrap items-stretch gap-3 lg:flex-nowrap">
         <section aria-label="Progress" className={`${section} shrink-0 gap-3`}>
           <span className="text-xs whitespace-nowrap text-ink-muted">

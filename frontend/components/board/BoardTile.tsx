@@ -2,13 +2,13 @@ import { AlertTriangle, LayoutList, Users } from "lucide-react";
 import Link from "next/link";
 import { BaseAvatar } from "@/components/shared/BaseAvatar";
 import { BaseVisibility } from "@/components/shared/BaseVisibility";
-import type { Board, User } from "@/lib/types";
+import type { Board, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const AVATARS = 3;
 
 /** A board on Home: name and visibility, description, progress, counts, and a few members. */
-export function BoardTile({ board, members }: { board: Board; members: User[] }) {
+export function BoardTile({ board, members }: { board: Board; members: Member[] }) {
   const cards = board.card_count ?? 0;
   const done = board.done_count ?? 0;
   const overdue = board.overdue_count ?? 0;

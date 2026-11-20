@@ -2,6 +2,11 @@
 
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000/api").replace(/\/$/, "");
 
+/** A backend-relative path such as /api/users/{id}/avatar/file made absolute against the API host. */
+export function apiAsset(path: string): string {
+  return path.startsWith("/") ? `${new URL(API_URL).origin}${path}` : path;
+}
+
 export type Details = Record<string, string[]>;
 
 export class ApiError extends Error {
@@ -10,6 +15,7 @@ export class ApiError extends Error {
     public code: string,
     message: string,
     public details?: Details,
+    public retryAfter?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -55,8 +61,18 @@ export async function request<T>(method: string, path: string, opts: RequestOpti
     status?: boolean;
     message?: string;
     data?: T;
-    error?: { code?: string; details?: Details };
+    error?: { code?: string; details?: Record<string, unknown> };
   };
   if (env.status === true) return env.data as T;
-  throw new ApiError(res.status, env.error?.code ?? "ERROR", env.message ?? "Request failed", env.error?.details);
+  const raw = env.error?.details ?? {};
+  const retry = Number(raw.retry_after ?? res.headers?.get?.("Retry-After"));
+  const fields: Details = {};
+  for (const [key, value] of Object.entries(raw)) if (Array.isArray(value)) fields[key] = value.map(String);
+  throw new ApiError(
+    res.status,
+    env.error?.code ?? "ERROR",
+    env.message ?? "Request failed",
+    Object.keys(fields).length ? fields : undefined,
+    Number.isFinite(retry) && retry > 0 ? retry : undefined,
+  );
 }

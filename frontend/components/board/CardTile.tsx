@@ -3,7 +3,7 @@ import { BaseAvatar } from "@/components/shared/BaseAvatar";
 import { BaseBadge, type BadgeTone } from "@/components/shared/BaseBadge";
 import { shortDate } from "@/lib/format";
 import { categoryTone } from "@/lib/tones";
-import type { Card, Category, Priority, User } from "@/lib/types";
+import type { Card, Category, Priority, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const PRIORITY_TONE: Record<Priority, BadgeTone> = { high: "red", medium: "orange", low: "green" };
@@ -11,7 +11,7 @@ const PRIORITY_TONE: Record<Priority, BadgeTone> = { high: "red", medium: "orang
 interface CardTileProps {
   card: Card;
   category?: Category;
-  assignee?: User;
+  assignee?: Member;
   overdue: boolean;
   draggable: boolean;
   onOpen: () => void;

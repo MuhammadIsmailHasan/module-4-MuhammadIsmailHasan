@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CardModal } from "@/components/card/CardModal";
 import { ShellContext } from "@/components/shell/ShellContext";
-import type { Board, Card, User } from "@/lib/types";
+import type { Board, Card, Member } from "@/lib/types";
 
 const card: Card = {
   id: "c1",
@@ -22,7 +22,7 @@ const card: Card = {
   comments: [{ id: "m1", card_id: "c1", author_id: "u9", author_name: "Manager Name", parent_id: null, content: "Hello", is_priority: false, reply_count: 0, created_at: "2026-11-19T10:00:00Z", can_create_card: false, replies: [] }],
   activity: [{ id: "x1", actor_id: "u9", actor_name: "Manager Name", action: "card.moved", target_type: "card", target_id: "c1", metadata: null, created_at: "2026-11-19T10:00:00Z" }],
 };
-const members: User[] = [{ id: "u1", full_name: "Member One", login_identifier: "one@example.com", avatar_url: null }];
+const members: Member[] = [{ id: "u1", full_name: "Member One", username: "memberone", email: "one@example.com", avatar_url: null }];
 
 vi.mock("@/lib/api", () => ({
   api: {

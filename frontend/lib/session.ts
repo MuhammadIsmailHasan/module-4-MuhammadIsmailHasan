@@ -36,6 +36,14 @@ export function setSession(token: string, user?: User): void {
   }
 }
 
+export function storeUser(user: User): void {
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export function getToken(): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie.split("; ").find((c) => c.startsWith(`${TOKEN_COOKIE}=`));

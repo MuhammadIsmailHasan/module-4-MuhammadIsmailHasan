@@ -7,7 +7,7 @@ import { BaseInput } from "@/components/shared/BaseField";
 import { useFlip } from "@/hooks/useFlip";
 import { dropIndex } from "@/lib/ordering";
 import { columnTone, SOLID } from "@/lib/tones";
-import type { Card, Category, Column, User } from "@/lib/types";
+import type { Card, Category, Column, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CardTile } from "./CardTile";
 
@@ -15,7 +15,7 @@ interface BoardProps {
   columns: Column[];
   cards: Card[];
   categories: Category[];
-  members: User[];
+  members: Member[];
   canMove: boolean;
   canCreate: boolean;
   onOpen: (card: Card) => void;

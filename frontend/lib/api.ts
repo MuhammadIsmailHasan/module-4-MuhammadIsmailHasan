@@ -14,6 +14,9 @@ import type {
   Inbox,
   Notification,
   Priority,
+  Member,
+  SharedBoard,
+  SharedCard,
   Subtask,
   User,
 } from "./types";
@@ -53,9 +56,14 @@ export interface PageQuery {
   before?: string;
 }
 
-export interface Candidate {
-  id: string;
-  full_name: string;
+export interface Candidate extends Member {
+  email: string;
+}
+
+export interface ShareState {
+  enabled: boolean;
+  token: string | null;
+  path: string | null;
 }
 
 export interface CardFilters {
@@ -67,11 +75,38 @@ export interface CardFilters {
 
 export const api = {
   auth: {
-    register: (body: { full_name: string; login_identifier: string; password: string }) =>
+    register: (body: { full_name: string; username: string; email: string; password: string }) =>
       request<AuthResult>("POST", "/auth/register", { body }),
-    login: (body: { login_identifier: string; password: string }) =>
-      request<AuthResult>("POST", "/auth/login", { body }),
-    logout: () => post<null>("/auth/logout"),
+    login: (body: { identifier: string; password: string }) => request<AuthResult>("POST", "/auth/login", { body }),
+    availability: (q: { username?: string; email?: string }) =>
+      request<{ username?: { available: boolean }; email?: { available: boolean } }>("GET", "/auth/availability", { query: q }),
+    me: () => get<User>("/auth/me"),
+    updateMe: (body: { full_name: string }) => patch<User>("/auth/me", body),
+    changePassword: (body: { current_password: string; new_password: string }) => post<null>("/auth/change-password", body),
+    uploadAvatar: (file: File) => {
+      const form = new FormData();
+      form.set("file", file);
+      return call<User>("POST", "/users/me/avatar", { form });
+    },
+    removeAvatar: () => del<User>("/users/me/avatar"),
+    /** Always clears the session and goes to /login, even when the call fails (Req 1.34). */
+    logout: async () => {
+      try {
+        await request<null>("POST", "/auth/logout", { token: getToken() });
+      } catch {
+        /* the Token is discarded on the client either way */
+      }
+      clearSession();
+      if (typeof window !== "undefined") window.location.assign("/login");
+    },
+  },
+  shared: {
+    board: (token: string) => request<SharedBoard>("GET", `/shared/${token}`, { token: getToken() }),
+    cards: (token: string, f: { search?: string; category?: string } = {}) =>
+      request<SharedCard[]>("GET", `/shared/${token}/cards`, { query: { search: f.search, "filter[category]": f.category } }),
+    categories: (token: string) => request<Category[]>("GET", `/shared/${token}/categories`),
+    attachmentUrl: (token: string, id: string) =>
+      request<{ file_url: string | null; expires_at: string | null }>("GET", `/shared/${token}/attachments/${id}/url`),
   },
   boards: {
     list: () => get<Board[]>("/boards"),
@@ -79,12 +114,16 @@ export const api = {
     create: (body: { name: string; visibility?: "public" | "private"; description?: string }) => post<Board>("/boards", body),
     update: (id: string, body: { name?: string; visibility?: string; owner_id?: string | null }) =>
       patch<Board>(`/boards/${id}`, body),
-    members: (id: string) => get<User[]>(`/boards/${id}/members`),
-    addMember: (id: string, userId: string) => post<User>(`/boards/${id}/members`, { user_id: userId }),
+    members: (id: string, withEmail = false) => get<Member[]>(`/boards/${id}/members`, { include: withEmail ? "email" : undefined }),
+    addMember: (id: string, userId: string) => post<Member>(`/boards/${id}/members`, { user_id: userId }),
     removeMember: (id: string, userId: string) => del<null>(`/boards/${id}/members/${userId}`),
     activity: (id: string, page: PageQuery = {}) => get<ActivityEntry[]>(`/boards/${id}/activity`, pageQuery(page)),
     candidates: (id: string, search: string) => get<Candidate[]>(`/boards/${id}/candidates`, { search: search || undefined }),
     addColumn: (id: string, name: string) => post<Column>(`/boards/${id}/columns`, { name }),
+    share: (id: string) => get<ShareState>(`/boards/${id}/share`),
+    enableShare: (id: string) => post<ShareState>(`/boards/${id}/share`),
+    regenerateShare: (id: string) => post<ShareState>(`/boards/${id}/share/regenerate`),
+    disableShare: (id: string) => del<ShareState>(`/boards/${id}/share`),
   },
   cards: {
     listForBoard: (boardId: string, f: CardFilters = {}) =>
@@ -144,9 +183,9 @@ export const api = {
   },
   users: {
     list: () => get<(User & { role: string })[]>("/users"),
-    create: (body: { full_name: string; login_identifier: string; password: string; role: string }) =>
+    create: (body: { full_name: string; username: string; email: string; password: string; role: string }) =>
       post<User>("/users", body),
-    update: (id: string, body: { full_name?: string; login_identifier?: string; role?: string }) =>
+    update: (id: string, body: { full_name?: string; username?: string; email?: string; role?: string }) =>
       patch<User>(`/users/${id}`, body),
   },
 };

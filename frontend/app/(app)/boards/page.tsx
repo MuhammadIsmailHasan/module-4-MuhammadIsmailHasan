@@ -2,7 +2,7 @@ import { AnalyticsStrip } from "@/components/board/AnalyticsStrip";
 import { BoardTile } from "@/components/board/BoardTile";
 import { decodeToken } from "@/lib/session";
 import { serverGet, serverToken } from "@/lib/server";
-import type { Analytics, Board, User } from "@/lib/types";
+import type { Analytics, Board, Member } from "@/lib/types";
 
 /** Totals for the analytics strip: a Manager sees every board, a Supervisor only the boards they own; others get none. */
 async function analyticsFor(boards: Board[]): Promise<Analytics[] | null> {
@@ -24,7 +24,7 @@ async function analyticsFor(boards: Board[]): Promise<Analytics[] | null> {
 export default async function BoardsHome() {
   const boards = await serverGet<Board[]>("/boards");
   const [members, analytics] = await Promise.all([
-    Promise.all(boards.map((b) => serverGet<User[]>(`/boards/${b.id}/members`).catch(() => [] as User[]))),
+    Promise.all(boards.map((b) => serverGet<Member[]>(`/boards/${b.id}/members`).catch(() => [] as Member[]))),
     analyticsFor(boards),
   ]);
   return (
