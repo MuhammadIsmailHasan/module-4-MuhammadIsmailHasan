@@ -2,8 +2,9 @@
 
 ## Overview
 
-Version V8. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+Version V10. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
 
+V10 adds group 33 (Decisions K to P): the V10 migration (username, email, share token, rate-limit table), identity changes, the Rate_Limiter, share links and the shared routes, the Guest change (no public browsing), the profile endpoints, the App_Header with the User_Menu, the Profile_Page and Email_Prompt, the route guard `proxy.ts`, the Share button and Shared_View, and the update of the V9 Playwright suite. No existing task is renumbered, and no ticked box changes: ticked tasks describe what was built under V9 (for example `login_identifier`, Guest access to public Boards, the Sidebar Log out item) and group 33 changes that behaviour.
 V6 applies Decision G to the envelope. `status` is a boolean, true exactly when the HTTP status is 2xx; the numeric HTTP status travels on the HTTP line only. A success body is `{ "status": true, "message", "data" }`. An error body is `{ "status": false, "message", "error": { "code", "details"? } }`: the message text appears once at the top level, `error` has no `message` field, and `error.details` (field name to list of messages) appears only for `VALIDATION_ERROR`. Mutating endpoints pass a short descriptive message (for example "Card moved"); reads default to "OK". V6 edits tasks 1.2, 3.2, 8.1, 14.4, 15.3, 23.3, 24.1, 24.2, and 24.3 and the Notes. Existing checkbox states are unchanged; tasks already ticked that quote the old envelope are brought to the V6 shape by group 24.
 
 V5 adds group 25, which adds the five SQLAlchemy relationships with `lazy="raise"` and moves related-row loading into the repositories with `selectinload` (Decision F). Group 25 runs after group 24 (the marshmallow schemas replace the DTO functions) and before the checkpoint 14.6 and the frontend group 15. It needs no database migration. Existing checkbox states are unchanged.
@@ -603,7 +604,159 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [ ] 31.5 Checkpoint - Run backend and frontend tests and `next build`
     - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass, run the migration on the dev database, then check the header, Home, and the card modal in a browser at desktop and phone width; ask the user if questions arise.
 
+- [ ] 32. Auth end-to-end tests: sign-in and sign-out (V9)
+  - [ ] 32.1 Set up Playwright for the deployed URL
+    - Add `@playwright/test` as a dev dependency (skip if task 20.1 already did), `frontend/playwright.config.ts` (`testDir: "tests/e2e"`, `baseURL` from `E2E_BASE_URL`, no `webServer`), and a `test:e2e` script.
+    - Add `E2E_BASE_URL=`, `E2E_USER_IDENTIFIER=`, and `E2E_USER_PASSWORD=` to `frontend/.env.example`; confirm no real `.env` is tracked.
+    - _Requirements: 15.10, 15.11, 15.13_
+  - [ ] 32.2 Write the Auth_Page_Object and the environment helper (V9 form; V10 revises it in 33.22)
+    - `frontend/tests/e2e/auth/pages/AuthPage.ts` (locators and actions; `signOut()` opens the drawer below 960 pixels) and `frontend/tests/e2e/auth/env.ts` (throws an error naming the missing variable).
+    - _Requirements: 15.10, 15.11, 15.12, 15.15_
+  - [ ] 32.3 Write `signin.spec.ts` (V9 form; V10 revises it in 33.23)
+    - One test per ID: SI-01 to SI-05 (happy) and SI-06 to SI-10 (negative), titles starting with the ID; the 256-character identifier and the password-hygiene checks included.
+    - _Requirements: 1.19, 1.20, 1.21, 1.22, 1.23, 1.24, 1.25, 1.26, 1.27, 1.28, 1.37, 15.14_
+  - [ ] 32.4 Write `signout.spec.ts` (V9 form; V10 revises it in 33.24)
+    - One test per ID: SO-01, SO-02, SO-04 (happy), SO-06, SO-07, SO-08 (negative, with `page.route`), and SO-03, SO-05 as `test.fixme` until Open Question 5 is decided.
+    - _Requirements: 1.29, 1.30, 1.31, 1.32, 1.33, 1.34, 1.35, 1.36, 1.37, 1.38, 15.14_
+  - [ ]* 32.5 Write static checks for the suite
+    - A CI step that fails when `waitForTimeout` appears under `frontend/tests/e2e/`, when a credential-like literal appears in `tests/e2e/auth/`, or when a criterion ID in Req 1.19 to 1.36 has no test title (extends 20.2).
+    - _Requirements: 1.37, 15.3, 15.11, 15.14_
+  - [ ] 32.6 Checkpoint - Run the suite against the deployed URL
+    - Run `npm run test:e2e` with the three variables set; confirm all non-fixme tests pass and report the two `fixme` tests.
+- [ ] 33. Share links, username and email, header menu, rate limiting, route guard (Decisions K to P, V10)
+  - [ ] 33.1 Update the models and write the V10 migration
+    - Models: `User` gets `username` (String(30), lower-case) and `email` (String(255), lower-case, nullable in the database) and loses `login_identifier`; `Board` gets nullable `share_token` (String(64)); new `RateLimitAttempt` (`scope` in `login_pair`, `login_ip`, `availability`, with no `register` value; `key_hash`; `created_at`; index `(scope, key_hash, created_at)`). The avatar column change is part 4 of the same revision, written in 33.28.
+    - One Alembic revision `b7d2e4f6a801` in three parts: users (add columns, Python backfill in `created_at, id` order with the two passes and `derive_username` of the design, unique indexes on `lower(username)` and `lower(email)`, `username` NOT NULL, drop the old index and `login_identifier`), boards (`share_token` plus partial unique index), and the table. Print one line per derived or sanitized Username. Write `downgrade()` as in the design.
+    - Run it on a copy of the dev database first and keep a dump.
+    - _Requirements: 1.43, 1.52, 18.1, 20.9, 20.12_
+  - [ ]* 33.2 Write the migration and constraint tests
+    - **Property 45: Migration backfill**
+    - Generated legacy rows (email-shaped, username-shaped, other, in any order, with collisions); assert valid and unique Usernames, `email` rules, idempotence, and that downgrade restores a `login_identifier`; integration tests for the two functional unique indexes (case-insensitive, two null Emails allowed) and the unique `share_token`.
+    - **Validates: Requirements 1.43, 1.52, 15.18**
+  - [ ] 33.3 Implement the identity changes in the auth and users blueprints
+    - `common/validation.py`: `normalize_username`, `normalize_email`, `is_email_shape`, `classify_identifier`, `USERNAME_RE`.
+    - `auth`: register with `username` and `email` (field-level 400, 409 with `details` per field, `IntegrityError` mapped to the same 409), login with `identifier` (classification, one generic 401, dummy hash for unknown users), `GET /auth/availability`, the `{ id, full_name, username, email, avatar_url }` user shape; `users` create and edit accept the two fields; `GET /boards/{id}/candidates` matches `full_name`, `username` prefix, `email` exact (the response carries `email` from round 2, built in 33.35); update `app/seed.py`.
+    - Update the existing backend tests that used `login_identifier`.
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.44, 1.45, 1.46, 1.47, 1.48, 1.49, 1.54, 3.25_
+  - [ ]* 33.4 Write the identity property tests
+    - **Property 1: Registration and login round trip** (revised), **Property 2: Registration validation and unique username and email** (revised), **Property 42: Login identifier classification**, **Property 43: Username and Email normalisation and uniqueness**
+    - **Validates: Requirements 1.1 to 1.5, 1.43 to 1.49**
+  - [ ] 33.5 Implement the Rate_Limiter and wire it into login and availability (not register, Decision Q)
+    - `common/rate_limiter.py` (pure `blocked_until`, store with advisory lock and separate-commit failure record, `check_login`, `record_login_failure`, `reset_pair`, `hit` for availability only), `RateLimited` (429, `RATE_LIMITED`, `details.retry_after`), `Retry-After` header in `EnvelopeApi`, CORS `expose_headers`, `ProxyFix` from `TRUSTED_PROXY_COUNT`, the five settings in config (`RATE_LIMIT_WINDOW_SECONDS`, `RATE_LIMIT_LOGIN_PAIR_MAX`, `RATE_LIMIT_LOGIN_IP_MAX`, `RATE_LIMIT_AVAILABILITY_MAX`, `TRUSTED_PROXY_COUNT`; no `RATE_LIMIT_REGISTER_MAX`), `create_app(config_overrides)`, and `backend/.env.example` placeholders. `auth_service.register` makes no limiter call (Req 20.18).
+    - Routes pass `client_ip` to the service; services stay free of Flask imports.
+    - _Requirements: 20.1 to 20.14, 20.17, 13.3, 13.11_
+  - [ ]* 33.6 Write the Rate_Limiter tests
+    - **Property 44: Rate limit window** (fake clock, small thresholds through `create_app`, PostgreSQL, two app instances on one table); example tests for the 429 body and header, a blocked correct password, success reset, independent pairs, and that register is never answered with 429 (Req 20.18).
+    - **Validates: Requirements 20.1 to 20.14, 15.16**
+  - [ ] 33.7 Implement the profile endpoints
+    - `GET /auth/me`, `PATCH /auth/me` (`unknown=RAISE`, so `avatar_url` returns 400; email only while null, 409 `details.email`), `POST /auth/change-password` (400 `details.current_password`), one Activity_Log row per success with no secret in `metadata`.
+    - _Requirements: 19.8 to 19.16_
+  - [ ]* 33.8 Write the profile property test
+    - **Property 46: Profile update rules**
+    - **Validates: Requirements 19.9 to 19.16**
+  - [ ] 33.9 Remove Guest access to Boards
+    - `can_access(None, board)` returns false; `GET /boards` without a Token returns 401; remove the Guest branches in board, card, column, category, comment, activity, search, and attachment services and serializers (a Guest gets 401 everywhere outside `/api/shared`; the comment endpoints return 401 instead of 403 on a public Board); update `list_visible`.
+    - Update the existing tests that expected Guest access (tasks 4, 5, 7, 8, 9, 12, 14.1 fixtures).
+    - _Requirements: 7.16, 8.5, 11.4, 11.5, 11.7, 11.12, 11.13, 12.6, 12.7, 13.10, 14.3_
+  - [ ] 33.10 Implement the share endpoints
+    - `board_service.get_share`, `enable_share`, `regenerate_share`, `disable_share`; routes `GET`, `POST`, `POST .../regenerate`, `DELETE` under `/boards/{id}/share`; owner, Manager, Admin only; one activity row per change, no token in `metadata`.
+    - _Requirements: 18.1 to 18.8_
+  - [ ] 33.11 Implement the `shared` blueprint and token-scoped file URLs
+    - `blueprints/shared/` with `routes.py`, `service.py`, `repository.py`, `schema.py` (board, cards, categories, card detail, attachment URL; GET only; shared schemas without comments, activity, owner, members, token; `has_board_access` from an optional Bearer; `Cache-Control: private, no-store`); extend `common/signing.py` with the `scope` and `st` parameter and the file route check against the Board's current token.
+    - _Requirements: 18.9 to 18.19, 12.6, 6.6, 4.26_
+  - [ ]* 33.12 Write the share and guest tests
+    - **Property 40: Share_Token lifecycle**, **Property 41: Shared routes stay inside the token's board**, **Property 28: Guest responses never include comments or activity** (revised), **Property 34: Board list visibility** (revised), **Property 4** and **Property 5** (revised); a static test that `/api/shared` has no non-GET route and no comment or activity route.
+    - **Validates: Requirements 18.1 to 18.17, 7.16, 8.5, 11.4 to 11.7, 11.13, 15.17**
+  - [ ] 33.13 Update the generated OpenAPI document and `backend/API.md`
+    - Document the new and changed endpoints, the 429 response, the `identifier` field, and the user shape; run `flask export-openapi`; keep the "every route is documented" test (Property 37) green.
+    - _Requirements: 17.1, 17.2, 17.3_
+  - [ ] 33.14 Update the Frontend API client and helpers
+    - `lib/api.ts`: `ApiError.retryAfter`, no redirect on a 401 from `POST /auth/login`, `api.auth` (`login` with `identifier`, `register`, `availability`, `me`, `updateMe`, `changePassword`, `logout` that always clears the cookie and navigates), `api.shared`; `lib/validation.ts` (`classifyIdentifier`, `isUsername`, `isEmail`); `hooks/useCountdown.ts`; update the `User` type.
+    - _Requirements: 1.50, 1.51, 19.4, 20.15_
+  - [ ]* 33.15 Write the helper tests
+    - fast-check parity of `classifyIdentifier` with the Backend cases (Property 42); `useCountdown` ticks to zero with fake timers.
+    - **Validates: Requirements 1.51, 20.15**
+  - [ ] 33.16 Rebuild the login and register forms
+    - Login: one "Username or email" field, email-or-username validation by `@`, Generic_Login_Error, countdown and disabled submit on 429. Register: full name, Username, Email, password; availability on blur (silent when blocked); field errors from `error.details`; no 429 handling for register (Decision Q), and a 429 on the availability check silently stops the on-blur checks.
+    - _Requirements: 1.50, 1.51, 20.15, 20.16, 1.9, 1.10_
+  - [ ] 33.17 Build `BaseMenu`, the App_Header, and the User_Menu
+    - Add `@radix-ui/react-dropdown-menu`, `components/ui/dropdown-menu.tsx`, and `components/shared/BaseMenu.tsx`; `AppHeader` and `UserMenu` in `(app)/layout.tsx`; move the Board header's first row into the App_Header slot; remove the profile entry and Log out item from the Sidebar; keep the Inbox bell and the Sidebar toggle.
+    - _Requirements: 19.1 to 19.7, 14.10, 3.23_
+  - [ ] 33.18 Build the Profile_Page and the Email_Prompt
+    - `(app)/profile/page.tsx` with the full name field, the avatar section (`AvatarUploader`, built in 33.31), the read-only fields, and the change-password form; `EmailPrompt` mounted by the layout while `user.email` is null.
+    - _Requirements: 19.8 to 19.17, 1.53_
+  - [ ] 33.19 Add the route guard
+    - `frontend/proxy.ts` with the matcher for `/boards`, `/profile`, `/admin`; leave `/login`, `/register`, `/shared` open; a unit test per path. Round 2 extends this file in 33.33 (unusable cookie, cookie removal, `x-return-path`).
+    - _Requirements: 14.27_
+  - [ ] 33.20 Build the Share button and the Shared_View
+    - `ShareButton` popover (enable, link and Copy, Regenerate and Disable behind `BaseConfirm`); `app/shared/[token]/page.tsx` with `SharedBoard` and `SharedCardModal` (read-only, banner, Sign in link, invalid-link page); redirect when `has_board_access`; `no-referrer` and `noindex` headers in `next.config.ts`; remove any Guest-facing board browsing from `/boards`.
+    - _Requirements: 18.19 to 18.23, 3.23_
+  - [ ]* 33.21 Write the component tests
+    - The V10 component tests listed in the design's Frontend tests section.
+    - **Validates: Requirements 14.27, 18.21, 18.22, 19.2, 19.5, 19.13**
+  - [ ] 33.22 Update the Auth_Page_Object and the environment helper for V10
+    - New locators (`Username or email`, `User menu`, Profile and Log out menu items, Sidebar), `openUserMenu()`, `signOut()` through the menu with no drawer step, `waitTimeText`; `env.ts` unchanged apart from comments.
+    - _Requirements: 15.10, 15.11, 15.12, 15.15_
+  - [ ] 33.23 Update `signin.spec.ts` for V10
+    - Signed-in indicator is the User_Menu_Trigger; SI-07 uses a Throwaway_Identifier; SI-08, SI-09 assert no request is sent; add SI-11 (rate limit, up to 10 attempts, Throwaway_Identifier, never the Test_Account) and SI-12 (email shape).
+    - _Requirements: 1.19 to 1.28, 1.39, 1.40, 1.37, 15.14, 15.19_
+  - [ ] 33.24 Update `signout.spec.ts` for V10
+    - Sign-out through the menu; SO-03 and SO-05 become real tests (no `test.fixme`); SO-04 ends on `/login`; add SO-09 (menu order) and SO-10 (no Sidebar Log out or Profile).
+    - _Requirements: 1.29 to 1.36, 1.41, 1.42, 1.37, 1.38, 15.14_
+  - [ ]* 33.25 Update the static checks for the suite
+    - The CI step covers IDs in criteria 19 to 36, 39 to 42, 55, and 56, no `waitForTimeout`, no credential-like literal, and no `test.fixme` left in `tests/e2e/auth/`.
+    - _Requirements: 1.37, 15.3, 15.11, 15.14_
+  - [x] 33.26 Sync steering and guidelines to V10
+    - Updated in this revision: `product.md`, `data-model.md`, `api-conventions.md`, `backend.md`, `frontend.md`, `structure.md`, `tech.md`, and `guidelines/` where they contradicted V10 (see CHANGELOG V10, "Steering and guidelines").
+    - _Requirements: 14.10, 13.3, 11.4_
+  - [ ] 33.27 Checkpoint - Run backend and frontend tests, the build, and the suite
+    - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass, run the migration on a copy of the dev database, run `npm run test:e2e` against the deployed URL with the three variables set, and check the risk recorded for SI-11: set `RATE_LIMIT_LOGIN_IP_MAX` above 20 on the test environment or run the suite once per window. Ask the user if questions arise.
+- [ ] 33.28 Extract the file store, add `detect_image_type`, and write migration part 4 (avatar) (Decision R)
+  - `common/file_store.py` (`FileStore(upload_dir)`: `save`, `delete`, `path`, bare-name check) extracted from the inline code in `cards/service.py` (write, `os.remove`, file route path); attachments call it with `subdir=""`, behaviour unchanged. `common/images.py` with `MAX_AVATAR_BYTES` and `detect_image_type`. `common/signing.py` takes `scope` and a route name (shared with 33.11) so the avatar scope reuses the one signing and verification code. `User.avatar_path` (String(64), nullable) replaces `avatar_url`; add part 4 to revision `b7d2e4f6a801` (add column, print and drop the old non-null `avatar_url` values, drop the column; `downgrade()` re-adds `avatar_url` empty). Create `UPLOAD_DIR/avatars/` on first write.
+  - Risks to record in the PR: Werkzeug buffers the multipart body (cap the body at the reverse proxy, about 3 MB); the file keeps EXIF data and no image library re-encodes it.
+  - _Requirements: 19.21, 19.24, 13.14, 1.6_
+- [ ] 33.29 Implement the avatar endpoints (Decision R)
+  - `auth_service.set_avatar`, `clear_avatar`, `open_avatar`; routes `POST` and `DELETE /auth/me/avatar` and `GET /auth/avatars/{user_id}/file`; `user_repository.get_for_update`; write-commit-delete order with cleanup on failure; `UserSchema.avatar_url` as a signed-URL method that is null without a file; one `user.profile_updated` row with `{ "fields": ["avatar"] }`; remove `avatar_url` from the `PATCH /auth/me` and admin `POST|PATCH /users` schemas (400); response headers `nosniff`, `inline`, `Cache-Control: private, max-age=300`; update the OpenAPI document and `backend/API.md`.
+  - _Requirements: 19.18, 19.19, 19.20, 19.21, 19.22, 19.23, 19.24, 19.25, 19.26, 19.27, 19.32, 19.33, 13.10_
+- [ ]* 33.30 Write the avatar tests
+  - **Property 47: Avatar image type and size**
+  - API tests of Req 15.20 (happy: PNG, JPEG, WebP, renamed extension, replace, delete, idempotent delete; negative: no Token, text renamed `.png`, SVG, GIF, empty, 2,097,153 bytes, missing part, traversal name, bad or expired or cross-user signature, no avatar 404, `avatar_url` in PATCH, no `avatar_url` in shared payloads); a test that two parallel uploads leave one file.
+  - **Validates: Requirements 19.19, 19.20, 19.21, 19.22, 19.25, 19.26, 19.27, 19.33, 15.20**
+- [ ] 33.31 Build the avatar section of the Profile_Page
+  - `AvatarUploader` (choose, preview with a revoked object URL, Upload, Cancel, Remove behind `BaseConfirm`, client-side type and size messages, `details.file` and network messages), `api.auth.uploadAvatar` (existing `form` option) and `removeAvatar`, `BaseAvatar` initials fallback with one refresh through `api.auth.me()`, header and stored-user update without reload.
+  - _Requirements: 19.28, 19.29, 19.30, 19.31_
+- [ ]* 33.32 Write the avatar component tests
+  - The tests of Req 15.21 (preview, Upload, Remove with confirmation, wrong type, too large, server `details.file`, initials fallback after one refresh). Add the manual smoke check (upload, preview, replace, remove) to the release checklist; the auth e2e suite has no avatar test (Req 15.22).
+  - **Validates: Requirements 15.21, 15.22, 19.28, 19.29, 19.30**
+- [ ] 33.33 Implement the invalid-Token redirect (Decision T)
+  - `lib/session-token.ts` (`isUsableToken`), `lib/return-path.ts` (`safeReturnPath`), `frontend/proxy.ts` (redirect with `next`, cookie removal, `x-return-path` request header), `serverGet` redirecting to `/session-expired`, `app/session-expired/route.ts` (delete the cookie, redirect only to `/login`), `LoginForm` reading `next`. Backend: the shared routes use optional JWT verification that treats any JWT error as a Guest (never 401).
+  - _Requirements: 1.57, 1.58, 1.59, 1.60, 1.61, 14.28, 18.24_
+- [ ]* 33.34 Write the invalid-Token tests
+  - **Property 48: Safe return path and usable Token** (fast-check); vitest for `proxy.ts` (no cookie, malformed, expired, valid, public paths, cookie removed on redirect); pytest that a malformed or expired Bearer Token on each shared route returns the Guest response.
+  - **Validates: Requirements 1.57, 1.59, 1.60, 15.23, 18.24**
+- [ ] 33.35 Return the Email to staff in candidates and in the members list (Decision S)
+  - `CandidateSchema` gains `email`; `GET /boards/{id}/members` accepts `include=email` (403 without Board_Staff_Access, 401 without a Token) and the default path never reads `User.email`; confirm no Comment, activity, Notification, shared, or default member schema declares `email`; update the OpenAPI document.
+  - _Requirements: 3.25, 3.30, 3.31_
+- [ ] 33.36 Show the Email in `MemberSearch` and `MemberPicker`
+  - `MemberSearch` rows show full name with the Username and Email beneath; `MemberPicker` loads `?include=email`, shows full name and Email, and searches all three fields; the Sidebar member rows and every other component keep showing no Email; the picker stays hidden from a Member.
+  - _Requirements: 3.31, 3.32, 4.33_
+- [ ]* 33.37 Write the Email exposure tests
+  - **Property 49: Email exposure**
+  - The tests of Req 15.24, and component tests that `MemberSearch` and `MemberPicker` render the Email and the Sidebar and `CommentThread` render none.
+  - **Validates: Requirements 3.25, 3.30, 3.31, 3.32, 15.24**
+- [ ] 33.38 Add SO-11 and SO-12 to `signout.spec.ts`
+  - `AuthPage.setSessionCookie(value)` and `buildForgedToken()` (header, payload with `exp` one hour ahead, the text `invalid` as signature; no secret); SO-11 uses the value `bogus`; both assert the URL path `/login`, the login form, and no `kanban_token` cookie, and neither touches the Test_Account.
+  - _Requirements: 1.55, 1.56, 1.62, 15.14_
+- [x] 33.39 Sync steering and guidelines to round 2
+  - Updated in this revision: `product.md`, `data-model.md`, `api-conventions.md`, `backend.md`, `frontend.md`, `tech.md`, `guidelines/backend.md`, `guidelines/database.md`, and `guidelines/frontend.md` (see CHANGELOG V10, "Round 2 within V10").
+  - _Requirements: 20.18, 19.24, 3.31, 1.57_
+- [ ] 33.40 Checkpoint - Run the round 2 checks
+  - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass with 33.28 to 33.38 in place; run migration part 4 on a copy of the dev database; run the suite against the deployed URL, including SO-11 and SO-12; do the manual avatar smoke check. Ask the user if questions arise.
 ## Notes
+- Round 2 within V10 (33.28 to 33.40, Decisions Q to T) amends unimplemented V10 work and is not a new version; 33.5, 33.16, 33.18, and 33.19 were edited in place for it. 33.35 builds on 33.3, 33.28 on 33.1 and 33.11, and 33.33 on 33.11 and 33.19.
+- Group 33 (V10) must deploy the Backend and the Frontend together: the login request field, the `user` shape, and Guest access change on both sides. 33.9 (Guest access) and 33.10 to 33.11 (share links) land before the Frontend tasks 33.14 to 33.20, and the e2e update 33.22 to 33.25 runs last. If group 33 reaches the Frontend before group 32 is executed, write 32.2 to 32.4 directly in their V10 form (33.22 to 33.24) and skip the V9 variants.
+- The ticked tasks of groups 1 to 19 that mention `login_identifier`, Guest access to public Boards, or the Sidebar Log out item describe the V9 build; group 33 supersedes those behaviours.
+- Group 32 (V9, auth end-to-end tests) adds tests only and changes no application code. It needs the login page (15.4) and the Sidebar Log out item (16.1), and shares the Playwright setup with 20.1. Tests SO-03 and SO-05 wait for Open Question 5.
 
 - Group 27 (Trello-style board and card modal, Decision I) runs after 26.7 and before the remaining frontend tasks; it changes components built in tasks 16 to 18 without changing the API client. Task 18.4 tests the new modal, and 19.2 adds the Categories, Members, and Users screens on the new shell.
 - Group 26 (Tailwind CSS and shadcn/ui restyle, Decision H) runs after task 15 and before the app shell tasks 16 to 19; the components written before it are restyled in 26.3, with their props, logic, `lib/`, and API client unchanged. It touches no backend code.
@@ -687,7 +840,27 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     { "id": 60, "tasks": ["22.2"] },
     { "id": 61, "tasks": ["23.1"] },
     { "id": 62, "tasks": ["23.2"] },
-    { "id": 63, "tasks": ["23.3", "23.4"] }
+    { "id": 63, "tasks": ["23.3", "23.4"] },
+    { "id": 64, "tasks": ["32.1"] },
+    { "id": 65, "tasks": ["32.2"] },
+    { "id": 66, "tasks": ["32.3", "32.4", "32.5"] },
+    { "id": 67, "tasks": ["32.6"] },
+    { "id": 68, "tasks": ["33.1", "33.26"] },
+    { "id": 69, "tasks": ["33.2", "33.3", "33.9"] },
+    { "id": 70, "tasks": ["33.4", "33.5", "33.7", "33.10"] },
+    { "id": 71, "tasks": ["33.6", "33.8", "33.11"] },
+    { "id": 72, "tasks": ["33.12", "33.13"] },
+    { "id": 73, "tasks": ["33.14"] },
+    { "id": 74, "tasks": ["33.15", "33.16", "33.17", "33.19"] },
+    { "id": 75, "tasks": ["33.18", "33.20"] },
+    { "id": 76, "tasks": ["33.21", "33.22"] },
+    { "id": 77, "tasks": ["33.23", "33.24", "33.25"] },
+    { "id": 78, "tasks": ["33.27"] },
+    { "id": 79, "tasks": ["33.28", "33.33", "33.35", "33.39"] },
+    { "id": 80, "tasks": ["33.29", "33.34", "33.36"] },
+    { "id": 81, "tasks": ["33.30", "33.31", "33.37"] },
+    { "id": 82, "tasks": ["33.32", "33.38"] },
+    { "id": 83, "tasks": ["33.40"] }
   ]
 }
 ```

@@ -32,8 +32,9 @@ overriding any looser prose description elsewhere.
 
 - **Rule:** The app shell has a left `Sidebar` (nav — **Home** first, then
   **Inbox** and **Activity** links — the **Boards** list, which *is* the
-  board switcher, team members, profile) and a center `Main` area (board
-  header + columns). Inbox and Activity share one **side panel** sliding in
+  board switcher, team members; no profile entry and no Log out item) and a
+  center `Main` area under a persistent **app header** (board header +
+  columns). Inbox and Activity share one **side panel** sliding in
   from the right, opened from the sidebar's own nav items or the header bell
   — there is no separate floating dock; the sidebar already covers that
   entry point. On mobile the sidebar is an off-canvas drawer behind a scrim;
@@ -260,7 +261,9 @@ overriding any looser prose description elsewhere.
   the owner, Managers, and Admins add members from its heading and remove them per
   row. The Board header is one row with no Add Member button and no settings icon.
   **Rationale:** One place per feature, and more height for the board.
-  **Example:** the add button opens `MemberSearch` over `GET /boards/{id}/candidates`.
+  **Example:** the add button opens `MemberSearch` over `GET /boards/{id}/candidates`;
+  each result shows the full name, then the username and email. The sidebar's own
+  member rows show no email.
 
 - **Rule:** The Inbox and the activity lists load one screen of rows and a Load
   more action (Decision J); attachment changes in the card modal wait for Save
@@ -275,3 +278,44 @@ overriding any looser prose description elsewhere.
   **Rationale:** Two pills of the same shape read as one kind of information.
   **Example:** `<BaseBadge shape="outline" tone="red"><Flag/> high</BaseBadge>`.
 
+- **Rule:** Every signed-in page sits under one persistent `AppHeader`: the
+  sidebar toggle below 960px, the page context (on a board: visibility icon,
+  name, and the Share button for the owner, Manager, and Admin), the Inbox
+  bell, and a user-icon menu (`BaseMenu`, trigger named "User menu") whose items
+  are **Profile** above **Log out**. Log out calls `POST /api/auth/logout` and
+  clears the cookie even when the call fails. The `/profile` page edits full
+  name and avatar (choose an image, preview it, upload, remove; PNG, JPEG, or
+  WebP up to 2 MB, with initials as the fallback), shows username and email
+  read-only, and changes the password (current and new, at least 8). A user whose `email` is
+  null sees a blocking prompt to add one.
+  **Rationale:** One entry point for account actions, reachable on a phone.
+  **Example:** `<UserMenu />` renders `Profile` then `Log out`; the Sidebar has neither.
+- **Rule:** The login form is one "Username or email" field plus a password: a
+  value containing `@` is validated as an email, any other value as a username
+  (3 to 30 of `a-z 0-9 _ .`). The register form has full name, username, email,
+  and password, checks availability on blur, and shows `error.details` beside
+  each field. On a `429` the form shows a mm:ss countdown from
+  `error.details.retry_after` and disables submit until it ends.
+  **Rationale:** The server decides the identifier type; the client only avoids
+  sending a value that cannot match.
+  **Example:** `classifyIdentifier("ada@x.io")` is `"email"`; `classifyIdentifier("ada")` is `"username"`.
+- **Rule:** Every page of the `(app)` route group is guarded by
+  `frontend/proxy.ts`: a request without the `kanban_token` cookie, or with one
+  that is malformed or expired, is redirected to `/login?next=<safe path>` and
+  the cookie is removed. A server render that gets a Backend `401` redirects to
+  `/session-expired`, which removes the cookie and redirects to `/login`. The
+  `next` value is used only when it is a local path under `/boards`, `/profile`,
+  or `/admin`. `/login`, `/register`, and `/shared/{token}` are not guarded and
+  ignore a stale cookie.
+  **Rationale:** Guests no longer browse boards; the Backend 401 stays the
+  authority, and a stale cookie must not leave a user on an error page.
+  **Example:** `GET /boards` with the cookie `bogus` answers a redirect to
+  `/login?next=%2Fboards` and clears `kanban_token`.
+- **Rule:** `/shared/{token}` renders a read-only board and card modal with a
+  "Shared view, read only" banner and a Sign in link: no drag-and-drop, add,
+  edit, assign, comments, activity, inbox, sidebar, or user menu. A signed-in
+  user with board access is redirected to the normal board. The page sends
+  `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`. An invalid link
+  shows one "link is not valid" page.
+  **Rationale:** A guest gets status only, and the token must not leak.
+  **Example:** `GET /api/shared/{token}` returns `has_board_access`; when true the page redirects.

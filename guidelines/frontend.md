@@ -5,7 +5,7 @@ Coding standards for the Next.js app.
 ---
 
 **Rule:** Build UI only from `components/shared/Base*` (`BaseButton`,
-`BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar`); never a raw `<button>`, ad-hoc badge `<span>`, or a
+`BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar`, `BaseTooltip`, `BaseCombobox`, `BaseMenu`); never a raw `<button>`, ad-hoc badge `<span>`, or a
 one-off modal. The `Base*` components wrap the shadcn/ui primitives in
 `components/ui/`; only they import `components/ui/`.
 
@@ -185,3 +185,22 @@ from the first component.
 // Good: ring from the --ring token on keyboard focus
 <BaseButton className="focus-visible:ring-2 focus-visible:ring-ring" />
 ```
+---
+**Rule:** A Server Component cannot remove a cookie, so a server-side `401`
+redirects to a Route Handler that removes the cookie, and any `next` value is
+passed through one `safeReturnPath` check before it is used.
+**Rationale:** A redirect that leaves a bad cookie repeats the failure on the
+next click, and an unchecked `next` is an open redirect.
+**Example:**
+```ts
+// Bad
+redirect(searchParams.get("next") ?? "/boards");
+// Good
+redirect(safeReturnPath(searchParams.get("next")));
+```
+---
+**Rule:** A user's email is rendered only by `MemberSearch` and `MemberPicker`;
+no other component reads an `email` field of another user.
+**Rationale:** The email is shown to staff in those two places and nowhere
+else; one narrow place is easy to review.
+**Example:** a sidebar member row renders `member.full_name` and `member.username`.

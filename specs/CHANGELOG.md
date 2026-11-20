@@ -89,3 +89,22 @@ Versions match `.kiro/specs/CHANGELOG.md`. Each folder holds requirement domains
 - `v8/03-BOARDS` (23 reworded; 26 to 29), `v8/04-CARDS` (46 to 50), `v8/06-CATEGORIES` (14), `v8/10-ANALYTICS` (8), `v8/00-OVERVIEW` (Decision I "where applied").
 - Impact: a migration for `Board.description` and four computed counts on the board list; the rest is frontend.
 - Round 5 amendment: `v8/03-BOARDS` criterion 29 drops the cover band (plain bordered tile).
+## V9 - 2026-11-20
+### Changes
+- `v9/` holds the changed domains: `01-AUTH` (criteria 19 to 38: sign-in and sign-out end-to-end criteria with IDs `AUTH-E2E-SI-01` to `-10` and `AUTH-E2E-SO-01` to `-08`, new Glossary terms, Open Questions 5 to 7), `15-TESTING` (criteria 10 to 15: suite files, environment variables, `.env.example`, no `waitForTimeout`, test isolation).
+### Reason
+- The product owner asked for Playwright end-to-end specifications for sign-in and sign-out, happy and negative cases.
+### Impact
+- Specification and test additions only; no behaviour, API, or schema change. Criteria SO-03 and SO-05 are pending Open Question 5 (no Frontend route guard exists; `/boards` is open to Guests).
+## V10 - 2026-11-20
+### Changes
+- `v10/` holds the changed domains: `00-OVERVIEW` (Decisions K to P, new and changed Glossary terms, Open Questions 1, 3, 5, 6 resolved and 7 to 13), `01-AUTH` (criteria 1 to 5, 11, 17, 18 reworded or withdrawn; 19 to 37 updated for the new login form, header sign-out, and route guard; 39 to 54 added), `03-BOARDS` (23, 25), `04-CARDS` (26), `06-CATEGORIES` (6), `07-COMMENTS` (16), `08-ACTIVITY-LOG` (5), `11-VISIBILITY` (4, 5, 7 reworded; 13 added), `12-SEARCH-FILTER` (6, 7), `13-API-CONVENTIONS` (3, 10, 11), `14-NON-FUNCTIONAL` (3, 10, 26 reworded; 27 added), `15-TESTING` (7, 11, 15 reworded; 16 to 19 added), `17-API-DOCS` (1), and the new domains `18-SHARE-LINKS`, `19-APP-HEADER-PROFILE`, `20-RATE-LIMITING`.
+### Reason
+- Guests no longer browse public Boards (share links instead); one header user menu; separate Username and Email; rate limiting; every signed-in page guarded; V9 e2e criteria brought in line.
+### Impact
+- Breaking API changes: login field `identifier`; register fields `username` and `email`; `user` shape; Guest requests to board routes return 401 (comment endpoints 401 instead of 403); candidate search fields; 429 `RATE_LIMITED`; `error.details` on a registration 409; Signed_File_URL signature scope. Database revision `b7d2e4f6a801` (reversible in part). Full list in `.kiro/specs/CHANGELOG.md` V10.
+- Earlier version folders are unchanged.
+### V10 round 2 (same version; V10 is specified but not implemented, so there is no V11)
+- `v10/00-OVERVIEW` (Decisions Q to T; Decisions L, M, O, P annotated; Glossary: Avatar_Image, Avatar_URL, Initials_Avatar, Safe_Return_Path; Open Questions 7, 8, 10, 12 resolved, 14 to 16 added), `v10/01-AUTH` (1.6, 1.34, 1.37 reworded; 55 to 62 added: invalid or expired Token on any request, tests AUTH-E2E-SO-11 and -12), `v10/03-BOARDS` (25 reworded; 30 to 32 added: Email to staff), `v10/04-CARDS` (33 reworded: assignee popover with Email), `v10/13-API-CONVENTIONS` (10), `v10/14-NON-FUNCTIONAL` (28), `v10/15-TESTING` (16 reworded; 20 to 24 added), `v10/18-SHARE-LINKS` (24), `v10/19-APP-HEADER-PROFILE` (8 to 10 reworded; 18 to 33 added: avatar upload), `v10/20-RATE-LIMITING` (7 withdrawn; 8, 10, 15 reworded; 18 added: registration not limited).
+- Impact: no `RATE_LIMIT_REGISTER_MAX` and no register limiter; avatar upload endpoints and `avatar_path` replace the `https` avatar URL; `GET /api/boards/{id}/candidates` and `GET /api/boards/{id}/members?include=email` return `email` to staff; an unusable Token ends on `/login` with the cookie removed. Full list in `.kiro/specs/CHANGELOG.md`, "Round 2 within V10".
+- Open for the owner: the availability limiter was kept by the specifier (Open Question 14); avatar visibility (15); Email exposure through name search (16).

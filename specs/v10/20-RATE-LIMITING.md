@@ -1,0 +1,33 @@
+### Requirement 20: Rate Limiting
+
+**User Story:** As a system owner, I want repeated failed sign-ins, repeated wrong current passwords, and bulk availability checks to be blocked for a while, so that passwords cannot be guessed and the account list is harder to probe.
+
+#### Acceptance Criteria
+**Round 3 within V10 (Decisions U to W):** user story and criteria 10 and 12 reworded; 19 to 23 added (change-password limiter, Decision W).
+
+New in V10 (Decision O). Criteria 1 to 17 are new in V10; round 2 within V10 (Decision Q) withdraws criterion 7, rewords criteria 8, 10, and 15, and adds criterion 18: registration is not rate limited.
+
+1. [RL-01] IF the Rate_Limiter has counted 5 failed login attempts for the same pair of lower-cased Identifier and Client_IP within the Rate_Limit_Window, THEN THE Backend SHALL return HTTP 429 with the code `RATE_LIMITED` for every further login attempt of that pair until fewer than 5 failures remain in the window (Decision O).
+2. [RL-02] IF the Rate_Limiter has counted 20 failed login attempts from the same Client_IP within the Rate_Limit_Window across all Identifiers, THEN THE Backend SHALL return HTTP 429 with the code `RATE_LIMITED` for every further login attempt from that Client_IP until fewer than 20 failures remain.
+3. [RL-03] WHEN a login succeeds, THE Backend SHALL delete the failed-attempt rows of that pair and SHALL leave the per-IP count unchanged.
+4. [RL-04] THE Backend SHALL count one failed attempt for each login that ends in the generic HTTP 401, whether the Identifier is unknown or the password is wrong, and SHALL count no attempt for a login that ends in HTTP 400, or in HTTP 429.
+5. [RL-05] WHEN the Rate_Limiter blocks a request, THE Backend SHALL return `{ "status": false, "message": string, "error": { "code": "RATE_LIMITED", "details": { "retry_after": integer } } }` with HTTP status 429 and a `Retry-After` header holding the same integer number of seconds (Decision O).
+6. [RL-06] THE Backend SHALL compute `retry_after` as the number of whole seconds, rounded up and at least 1, until the oldest counted attempt that keeps the pair or the Client_IP at its limit leaves the Rate_Limit_Window.
+7. [RL-07] [Withdrawn in V10 round 2, Decision Q] Registration is not rate limited; criterion 18 states the rule. The ID stays so that references do not move.
+8. [RL-08] IF a Client_IP makes more than `RATE_LIMIT_AVAILABILITY_MAX` availability requests within the Rate_Limit_Window, THEN THE Backend SHALL return HTTP 429 with the code `RATE_LIMITED` for each further availability request; every availability request counts (kept by the specifier and reversible, Open Question 14).
+9. [RL-09] THE Backend SHALL keep the attempt counts in the Postgres table `rate_limit_attempts`, SHALL serialize the check and the insert for one key with a transaction-scoped advisory lock, and SHALL commit a failed-attempt row before it returns the 401, so that counts hold across worker processes and survive the rollback that follows an error. Rate_Limiter rows are operational records, not state changes of the Board domain, so they write no Activity_Log row.
+10. [RL-10] THE Backend SHALL read `RATE_LIMIT_WINDOW_SECONDS` (default 900), `RATE_LIMIT_LOGIN_PAIR_MAX` (default 5), `RATE_LIMIT_LOGIN_IP_MAX` (default 20), `RATE_LIMIT_AVAILABILITY_MAX` (default 60), and `RATE_LIMIT_CHANGE_PASSWORD_MAX` (default 5) from the environment, SHALL list each in `backend/.env.example` with a placeholder, and SHALL accept the same settings as arguments of the app factory, so that tests use small limits without setting `APP_ENV`.
+11. [RL-11] THE Backend SHALL take the Client_IP from the connection's remote address, and SHALL read `X-Forwarded-For` only through the number of trusted proxies set in `TRUSTED_PROXY_COUNT` (default 0).
+12. [RL-12] THE Backend SHALL store in `rate_limit_attempts` only a keyed hash of the Identifier-and-IP pair, of the IP, or of the user id (scope `change_password`), and never the plaintext Identifier or an Email.
+13. [RL-13] WHEN the Rate_Limiter records an attempt, THE Backend SHALL delete the rows of that scope that are older than the Rate_Limit_Window.
+14. [RL-14] WHILE a pair is blocked, THE Backend SHALL return HTTP 429 without comparing the password, so that a correct password does not unblock the pair.
+15. [RL-15] WHEN a login response is HTTP 429, THE Frontend SHALL show the wait time as a countdown in minutes and seconds beside the form message, disable the submit button until the countdown ends, and then enable it and clear the message; THE Frontend SHALL read the wait from `error.details.retry_after`.
+16. [RL-16] WHEN the availability check is blocked, THE Frontend SHALL stop on-blur checks until the wait ends and SHALL show no error for the field, because the 409 on submit stays authoritative (Requirement 1, criterion 50).
+17. [RL-17] THE Backend SHALL list `Retry-After` in the CORS exposed headers.
+
+18. [RL-18] THE Backend SHALL NOT rate limit `POST /api/auth/register` and SHALL keep no `register` scope in `rate_limit_attempts`, so that a registration request is answered only with 201, 400, or 409 (Decision Q; registration rate limiting deferred).
+19. [RL-19] IF a signed-in user has had `RATE_LIMIT_CHANGE_PASSWORD_MAX` failed change-password attempts within the Rate_Limit_Window, THEN THE Backend SHALL return HTTP 429 with the code `RATE_LIMITED` for every further `POST /api/auth/change-password` call of that user until fewer failures remain; the counter is keyed by the user id and not by the Client_IP (Decision W, resolving Open Question 9).
+20. [RL-20] THE Backend SHALL count one failed attempt for each change-password call that ends in HTTP 400 with `details.current_password`, and SHALL count no attempt for a call that ends in any other 400, in 401, or in 429; WHEN a change-password call succeeds, THE Backend SHALL delete that user's failed-attempt rows of the scope.
+21. [RL-21] WHILE a user is blocked by criterion 19, THE Backend SHALL return HTTP 429 without comparing the current password, with the body, the `Retry-After` header, and the `retry_after` value of criteria 5 and 6.
+22. [RL-22] WHEN a change-password response is HTTP 429, THE Frontend SHALL show the wait time as a countdown beside the form message, disable the Change password button until the countdown ends, and keep the session, because a 429 is not a 401.
+23. [RL-23] THE Backend SHALL keep a `change_password` value in the scope column of `rate_limit_attempts` and SHALL purge the rows of that scope older than the Rate_Limit_Window when it records an attempt, as criterion 13 states for the other scopes.

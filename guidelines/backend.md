@@ -51,25 +51,29 @@ def move_card(card_id, to_column_id, new_order, actor_id):
 
 ---
 
-**Rule:** Every success response is `{"data": ...}`; every error is
-`{"error": {"code": ..., "message": ...}}` with the matching HTTP status —
-produced by one shared helper, not re-typed per route.
+**Rule:** Every success response is `{"status": true, "message": ..., "data": ...}`;
+every error is `{"status": false, "message": ..., "error": {"code": ..., "details"?: ...}}`
+with the matching HTTP status (`429` included, with a `Retry-After` header and
+`details.retry_after`) — produced by one shared helper, not re-typed per route.
+`details` appears only for `VALIDATION_ERROR`, a registration `CONFLICT`, and
+`RATE_LIMITED`.
 
 **Rationale:** A single helper means every endpoint's envelope is identical by
 construction, not by each author remembering the convention.
 
 **Example:**
 ```python
-def ok(payload, status=200):
-    return jsonify({"data": payload}), status
+def ok(payload, message="OK", status=200):
+    return jsonify({"status": True, "message": message, "data": payload}), status
 
-def fail(code, message, status):
-    return jsonify({"error": {"code": code, "message": message}}), status
+def fail(code, message, status, details=None):
+    error = {"code": code, **({"details": details} if details else {})}
+    return jsonify({"status": False, "message": message, "error": error}), status
 
 try:
     data = CommentCreateSchema().load(request.json)
 except ValidationError as e:
-    return fail("VALIDATION_ERROR", str(e), 400)
+    return fail("VALIDATION_ERROR", "Validation failed", 400, e.messages)
 ```
 
 ---
@@ -200,4 +204,18 @@ def create_category(board_id):
 def list_categories(board_id):
     require_board_access(current_user, board_id)  # no role restriction beyond this
     return jsonify({"data": category_service.list_for_board(board_id)})
+```
+---
+**Rule:** An uploaded file is accepted by its content, not by its name: read
+the leading bytes, allow a short list of types, store it under a generated
+name through the one file store, and delete the replaced file only after the
+database change commits.
+**Rationale:** A file name and a `Content-Type` header come from the client;
+a generated name also closes path tricks such as `../`.
+**Example:**
+```python
+kind = detect_image_type(data[:12])          # "png" | "jpg" | "webp" | None
+if kind is None or not 0 < len(data) <= MAX_AVATAR_BYTES:
+    raise ValidationError("Invalid image", details={"file": ["Use a PNG, JPEG, or WebP image up to 2 MB."]})
+name = f"{uuid4().hex}.{kind}"               # never the original file name
 ```

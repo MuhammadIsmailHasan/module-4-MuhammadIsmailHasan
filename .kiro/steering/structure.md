@@ -5,7 +5,7 @@ inclusion: always
 # Structure Steering — Folder & File Layout
 
 - **Rule:** Every backend domain — `auth, boards, columns, cards, categories,
-  comments, notifications, analytics, users` — is a folder under
+  comments, notifications, analytics, users, shared` — is a folder under
   `app/blueprints/` containing `routes.py`, `service.py`, `repository.py`,
   `schema.py`.
   **Rationale:** Routes stay thin, business logic is isolated and
@@ -15,7 +15,7 @@ inclusion: always
   `card_repository.get_by_id(...)`; `schema.py` defines the marshmallow `CardCreateSchema` and `CardSchema`.
 
 - **Rule:** Shared, reusable frontend primitives live only in
-  `components/shared/` (`BaseButton`, `BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar`), implemented as
+  `components/shared/` (`BaseButton`, `BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar`, `BaseTooltip`, `BaseCombobox`, `BaseMenu`), implemented as
   thin wrappers over the shadcn/ui primitives in `components/ui/`; feature pages
   import the `Base*` components and never `components/ui/` directly, and never
   define their own buttons/badges/modals.

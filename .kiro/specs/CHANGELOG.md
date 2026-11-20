@@ -130,3 +130,107 @@
 - **Round 5 within V8 (owner feedback on header, Home, and the modal):** two-row Board header with bordered sections and a sideways-scrolling category strip with arrows; Home tiles with a coloured cover, description, progress, counts, and member avatars; an analytics strip on Home for Supervisors (owned boards) and Managers, Admins still excluded (Decision B); an optional board description; the Card title shown as text with Edit; aligned date rows; a file drop zone; the modal close icon inside the header row; Category and Priority as two badge types; lowercase Category names. Requirements: 3.23 reworded; 3.26 to 3.29, 4.46 to 4.50, 6.14, 10.8 added. Design: section "Round 5". Tasks: new group 31. Steering: `data-model.md`, `frontend.md`.
 - **API and schema (round 5):** `Board.description` (nullable, max 500) with a migration; `GET /api/boards` adds `card_count`, `done_count`, `overdue_count`, `member_count`. Additive only.
 - **Round 5 amendment (same version):** the Home board tile has no coloured cover band (owner request); Req 3.29 and the design note are reworded and the `--size-tile-cover` token is removed.
+## V9 - 2026-11-20
+### Changes
+- **Specification and test additions (no behaviour change):** end-to-end Playwright specifications for sign-in and sign-out, happy and negative cases.
+- **Requirements:** 1.19 to 1.38 added (IDs `AUTH-E2E-SI-01` to `-10`, `AUTH-E2E-SO-01` to `-08`); 15.10 to 15.15 added (suite files, environment variables `E2E_BASE_URL`, `E2E_USER_IDENTIFIER`, `E2E_USER_PASSWORD`, `.env.example`, no `waitForTimeout`, isolation); Glossary terms added; Open Questions 5 to 7 added; introduction names V9.
+- **Design:** section "Auth End-to-End Tests (V9)", end-to-end paragraph in the Testing Strategy, V9 revision notes.
+- **Tasks:** new group 32 (32.1 to 32.6); no existing task renumbered; dependency graph gains waves 64 to 67.
+### Reason
+- The product owner asked for Playwright end-to-end specifications covering sign-in and sign-out.
+### Impact
+- Requirements: 1 and 15. Design: testing sections. Tasks: 32 (new).
+- Code: none yet; the tasks add files only under `frontend/tests/e2e/auth/`, `frontend/playwright.config.ts`, and `frontend/.env.example`. Steering is unchanged.
+- Findings, open for the product owner: (5) no Frontend route guard exists and `/boards` is open to Guests, so SO-03 and SO-05 are pending; (6) sign-out is the Sidebar "Log out" item, not a header control; (7) an invalid Token on a server render has no specified behaviour. Also: the Token is the `kanban_token` cookie, not browser storage.
+
+## V10 - 2026-11-20
+### Changes
+**Specification changes**
+- **Decision K, share links (specification, breaking):** Guests no longer browse public Boards. A Guest opens a Board only through `/shared/{token}`, read-only (columns, cards, card details, categories, attachment links); never comments or activity. New nullable unique `Board.share_token`; the Board_Owner, a Manager, and an Admin enable, disable, and regenerate it; disabling or regenerating invalidates the old link and its outstanding file URLs at once; private Boards may have a link; no expiry. A signed-in user with Board_Access who opens a link gets the normal view. Without a link, `/boards` needs sign-in. New Requirement 18. Reverses Req 11.4, 11.5, 11.7 as written in V2 to V9 and the Guest half of Decision A; Members can still read public Boards (restated as Req 11.13).
+- **Decision L, header user menu and Profile (specification):** one App_Header on every signed-in page with a User_Menu (Profile above Log out); the Sidebar loses both entries. Profile page: full name, avatar (https URL), read-only Username and Email, change password. New Requirement 19. Resolves V9 Open Question 6.
+- **Decision M, separate Username and Email (specification, breaking; supersedes Decision C and resolves Open Question 1):** unique case-insensitive `username` (3 to 30, `a-z 0-9 _ .`) and `email`; `login_identifier` dropped; register shows field-level errors and 409 carries `error.details` per field; `GET /api/auth/availability`; migration backfill and a small blocking Email_Prompt for accounts without an email; candidate search by Username prefix and exact Email, returning `id`, `full_name`, `username` only.
+- **Decision N, login form (specification, breaking):** one "Username or email" input; request field `identifier`; the Backend classifies it; one generic 401; `user` shape `{ id, full_name, username, email, avatar_url }`.
+- **Decision O, rate limiting (specification, breaking for the error shape; reverses Req 1.18):** Postgres-backed Rate_Limiter: login 5 failures per (identifier, IP) and 20 per IP in 15 minutes, reset on success; register and availability have their own limits; 429 `RATE_LIMITED` with `Retry-After` and `details.retry_after`; thresholds from environment variables, test overrides without `APP_ENV`; the Frontend shows a countdown. New Requirement 20. Amends Decision G: `error.details` also appears on a registration `CONFLICT` and on `RATE_LIMITED`.
+- **Decision P, route guard (specification; resolves Open Question 5):** every `(app)` page is a Protected_Route, guarded by `frontend/proxy.ts`.
+- **V9 Playwright criteria updated:** AUTH-E2E-SI-01 to -10 and SO-01 to -08 now use the "Username or email" form, the User_Menu_Trigger as the signed-in indicator, and the header sign-out; SO-03 and SO-05 are no longer pending; new IDs SI-11 (rate limit, Throwaway_Identifier), SI-12 (email shape), SO-09 (menu order), SO-10 (no Sidebar Log out or Profile). Req 1.19 to 1.42, 15.11, 15.15 to 15.19.
+
+**Design changes**
+- New section "V10 Design"; revised access function, role matrix, auth, users, boards, attachments (share scope), data model (User, Board, RateLimitAttempt), error table, testing strategy, and the Auth End-to-End Tests section. Properties 1, 2, 4, 5, 17, 21, 28, 34, 36 revised; 40 to 46 added. Next.js 16 `proxy.ts` is the guard file; `BaseMenu` and `@radix-ui/react-dropdown-menu` are added.
+
+**Implementation changes**
+- None yet. Tasks group 33 (33.1 to 33.27) carries the work. 33.26 (steering and guidelines sync) is done in this revision.
+
+**Steering and guidelines (done in this revision)**
+- `product.md` (guest and share-link rule, private-board rule, account and rate-limit rule), `data-model.md` (username and email, `share_token`, `RateLimitAttempt`, visibility example), `api-conventions.md` (429, `details` on 409 and 429, auth, share, profile, candidates), `backend.md` (categories, board access, auth and rate limit, `shared` blueprint), `frontend.md` (app header, login and register, route guard, shared view, sidebar), `structure.md` (`shared` domain, `BaseMenu`), `tech.md` (dropdown-menu package, rate-limit variables), `guidelines/backend.md` (envelope example brought to the current shape with 429; this was already out of date since V4), `guidelines/database.md`, `guidelines/frontend.md`.
+
+### Breaking API changes
+- `POST /api/auth/login`: request field `login_identifier` renamed to `identifier`; a value that fits neither shape returns 400 `VALIDATION_ERROR`.
+- `POST /api/auth/register`: request fields `login_identifier` replaced by `username` and `email`; duplicate returns 409 `CONFLICT` with `error.details` per field.
+- Register and login `user`: `login_identifier` removed, `username` and `email` added (`email` may be null for migrated accounts).
+- `GET /api/boards` without a Token: 401 (was the public Boards). `GET /api/boards/{id}`, `/cards`, `/categories`, `/columns`, attachment URL, and card routes without a Token: 401 for public Boards too (were readable).
+- Comment endpoints for a Guest on a public Board: 401 (was 403). Activity endpoints for a Guest: 401.
+- `GET /api/boards/{id}/candidates`: matches Username prefix and exact Email (was `login_identifier`), returns `id`, `full_name`, `username`.
+- New status and code: HTTP 429 `RATE_LIMITED` with a `Retry-After` header on login, register, and availability. `error.details` now also appears on a registration 409 and on 429.
+- Signed_File_URL signature string gains a scope suffix, so URLs issued before deploy stop verifying (15-minute lifetime; the existing re-issue path covers them).
+- Database: `users.login_identifier` dropped; `users.username`, `users.email`, `boards.share_token`, and `rate_limit_attempts` added (revision `b7d2e4f6a801`, reversible, data-losing in part on downgrade).
+- Frontend: Log out and the profile entry leave the Sidebar; `/boards` and every `(app)` page redirect to `/login` without the cookie; `/shared/{token}` is new.
+
+### Additive API changes
+- `GET /api/auth/availability`, `GET|PATCH /api/auth/me`, `POST /api/auth/change-password`, `GET|POST|DELETE /api/boards/{id}/share`, `POST /api/boards/{id}/share/regenerate`, and the read-only `/api/shared/{token}` routes (board, cards, categories, card, attachment URL).
+
+### Reason
+- The product owner asked to stop exposing public Boards to anyone, to give every signed-in page one account menu, to split Username and Email with field-level errors, to rate limit sign-in and registration, and to bring the V9 e2e criteria in line with the result.
+
+### Impact
+- Requirements: 1, 3, 4, 6, 7, 8, 11, 12, 13, 14, 15, 17, new 18 to 20, Glossary, Decisions K to P, Open Questions. Design and tasks as above. Root `specs/v10/` holds the changed domains.
+- Open (see `requirements.md` Open Questions 7 to 13): invalid Token on a server render; thresholds for register and availability; change-password rate limit; avatar upload; legacy identifiers that fit neither shape; candidate search by name; shared view assignee name and filters. Findings of the consistency check are listed in the V10 reply and in "Consistency check" below.
+
+### Consistency check (V10)
+- Resolved by agreed decisions, no action: Req 1.18 (rate limiting deferred) against Decision O; Open Questions 1, 3, 5, 6; Req 11.4 and the V9 Guest user story against Decision K and P.
+- Amendment needing confirmation: Decision G said `error.details` appears only for `VALIDATION_ERROR`. Decisions M and O require it on a registration 409 and on 429. Recorded as an amendment in Decision G, Req 13.3, Property 36, and the steering.
+- Deviation needing confirmation: the rate-limit e2e test uses a generated Throwaway_Identifier that belongs to no account, not a seeded throwaway account, because Req 1.38 and 15.15 forbid creating accounts in the suite and the limiter counts failures for unknown identifiers.
+- Risk: the per-IP limit of 20 can be reached by repeated suite runs from one address inside 15 minutes (task 33.27).
+- Old ticked tasks and the V8 to V9 snapshots keep the V9 wording by design.
+
+### Round 2 within V10 - 2026-11-20
+This is an amendment of V10, not a new version. V10 is specified but not implemented, so no V11 exists. Where this entry and the V10 entry above disagree, this entry wins; the V10 text is kept as history.
+
+#### Changes
+**Specification changes**
+- **Decision Q, registration rate limiting deferred (amends Decision O; answers Open Question 8 for register):** `POST /api/auth/register` has no rate limit. The `register` scope and `RATE_LIMIT_REGISTER_MAX` are removed. Login limiting is unchanged. **Kept by the specifier, not ordered by the owner, and reversible:** the limiter on `GET /api/auth/availability` (default 60 per Client_IP per window, `RATE_LIMIT_AVAILABILITY_MAX`) stays because the endpoint is an enumeration vector. Req 20: RL-07 withdrawn (ID kept), RL-08, RL-10, RL-15 reworded, RL-18 added. "Register rate limiting deferred" is recorded as a gap in Decision Q and Open Question 14.
+- **Decision R, avatar upload (amends Decision L; resolves Open Question 10):** the `https` avatar URL rule is withdrawn. The user uploads PNG, JPEG, or WebP, at most 2 MB; the type is read from the leading bytes; the file is stored under a generated name; replacing or removing deletes the old file after commit. Endpoints `POST` and `DELETE /api/auth/me/avatar` and the signature-checked `GET /api/auth/avatars/{user_id}/file`. `avatar_url` is a Signed_File_URL (scope `avatar`) built by the Decision D signing code and file store, issued only in responses to signed-in requests; a Guest on a Share_Link sees initials. `User.avatar_url` becomes `avatar_path`; `PATCH /api/auth/me` and the admin user endpoints reject `avatar_url`. Req 19.8 to 19.10 reworded, 19.18 to 19.33 added, 1.6 reworded; Req 15.20 to 15.22 (API tests, component tests, no avatar test in the auth e2e suite).
+- **Decision S, Email shown to staff (reverses part of Decision M; resolves Open Question 12; see Decision M):** `GET /api/boards/{id}/candidates` returns `id`, `full_name`, `username`, and `email`, and matches `full_name`, `username` by prefix, and `email` by exact value, case-insensitively; only the Board_Owner, a Manager, and an Admin may call it. The assignee popover lists the Board's members through `GET /api/boards/{id}/members?include=email` (403 without Board_Staff_Access) and stays hidden from a Member. The Email appears in those two places only, never in Comments, Activity_Log rows, Notifications, the Shared_View, the Sidebar, or a Member-visible list. Req 3.25 reworded, 3.30 to 3.32 added, 4.33 reworded, 15.24.
+- **Decision T, invalid Token redirects on every request (amends Decision P; resolves Open Question 7):** `frontend/proxy.ts` rejects a cookie that is not a decodable, unexpired Token and removes it on the redirect; a server render that gets a Backend 401 redirects to the route handler `/session-expired`, which removes the cookie and redirects to `/login` with a Safe_Return_Path in `next`; client-side 401 handling is unchanged; `/login`, `/register`, and `/shared/{token}` ignore a stale cookie, and shared routes treat an invalid Bearer Token as no Token. New Playwright criteria AUTH-E2E-SO-11 (cookie `bogus`, visit `/boards`, expect the login page and the cookie removed) and SO-12 (well-formed but forged Token). Req 1.34 and 1.37 reworded, 1.55 to 1.62 added, 14.28, 15.23, 18.24.
+- **Open Questions:** 7, 8 (for register), 10, and 12 marked resolved with a pointer; 14 (availability limiter kept), 15 (avatar visibility), and 16 (Email exposure through name search) added; the others are untouched.
+
+**Design changes**
+- New section "Round 2 within V10"; revised auth, users, attachments (avatar signing scope), data model (`avatar_path`, no `register` scope), routing (`proxy.ts`, `/session-expired`), testing strategy, and the auth e2e section. Properties 47 to 49 added (avatar image type and size, safe return path and usable Token, Email exposure); Property 46 (profile update rules) now covers the avatar field being rejected on `PATCH`.
+
+**Implementation changes**
+- None. Tasks 33.5, 33.16, 33.18, and 33.19 were edited in place; new tasks 33.28 to 33.40 (no existing ID renumbered).
+
+**Steering and guidelines (done in this revision)**
+- `product.md` (registration deferred, avatar upload, Email shown to staff), `data-model.md` (`avatar_path`), `api-conventions.md` (candidates with `email`, `include=email`, avatar endpoints), `backend.md` (register not limited, avatar signing), `frontend.md` (Profile avatar, member search and Email, route guard and `/session-expired`), `tech.md` (rate-limit variables without a register value), `guidelines/backend.md` (content-based upload rule), `guidelines/database.md` (`avatar_path`), `guidelines/frontend.md` (Email rendered by two components, safe return path).
+- Root `specs/v10/` snapshot files updated: `00-OVERVIEW`, `01-AUTH`, `03-BOARDS`, `04-CARDS`, `13-API-CONVENTIONS`, `14-NON-FUNCTIONAL`, `15-TESTING`, `18-SHARE-LINKS`, `19-APP-HEADER-PROFILE`, `20-RATE-LIMITING`.
+
+#### Breaking changes (relative to the V10 text above; nothing is released)
+- `RATE_LIMIT_REGISTER_MAX` and the `register` limiter scope no longer exist; register never returns 429.
+- `GET /api/boards/{id}/candidates` now returns `email` (the V10 text said it never would).
+- `avatar_url` is no longer accepted on `PATCH /api/auth/me` or on the admin `POST /api/users` and `PATCH /api/users/{id}` (400); the `users.avatar_url` column becomes `avatar_path` (migration part 4 of revision `b7d2e4f6a801`, which drops existing URL values).
+- New Token-free route: `GET /api/auth/avatars/{user_id}/file` (signature only).
+
+#### Reason
+- The product owner answered Open Questions 7, 8, 10, and 12: do not rate limit registration yet; let users upload an avatar; show full name and Email in the member search and assignee picker; send an invalid Token to `/login` on every request.
+
+#### Impact
+- Requirements: 1, 3, 4, 13, 14, 15, 18, 19, 20, Glossary, Decisions Q to T (L, M, O, P annotated), Open Questions 7, 8, 10, 12, 14 to 16. Design: sections above. Tasks: 33.5, 33.16, 33.18, 33.19 edited; 33.28 to 33.40 added; dependency graph waves 79 to 83.
+
+#### Consistency check (round 2)
+- Resolved by the owner's answers, no action: Open Questions 7, 8 (register), 10, 12; the V10 statements that register has its own limit, that avatar is an `https` URL, and that candidates never return `email` are superseded and marked "amended in V10 round 2" in the Decisions Log.
+- Decision needing confirmation: the availability limiter was kept by the specifier (Open Question 14). Without a register limit, the 409 on `POST /api/auth/register` answers the same question, so the limiter alone does not stop enumeration.
+- Decision needing confirmation: avatar images are visible only to their owner and to Admins, because only the `user` shape carries `avatar_url`; Comments, Board members, and Cards show initials (Open Question 15).
+- Risk: name search plus Email in the response lets a Board_Owner read the Email of any account by searching short names (Open Question 16; recommendation: minimum search length 2).
+- Deviation from the owner's wording: the avatar endpoints sit under `/api/auth/me/avatar` (next to `GET|PATCH /api/auth/me`), not `/api/users/me/avatar`; the owner gave the path as an example.
+- Ordering: checkpoint 33.27 sits before the round 2 tasks (33.28 to 33.38) in the file, and 33.40 re-runs the checks; 33.27 also mentions the suite, which gains SO-11 and SO-12 only in 33.38.
+- Risk: avatar files keep EXIF data (no re-encoding); Werkzeug buffers the multipart body, so the reverse proxy must cap it near 3 MB. A file URL works for 15 minutes without a Token once issued (the Decision D trade-off).
+- Old ticked tasks and the V8 to V9 snapshots keep their earlier wording by design.

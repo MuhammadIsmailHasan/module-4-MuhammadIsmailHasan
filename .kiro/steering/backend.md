@@ -89,9 +89,9 @@ inclusion: always
 
 - **Rule:** Categories get their own `categories` blueprint. Listing a
   board's categories only requires board access (same visibility rule as its
-  columns/cards — guests get them on public boards too, since they're just
-  filter data); creating, updating, or deleting one requires supervisor,
-  manager, or admin.
+  columns/cards; a guest gets them only through the share-link route
+  `GET /api/shared/{token}/categories`); creating, updating, or deleting one
+  requires supervisor, manager, or admin.
   **Rationale:** Categories are CRUD, per-board, and role-gated like columns
   — that's enough to earn a real blueprint instead of being folded into
   `boards`.
@@ -110,9 +110,15 @@ inclusion: always
   **Example:** `GET /api/cards/{id}` returns `attachment.file_url` as
   `/api/attachments/{id}/file?exp=...&sig=...`; `GET /api/attachments/{id}/url`
   re-issues a fresh one after the visibility check.
+  A user's avatar image follows the same mechanism: the same signing code with
+  its own scope, a 15-minute signature, `avatar_url` issued only in responses
+  to signed-in requests, and the file stored by the same file store under a
+  generated name; the type is read from the file's leading bytes, not from its
+  name or the client's header.
 
 - **Rule:** Board access is resolved in one place, `board_service.can_access(user, board)`:
-  guest sees public boards only; a signed-in user sees a public board, or a
+  a guest never has board access (401 on every board route outside
+  `/api/shared`); a signed-in user sees a public board, or a
   private board only if they are its owner, a `BoardMember`, a Manager, or an
   Admin. Every board-scoped read and write (columns, cards, categories,
   comments, activity, search, attachments) calls it.
@@ -121,11 +127,18 @@ inclusion: always
   **Example:** an unrelated Member requesting a private board gets `403`.
 
 - **Rule:** Authentication is stateless JWT with a 24-hour expiry and no
-  server-side revocation list in V2; passwords are at least 8 characters and
+  server-side revocation list; passwords are at least 8 characters and
   hashed with bcrypt or argon2; no token returns `401`, a valid token with
-  insufficient access returns `403`, everywhere.
-  **Rationale:** One predictable status rule for the frontend; revocation and
-  rate limiting are deferred, not forgotten.
+  insufficient access returns `403`, everywhere. Login and the
+  availability check (not register, which is deferred) go through one Postgres-backed rate limiter
+  (`common/rate_limiter.py`): login blocks after 5 failures per (identifier,
+  client IP) or 20 per IP in 15 minutes, a blocked request returns `429`
+  `RATE_LIMITED` with `Retry-After`, the failure row is committed before the
+  `401` is raised, thresholds come from environment variables, and the client
+  IP honours `X-Forwarded-For` only through `TRUSTED_PROXY_COUNT`.
+  **Rationale:** One predictable status rule for the frontend; token
+  revocation is deferred, rate limiting is not; a table works across workers
+  without Redis.
   **Example:** `POST /api/auth/logout` returns `{ "data": null }`; the client
   discards the token.
 
@@ -160,3 +173,16 @@ inclusion: always
   inside the 300 ms p95 target.
   **Example:** `select(Card).where(...).options(selectinload(Card.subtasks), selectinload(Card.attachments))`
   makes 3 queries for 200 cards, not 201.
+
+- **Rule:** The share-link routes live in their own `shared` blueprint under
+  `/api/shared/{token}`: `GET` only, no token required, a null, unknown,
+  replaced, or soft-deleted-board token always returns the same `404`, and
+  the response schemas contain no `comments`, `activity`, `activity_log`,
+  `owner_id`, member list, or `share_token`. A `Signed_File_URL` issued
+  through a share token carries a scope that is re-checked against the
+  board's current token.
+  **Rationale:** Disabling or regenerating a link must cut off every
+  outstanding link and file URL immediately, and a guest must never reach the
+  discussion.
+  **Example:** `GET /api/shared/{token}/cards/{card_id}` returns `404` when the
+  card is on another board.

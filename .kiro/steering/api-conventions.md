@@ -16,10 +16,13 @@ inclusion: always
   `message`. A success is `{ "status": true, "message": "...", "data": <payload> }`
   where the payload is a single object, a list, or `null`. An error is
   `{ "status": false, "message": "...", "error": { "code": string, "details"?: object } }`
-  with a matching HTTP status (`400`, `401`, `403`, `404`, `405`, `409`, `500`).
+  with a matching HTTP status (`400`, `401`, `403`, `404`, `405`, `409`, `429`, `500`).
   The message text appears once, at the top level; `error` holds only the
-  machine-readable `code` and, for `VALIDATION_ERROR`, a `details` object
-  mapping each field to a list of messages. The HTTP status code travels on
+  machine-readable `code` and a `details` object only for `VALIDATION_ERROR`
+  (each field to a list of messages), for the `CONFLICT` of a registration or
+  email save (each duplicate field to a list of messages), and for
+  `RATE_LIMITED` (`{ "retry_after": seconds }`, also sent as the `Retry-After`
+  header). The HTTP status code travels on
   the HTTP line only. Mutating endpoints send a short descriptive `message`
   ("Card moved"); reads default to "OK".
   **Rationale:** One envelope on both paths means the frontend's API client has
@@ -34,8 +37,11 @@ inclusion: always
   cards on the active board" instead of a bespoke query shape per list.
   **Example:** `GET /api/boards/{id}/cards?search=login&filter[priority]=high`.
 
-- **Rule:** `POST /api/auth/register` and `POST /api/auth/login` both return
-  `{ "data": { "user": { id, full_name, login_identifier, avatar_url }, "token": "..." } }`.
+- **Rule:** `POST /api/auth/register` (`full_name`, `username`, `email`,
+  `password`) and `POST /api/auth/login` (`identifier`, `password`) both return
+  `{ "data": { "user": { id, full_name, username, email, avatar_url }, "token": "..." } }`.
+  `GET /api/auth/availability?username=&email=` answers
+  `{ "username": { "available": bool }, "email": { "available": bool } }`.
   **Rationale:** One shared user shape from both endpoints keeps the frontend
   auth client simple — it never branches on which endpoint it just called.
   **Example:** register and login responses are interchangeable as far as the
@@ -73,12 +79,30 @@ inclusion: always
   **Example:** `PATCH /api/subtasks/st_1 { "is_done": true }` →
   `{ "data": { "id": "st_1", "is_done": true } }`.
 
-- **Rule:** The `login_identifier` is one unique, case-insensitive string
-  column; the same field accepts an email or a username. Additional auth and
+- **Rule:** The login `identifier` is a username (no `@`) or an email (has `@`);
+  the server decides the type and answers `400 VALIDATION_ERROR` when it fits
+  neither shape. Unknown user and wrong password return the same `401`.
+  Profile endpoints: `GET|PATCH /api/auth/me`, `POST /api/auth/change-password`
+  (a wrong current password is `400`, never `401`). Share-link endpoints:
+  `GET|POST|DELETE /api/boards/{id}/share`, `POST /api/boards/{id}/share/regenerate`
+  (owner, manager, admin); the token-free read-only routes are
+  `GET /api/shared/{token}`, `/cards`, `/categories`, `/cards/{card_id}`,
+  `/attachments/{id}/url` — there is no comment, activity, or mutating route
+  under `/api/shared`. Additional auth and
   membership endpoints: `POST /api/auth/logout` (returns `{ "data": null }`),
   `PATCH /api/notifications/{id}/read`, `PATCH /api/notifications/read-all`,
   `GET|POST /api/boards/{id}/members`, `DELETE /api/boards/{id}/members/{user_id}`,
-  `GET /api/attachments/{id}/url`.
+  `GET /api/attachments/{id}/url`, and `GET /api/boards/{id}/candidates` (matches
+  `full_name`, `username` by prefix, `email` by exact match, case-insensitively;
+  owner, manager, admin only; returns `id`, `full_name`, `username`, `email`).
+  `GET /api/boards/{id}/members` returns `id`, `full_name`, `username`, and adds
+  `email` only with `?include=email`, which needs write access to the board
+  (otherwise `403`). Avatar endpoints: `POST` (multipart, field `file`) and
+  `DELETE /api/auth/me/avatar`, and the signature-checked, token-free
+  `GET /api/auth/avatars/{user_id}/file`; `avatar_url` in a `user` payload is a
+  signed URL or `null`, and no other payload carries it.
+  A malformed, expired, or invalid Bearer Token on a `/api/shared` route is
+  ignored (the caller is a guest, never `401`).
   **Rationale:** One identifier column keeps register/login matching simple;
   the other endpoints close gaps the first version left open.
   **Example:** `POST /api/boards/b_1/members { "user_id": "u_2" }` →

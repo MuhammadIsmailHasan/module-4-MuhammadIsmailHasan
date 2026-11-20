@@ -7,8 +7,9 @@ inclusion: always
 - **Rule:** Core entities are `User, Board, BoardMember, Column, Card, Category, Subtask,
   Comment, ActivityLog, Notification, Attachment`; every entity has
   `id (UUID)`, `created_at`, `updated_at`; `Board` and `Card` additionally have
-  `deleted_at` and `archived_at`. The one exception is `ActivityLog`, which has
-  `created_at` only (see the append-only rule below).
+  `deleted_at` and `archived_at`. The exceptions are `ActivityLog` and
+  `RateLimitAttempt`, which have `created_at` only (append-only; rows are only
+  inserted and deleted).
   **Rationale:** One shared shape simplifies serialization and gives every
   entity an audit trail.
   **Example:**
@@ -39,10 +40,18 @@ inclusion: always
   `{ "action": "card.moved", "from_column": "...", "to_column": "..." }`.
 
 - **Rule:** `Board.visibility` is an enum `public | private`, mutable only by
-  supervisor, manager, or admin roles.
-  **Rationale:** This is exactly what "guests see public boards only" and
-  "supervisor can make public/private" need.
-  **Example:** guest board listing: `WHERE visibility = 'public' AND deleted_at IS NULL`.
+  supervisor, manager, or admin roles. A signed-in user's board list is the
+  public boards plus the boards they can access; a guest has no board list.
+  **Rationale:** "Supervisor can make public/private" and "private blocks
+  unrelated signed-in users" both key off this column.
+  **Example:** member board listing: `WHERE deleted_at IS NULL AND (visibility = 'public' OR <owner or member or manager/admin>)`.
+- **Rule:** `Board.share_token` is a nullable, unique string (43 URL-safe
+  characters from `secrets.token_urlsafe(32)`); null means sharing is off. It
+  is returned only by the share endpoints and never written to
+  `ActivityLog.metadata` or logs.
+  **Rationale:** The token is the credential for the read-only shared view, so
+  it must be unguessable and must not leak into other responses.
+  **Example:** `share_token = db.Column(db.String(64), nullable=True)` plus a unique index.
 
 - **Rule:** `Attachment` stores either a `url` (link) or a `file_path` +
   `mime_type` (upload), never both empty.
@@ -107,11 +116,24 @@ inclusion: always
   **Example:** dropping between `1.0` and `1.0000005` triggers a renumber, then
   the card is placed at the midpoint of its new neighbours.
 
-- **Rule:** `User` has one unique, case-insensitive `login_identifier` string
-  column (email or username shape) — never separate `email` and `username`
-  columns.
-  **Rationale:** One column means one uniqueness check and one login lookup.
-  **Example:** `login_identifier = db.Column(db.String(255), nullable=False)` plus `db.Index("uq_users_login_lower", db.func.lower(User.login_identifier), unique=True)`.
+- **Rule:** `User` has a unique, case-insensitive `username` (3 to 30 characters
+  from `a-z 0-9 _ .`, stored lowercase, not null) and a unique,
+  case-insensitive `email` (valid format, at most 255, stored lowercase;
+  nullable in the database only for migrated legacy accounts). There is no
+  `login_identifier` column. `avatar_path` is a nullable generated file name
+  (`<32 hex>.png|jpg|webp`) under `UPLOAD_DIR/avatars/`, never a URL; the API's
+  `avatar_url` is computed from it as a signed, time-limited URL.
+  **Rationale:** Two real columns give field-level validation and errors; the
+  nullable email exists only so the V10 migration can keep username-only
+  accounts until they add an address.
+  **Example:** `db.Index("uq_users_username_lower", db.func.lower(User.username), unique=True)` and `db.Index("uq_users_email_lower", db.func.lower(User.email), unique=True)`.
+- **Rule:** `RateLimitAttempt` is `id, scope (login_pair | login_ip |
+  availability), key_hash, created_at`, with an index on `(scope, key_hash,
+  created_at)`. `key_hash` is a keyed hash, never a plaintext identifier,
+  email, or address.
+  **Rationale:** A shared table makes the limiter correct across workers
+  without Redis, and hashing keeps personal data out of it.
+  **Example:** `RateLimitAttempt(scope="login_pair", key_hash=hmac_hex("ratelimit:pair:" + identifier + "|" + ip))`.
 
 - **Rule:** `BoardMember` is a join entity `(id, board_id, user_id, created_at,
   updated_at)` with a unique `(board_id, user_id)`; it records users attached

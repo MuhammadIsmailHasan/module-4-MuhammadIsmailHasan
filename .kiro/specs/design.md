@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document is the technical design for the Kanban Task Management application (Version V8). It implements the V8 `requirements.md` using the stack and conventions fixed in the workspace steering (already updated to V7): a Flask + SQLAlchemy + flask-smorest REST API (marshmallow schemas, generated OpenAPI) organized as one blueprint per domain, and a mobile-first Next.js (App Router, TypeScript) frontend. Requirement references use the V7 criterion numbers. "Decision A" to "Decision H" refer to the Decisions Log in `requirements.md`.
+This document is the technical design for the Kanban Task Management application (Version V10). It implements the V10 `requirements.md` using the stack and conventions fixed in the workspace steering (updated to V10 in this revision): a Flask + SQLAlchemy + flask-smorest REST API (marshmallow schemas, generated OpenAPI) organized as one blueprint per domain, and a mobile-first Next.js (App Router, TypeScript) frontend. Requirement references use the criterion numbers of the current `requirements.md`. "Decision 1" to "Decision P" refer to the Decisions Log in `requirements.md`; Decisions K to P are new in V10 and are summarised in the section "V10 Design: Share Links, Identity, Header, Rate Limiting, Route Guard".
 
 Key design decisions:
 
@@ -12,15 +12,16 @@ Key design decisions:
 | Board access | `board_service.can_access(user, board)` (Board_Access) gates every board-scoped read and comment; `board_service.can_write_staff(user, board)` (Board_Staff_Access) gates Supervisor, Manager, and Admin writes (Decision A) | "Private" must gate unrelated signed-in users and cannot drift per endpoint (Req 11.6, 11.11, 12.7); an unrelated Supervisor must not write on a public Board (Req 3.4, 4.1, 6.1). |
 | Authorization | `require_role(...)` decorator for the role gate, plus service-level policy functions that combine role, `can_access`, `can_write_staff`, and assignment | Role comes only from the Token (Req 2.7). Ownership and assignment rules need data, so they live in services. |
 | Role model | Numeric rank for guest < member < supervisor < manager; admin is a separate capability set | Additive hierarchy without duplicated rules (Req 2.2, 2.3). Admin is deliberately not a Manager superset (Decision B). |
-| Status codes | No Token returns 401; valid Token with insufficient role or access returns 403, everywhere. A Guest requesting a private Board gets 401 | Req 2.8, 2.9, 11.5, 12.7, 13.10. |
-| Auth transport | Stateless JWT bearer token, fixed 24-hour expiry, no revocation list; passwords hashed with argon2 (`argon2-cffi`) | Req 1.13, 1.14, 1.16. Rate limiting is deferred (Req 1.18). |
-| Login identity | One `login_identifier` column, unique case-insensitively through a functional unique index on `lower(login_identifier)` | Decision C, Req 1.1 to 1.5. |
+| Status codes | No Token returns 401; valid Token with insufficient role or access returns 403, everywhere. A Guest requesting any Board outside the shared routes gets 401 (V10); a rate-limited request gets 429 with `Retry-After` | Req 2.8, 2.9, 11.5, 12.7, 13.10, 20.5. |
+| Auth transport | Stateless JWT bearer token, fixed 24-hour expiry, no revocation list; passwords hashed with argon2 (`argon2-cffi`). A Postgres-backed Rate_Limiter guards login and availability; registration is not limited (Decisions O and Q) | Req 1.13, 1.14, 1.16, Requirement 20. |
+| Login identity | Two columns, `username` and `email`, each unique case-insensitively through a functional unique index on its lower-cased value; login takes one `identifier` and the service classifies it (Decisions M and N). `login_identifier` is dropped by the V10 migration | Req 1.1 to 1.5, 1.43 to 1.54. Replaces Decision C. |
 | Ordering | `Float` `order`; first = `min - 1`, last = `max + 1`, empty = `1.0`, otherwise average; renumber the whole sibling list when the gap falls below `1e-6` | Req 4.13, 5.1, 5.10, 5.11. |
 | Deletion | `deleted_at` / `archived_at` on Board and Card only; child rows are hidden through a join on the parent Card's `deleted_at` | Req 3.8, 4.23, 4.29. |
 | Audit | `ActivityLog` row written by the service in the same transaction as the change | Req 8.1. |
-| Guest privacy | Serializers omit `comments`, `activity`, `activity_log` for guests; comment and activity endpoints reject guests | Absence of the field is the access control (Req 7.16, 8.5, 14.3). |
+| Guest privacy | A Guest has no Board_Access and no Token-bearing route. The only Token-free Board reads are the `/api/shared/{token}` routes (Decision K), whose schemas contain no `comments`, `activity`, or `activity_log` field; the comment and activity endpoints answer a Guest with 401 | Absence of the field is the access control (Req 7.16, 8.5, 14.3, 18.15). |
 | Attachment files | Signed, 15-minute file URLs (HMAC over attachment id and expiry); no permanent public URL (Decision D) | Req 4.18, 4.24 to 4.27. This replaces the V1 design, which returned a stable public `file_url`. |
 | Deadline job | Scheduled job (APScheduler, or a platform cron calling `flask notify-deadlines`); "today" is computed in `APP_TIMEZONE` | Req 9.2. |
+| Route guard | `frontend/proxy.ts` (Next.js 16 `proxy`, formerly `middleware`) redirects a request for any `(app)` page without the `kanban_token` cookie to `/login`; the Backend 401 remains the authority (Decision P) | Req 14.27. The check is optimistic because a proxy cannot verify the JWT cheaply and must not be the only gate. |
 | Frontend rendering | Server Components by default; Client Components only for the board (drag-and-drop), card modal, comment composer, sort toggle, search input, side panel | Req 14.11. |
 | Frontend styling | Tailwind CSS v4 + shadcn/ui (Radix). `styles/tokens.css` stays the single source of the look (palette from the product owner's visual reference); a Tailwind `@theme` block and shadcn's variables alias to the tokens. `BaseButton`, `BaseBadge`, `BaseModal` wrap shadcn `Button`, `Badge`, `Dialog`; nothing else imports `components/ui/` (Decision H) | Consistent utilities and accessible primitives while one token file carries the look (Req 14.9, 14.10, 14.13 to 14.15). |
 | API framework | `flask-smorest`: one `Api` instance, every blueprint a `flask_smorest.Blueprint`, request and response declared with marshmallow schemas (Decision E) | One declaration per endpoint drives validation, serialization, and the OpenAPI document (Req 13.12, 17.1). |
@@ -82,10 +83,11 @@ backend/app/
     ordering.py          # between(a, b), position_for(...), needs_rebalance, rebalance
     signing.py           # sign_file_url(attachment_id, now), verify_file_signature(...)
     clock.py             # today(tz), now(): injectable for tests
-  models/                # one module per entity, UUID PKs, TimestampMixin
+    rate_limiter.py      # V10: check/record/reset against rate_limit_attempts; pure policy + a repository-backed store
+  models/                # one module per entity, UUID PKs, TimestampMixin (V10 adds RateLimitAttempt)
   blueprints/
     auth/ boards/ columns/ cards/ categories/ comments/
-    notifications/ analytics/ users/     # each: routes.py service.py repository.py schema.py
+    notifications/ analytics/ users/ shared/    # each: routes.py service.py repository.py schema.py (shared = read-only Share_Link routes, V10)
   jobs/deadlines.py      # daily deadline notifications
 backend/tests/           # pytest + hypothesis, fake repositories
 backend/openapi.json     # generated export (flask export-openapi), never edited by hand
@@ -96,11 +98,11 @@ Activity has no public blueprint of its own. Activity reads are exposed through 
 
 ### Environment variables (listed in each app's `.env.example`, never a real `.env`)
 
-Backend: `DATABASE_URL`, `JWT_SECRET`, `ALLOWED_ORIGINS`, `FILE_URL_SECRET` (HMAC key for signed file URLs, separate from `JWT_SECRET`), `APP_TIMEZONE` (IANA name, for example `UTC`), `UPLOAD_DIR`, `APP_ENV` (`development`, `testing`, or `production`; optional, defaults to `production`; selects whether the smorest `OPENAPI_*` documentation settings are applied, see Requirement 17). Frontend: `NEXT_PUBLIC_API_URL`. The app refuses to start when `ALLOWED_ORIGINS`, `JWT_SECRET`, `FILE_URL_SECRET`, or `APP_TIMEZONE` is missing, or when `ALLOWED_ORIGINS` contains `*`.
+Backend: `DATABASE_URL`, `JWT_SECRET`, `ALLOWED_ORIGINS`, `FILE_URL_SECRET` (HMAC key for signed file URLs, separate from `JWT_SECRET`), `APP_TIMEZONE` (IANA name, for example `UTC`), `UPLOAD_DIR` (attachments at its root, avatars under `UPLOAD_DIR/avatars/`), `APP_ENV` (`development`, `testing`, or `production`; optional, defaults to `production`; selects whether the smorest `OPENAPI_*` documentation settings are applied, see Requirement 17). V10 adds the optional `RATE_LIMIT_WINDOW_SECONDS` (default 900), `RATE_LIMIT_LOGIN_PAIR_MAX` (default 5), `RATE_LIMIT_LOGIN_IP_MAX` (default 20), `RATE_LIMIT_AVAILABILITY_MAX` (default 60, kept, Decision W), `RATE_LIMIT_CHANGE_PASSWORD_MAX` (default 5, round 3), and `TRUSTED_PROXY_COUNT` (default 0); each is listed in `backend/.env.example` with a placeholder, and `create_app(config_overrides)` accepts the same keys so tests use small limits without `APP_ENV` (Req 20.10). Frontend: `NEXT_PUBLIC_API_URL`, and for the Playwright suite `E2E_BASE_URL`, `E2E_USER_IDENTIFIER`, `E2E_USER_PASSWORD` (V9). The app refuses to start when `ALLOWED_ORIGINS`, `JWT_SECRET`, `FILE_URL_SECRET`, or `APP_TIMEZONE` is missing, or when `ALLOWED_ORIGINS` contains `*`.
 
 ### Backend dependencies
 
-`requirements.txt` lists: `flask`, `flask-sqlalchemy`, `flask-migrate`, `flask-cors`, `flask-jwt-extended`, `argon2-cffi`, `psycopg[binary]` (or the driver in use), `flask-smorest` (brings `marshmallow`, `webargs`, `apispec`), and dev/test packages `pytest`, `hypothesis`. Removed: `flask-swagger-ui` and `pyyaml` (Req 17.10). Services and repositories import none of `flask`, `flask_smorest`, or `marshmallow`.
+`requirements.txt` lists: `flask`, `flask-sqlalchemy`, `flask-migrate`, `flask-cors`, `flask-jwt-extended`, `argon2-cffi`, `psycopg[binary]` (or the driver in use), `flask-smorest` (brings `marshmallow`, `webargs`, `apispec`), and dev/test packages `pytest`, `hypothesis`. V10 adds no Backend package: the Share_Token uses `secrets.token_urlsafe(32)`, the limiter key uses `hmac`, and the proxy handling uses `werkzeug.middleware.proxy_fix.ProxyFix`, which ships with Flask. V10 adds one Frontend package, `@radix-ui/react-dropdown-menu`, behind `BaseMenu`. Removed: `flask-swagger-ui` and `pyyaml` (Req 17.10). Services and repositories import none of `flask`, `flask_smorest`, or `marshmallow`.
 
 ### Frontend layout
 
@@ -108,7 +110,9 @@ Backend: `DATABASE_URL`, `JWT_SECRET`, `ALLOWED_ORIGINS`, `FILE_URL_SECRET` (HMA
 frontend/
   app/
     (auth)/login/page.tsx, register/page.tsx
-    (app)/layout.tsx                 # Sidebar + Main shell, side panel host
+    shared/[token]/page.tsx          # V10: Shared_View, outside (app), no guard, sends no-referrer and noindex headers
+    (app)/layout.tsx                 # AppHeader + Sidebar + Main shell, side panel host
+    (app)/profile/page.tsx           # V10: Profile_Page
     (app)/boards/[id]/page.tsx       # Server Component, fetches board
     (app)/boards/[id]/categories/page.tsx
     (app)/boards/[id]/members/page.tsx   # owner, Manager, Admin
@@ -116,6 +120,7 @@ frontend/
   components/ui/                     # shadcn/ui primitives (Button, Badge, Dialog), imported only by components/shared/
   components/shared/                 # BaseButton, BaseBadge, BaseModal, BasePopover, BaseCalendar: thin wrappers over components/ui/
   components/                        # Sidebar, Board (client), CardModal (client), ...
+  proxy.ts                           # V10: redirect (app) requests without kanban_token to /login (Decision P)
   lib/api.ts                         # single envelope unwrap/throw
   lib/ordering.ts                    # pure drop-order computation
   lib/utils.ts                       # cn(): clsx + tailwind-merge
@@ -166,16 +171,16 @@ sequenceDiagram
 def can_access(user: Actor | None, board: Board) -> bool:
     if board.deleted_at is not None:
         return False                      # callers translate to 404
-    if board.visibility == "public":
-        return True                       # guests and every signed-in user (Decision A)
     if user is None:
-        return False                      # guest on private -> caller raises 401
+        return False                      # V10 (Decision K): a Guest has no Board_Access, public or private -> caller raises 401
+    if board.visibility == "public":
+        return True                       # every signed-in user (Decision A, unchanged)
     if user.role in ("manager", "admin"):
         return True
     return board.owner_id == user.id or board_repository.is_member(board.id, user.id)
 ```
 
-Callers translate a `False` result with one helper, `require_access(user, board)`: soft-deleted board raises `NotFound`; a Guest on a private board raises `Unauthorized` (401); a signed-in user without access raises `Forbidden` (403). Every board-scoped read and write calls it: columns, cards (including search and filter), categories, comments, activity, attachments (including file URL issue), board members, and analytics. A Card, Column, Comment, Attachment, or Category resolves its Board first, then calls `require_access`.
+Callers translate a `False` result with one helper, `require_access(user, board)`: soft-deleted board raises `NotFound`; a Guest on any board raises `Unauthorized` (401, V10); a signed-in user without access raises `Forbidden` (403). Every board-scoped read and write calls it: columns, cards (including search and filter), categories, comments, activity, attachments (including file URL issue), board members, and analytics. A Card, Column, Comment, Attachment, or Category resolves its Board first, then calls `require_access`.
 
 A second helper, `can_write_staff(user, board)`, implements Board_Staff_Access. It is true for a Manager, an Admin, or a Supervisor who is the Board's owner or a BoardMember, and false for everyone else, including a Supervisor who is unrelated to a public Board.
 
@@ -193,13 +198,14 @@ Staff write paths call `require_access` first (401, 403, or 404), then `can_writ
 
 ### Role policy matrix (service layer)
 
-"Access" means `can_access` (Board_Access) is true. "Staff" means `can_write_staff` (Board_Staff_Access) is true. Every row also requires a valid Token unless the Guest column says yes.
+"Access" means `can_access` (Board_Access) is true. "Staff" means `can_write_staff` (Board_Staff_Access) is true. Every row also requires a valid Token; the Guest column lists the only Token-free access (the shared routes), and every other Guest request returns 401.
 
 | Action | guest | member | supervisor | manager | admin |
 |---|---|---|---|---|---|
-| List boards | public only | public + accessible | public + accessible | public + accessible | public + accessible |
-| View a board's columns, cards, categories | public board | with Access | with Access | yes | yes |
-| View comments / activity | no | with Access | with Access | yes | yes |
+| List boards | no (401) | public + accessible | public + accessible | public + accessible | public + accessible |
+| View a board's columns, cards, categories | only through a Share_Link, read-only (shared routes) | with Access | with Access | yes | yes |
+| View comments / activity | no (401; never through a Share_Link) | with Access | with Access | yes | yes |
+| Enable, disable, regenerate, read a Share_Link | no | no | owner only | yes | yes |
 | Create board, assign or clear owner, archive board, soft-delete board | no | no | no | yes | yes |
 | Set visibility | no | no | Staff | yes | yes |
 | Add / remove BoardMember | no | no | owner only | yes | yes |
@@ -225,19 +231,23 @@ Notes:
 All paths are under `/api`. Every response uses the envelope.
 
 **auth**
-- `POST /auth/register` → `auth_service.register(full_name, login_identifier, password)`. Trims the identifier. 400 when a field is missing or blank, the identifier exceeds 255 characters, or the password is shorter than 8 characters; 409 when `lower(login_identifier)` exists. New accounts get role `member`. No format validation of the identifier (Open Question 1).
-- `POST /auth/login` → matches `lower(login_identifier)`; 401 on bad credentials. Register and login return the same `{ user: {id, full_name, login_identifier, avatar_url}, token }`.
+- `POST /auth/register` → `auth_service.register(full_name, username, email, password, client_ip)`. Registration is not rate limited (Decision Q, Req 20.18): the only refusals are 400 and 409. `normalize_username` and `normalize_email` trim and lower-case; marshmallow validates the formats (Req 1.47, 1.48). 400 `VALIDATION_ERROR` with `error.details` per failing field; 409 `CONFLICT` with `error.details` naming each duplicate field (`username`, `email`, or both, found by two lookups on the lower-cased values, with the unique indexes as the final guard against a race: an `IntegrityError` is mapped to the same 409). New accounts get role `member`.
+- `POST /auth/login` → body `{ identifier, password }`; `auth_service.login(identifier, password, client_ip)`: (1) `classify_identifier` returns `("email", value)` when the lower-cased value contains `@` and has the Email shape, `("username", value)` when it has no `@` and matches the Username format, and otherwise raises `ValidationError` (400, `details.identifier`, nothing counted); (2) `rate_limiter.check_login(identifier, client_ip)` raises `RateLimited` before any password comparison (Req 20.14); (3) look up by `lower(email)` or `lower(username)`; (4) when the user is unknown, verify the password against a fixed dummy argon2 hash so response time does not reveal whether the account exists; (5) on any mismatch `rate_limiter.record_login_failure(...)` commits the failure row, then the service raises one `Unauthorized("Invalid credentials")`, the same for unknown user and wrong password; (6) on success `rate_limiter.reset_pair(...)` and issue the Token. Register and login return the same `{ user: {id, full_name, username, email, avatar_url}, token }`.
+- `GET /auth/availability?username=&email=` → `auth_service.availability`; rate limited under its own scope; returns `{ "username": {"available": bool}, "email": {"available": bool} }` for the supplied parameters; 400 when none is supplied or a format check fails (Req 1.49). No Token needed.
 - `POST /auth/logout` → returns `{ "status": true, "message": "Logged out", "data": null }`. Nothing is revoked. The client discards the token, which stays valid until expiry.
+- `GET /auth/me` (Token) returns the current user in the `user` shape. `PATCH /auth/me` (Token) takes `full_name` only (round 3, Decision V: `email` is no longer editable, so no 409 exists here); the schema is `unknown=RAISE`, so `email`, `avatar_url`, `username`, `role`, and any other field return 400 (Req 19.11, 19.27). `POST /auth/change-password` (Token) takes `current_password` and `new_password` (min 8); a wrong current password returns 400 `VALIDATION_ERROR` with `details.current_password`, never 401 (Req 19.16), and counts one failure in the Rate_Limiter scope `change_password`, keyed by user id; a blocked user gets 429 before any password comparison (round 3, Decision W, Req 20.19 to 20.21). Each success writes one `user.profile_updated` or `user.password_changed` row with `target_type = "user"` and no secret in `metadata` (Req 19.15). These routes live in the `auth` blueprint, not `users`, so they need no admin role.
+- **Avatar (round 2, Decision R, Req 19.18 to 19.33):** `POST /users/me/avatar` (Token, `multipart/form-data`, part `file`) → `user_service.set_avatar(user, stream)`; `DELETE /users/me/avatar` (Token) → `user_service.clear_avatar(user)`; `GET /users/{user_id}/avatar/file?exp=&sig=` (no Token, signature only) → `user_service.open_avatar(user_id, exp, sig, now)`. Round 3 (Decision U) moved all three from `/auth/me/avatar` and `/auth/avatars/{user_id}/file` to the `users` blueprint and the service functions to `user_service`, with no change in behaviour. Role checks are per route (Req 2.7): the admin-only decorator sits on each admin route and not on the blueprint, so the two avatar routes need only a Token and the file route only a signature. `PATCH /users/{id}` uses a UUID path converter, so `/users/me/avatar` never matches it. `GET|PATCH /auth/me` and `POST /auth/change-password` stay in `auth`. Details are in the sections "Round 2 within V10" and "Round 3 within V10".
 
-**users** (admin only)
-- `GET /users`, `POST /users`, `PATCH /users/{id}` (edit, assign role). Each mutation logs an `ActivityLog` row (`user.created`, `user.updated`, `user.role_changed`). Non-admin returns 403, no token returns 401.
+**users** (admin only, except the self-service avatar routes of round 3)
+- `GET /users`, `POST /users`, `PATCH /users/{id}` (edit, assign role). `POST` and `PATCH` take `username` and `email` under the same validation and uniqueness rules as registration (Req 1.54). Each mutation logs an `ActivityLog` row (`user.created`, `user.updated`, `user.role_changed`). Non-admin returns 403, no token returns 401.
 
 **boards**
-- `GET /boards`: Guest gets public non-deleted boards; a signed-in user gets `(public AND deleted_at IS NULL) OR (non-deleted AND can_access)`. Implemented as one repository query `list_visible(user)`: Manager and Admin get every non-deleted board; others get public boards, boards where `owner_id = user.id`, and boards joined through `BoardMember`.
-- `GET /boards/{id}` → `require_access`. `serialize_board(board, viewer)` omits `comments` and `activity_log` for a Guest even if requested.
+- `GET /boards`: a request without a Token returns 401 (V10, Req 11.4); a signed-in user gets `(public AND deleted_at IS NULL) OR (non-deleted AND can_access)`. Implemented as one repository query `list_visible(user)`: Manager and Admin get every non-deleted board; others get public boards, boards where `owner_id = user.id`, and boards joined through `BoardMember`.
+- `GET /boards/{id}` → `require_access` (a Guest gets 401). `serialize_board(board, viewer)` never includes `share_token`; only the share endpoints below return it.
+- `GET /boards/{id}/share`, `POST /boards/{id}/share`, `POST /boards/{id}/share/regenerate`, `DELETE /boards/{id}/share` → `board_service.get_share`, `enable_share`, `regenerate_share`, `disable_share`. Allowed to the Board_Owner, a Manager, or an Admin (`is_owner or role in (manager, admin)`); a BoardMember Supervisor gets 403. `enable_share` creates `secrets.token_urlsafe(32)` (256 bits) only when `share_token` is null and returns the existing one otherwise; `regenerate_share` always replaces it; `disable_share` sets null. A unique violation on the new token (practically impossible) retries once. Each state change writes one `board.share_enabled`, `board.share_regenerated`, or `board.share_disabled` row in the same transaction with `metadata` `{ board_name }` and never the token (Req 18.8). Response: `{ enabled, token, path }` with `path = "/shared/<token>"`.
 - `POST /boards` (manager, admin; seeds columns in one transaction), `PATCH /boards/{id}` (name, `visibility`, `owner_id`), `POST /boards/{id}/archive`, `POST /boards/{id}/unarchive`, `DELETE /boards/{id}` (soft; manager, admin), `GET /boards/{id}/activity`.
 - `PATCH /boards/{id}` with `owner_id`: the new value must reference a user with role `supervisor`, otherwise 400 `VALIDATION_ERROR`; `null` clears the owner. Reassigning or clearing writes one `board.owner_changed` activity row in the same transaction (Req 3.2, 3.16 to 3.19). Only Manager and Admin may change `owner_id`; a visibility change is also allowed to owner/BoardMember Supervisors (Req 11.2).
-- `GET /boards/{id}/members` (requires `can_access`), `POST /boards/{id}/members` body `{ "user_id" }` (owner, Manager, Admin; 409 when the pair exists; 404 when the user does not exist), `DELETE /boards/{id}/members/{user_id}` (same actors; 404 when the pair does not exist). Each add or remove writes one `board.member_added` / `board.member_removed` activity row in the same transaction (Req 3.11 to 3.15).
+- `GET /boards/{id}/members` (requires `can_access`; returns `id`, `full_name`, `username` per member, and `email` too only with `?include=email`, which answers 403 without `can_write_staff` and 401 without a Token, Decision S, Req 3.30), `POST /boards/{id}/members` body `{ "user_id" }` (owner, Manager, Admin; 409 when the pair exists; 404 when the user does not exist), `DELETE /boards/{id}/members/{user_id}` (same actors; 404 when the pair does not exist). Each add or remove writes one `board.member_added` / `board.member_removed` activity row in the same transaction (Req 3.11 to 3.15).
 - `GET /boards/{id}/cards?search=&filter[priority]=&filter[assignee]=&filter[category]=` is served by the `cards` blueprint, nested under boards per API conventions.
 
 **columns**
@@ -248,12 +258,20 @@ All paths are under `/api`. Every response uses the envelope.
 - Setting `assignee_id` to a user creates an `assigned` Notification and a `card.assigned` activity row. Setting it to `null` writes a `card.unassigned` activity row and creates no Notification (Req 4.28).
 - `POST /cards/{id}/subtasks`, `PATCH /subtasks/{id}` (`title`, `is_done`, `order` position), `DELETE /subtasks/{id}`.
 - `POST /cards/{id}/attachments` (JSON link or multipart upload), `DELETE /attachments/{id}`.
-- `GET /attachments/{id}/url` → `{ "status": true, "message": "OK", "data": { "file_url": "...", "expires_at": "..." } }` after `require_access` on the owning Card's Board; open to Guests on public boards (Req 4.26).
+- `GET /attachments/{id}/url` → `{ "status": true, "message": "OK", "data": { "file_url": "...", "expires_at": "..." } }` after `require_access` on the owning Card's Board (a Guest gets 401; a Guest obtains URLs only through `GET /shared/{token}/attachments/{id}/url`, Req 4.26, 18.14).
 - `GET /attachments/{id}/file?exp=&sig=` serves the bytes after verifying the signature and expiry (see Attachments).
 - `card_service` exposes `add_subtask`, `toggle_subtask`, `reorder_subtasks`, `delete_subtask`, `move_card`, `assign_card`, `list_for_board(filters)`, `issue_file_url`.
 
 **categories**
-- `GET /boards/{board_id}/categories` (`require_access` only, no role check; guests on public boards allowed), `POST /boards/{board_id}/categories`, `PATCH /categories/{id}`, `DELETE /categories/{id}` (the last three need `can_write_staff`). A duplicate name on the board, compared case-insensitively, returns 409 `CONFLICT` for create and rename. Deleting a category sets `Card.category_id` to null for affected cards. Categories of a soft-deleted board stay stored and are unreachable because `require_access` fails first.
+- `GET /boards/{board_id}/categories` (`require_access` only, no role check; a Guest gets 401 and reads categories only through `/shared/{token}/categories`), `POST /boards/{board_id}/categories`, `PATCH /categories/{id}`, `DELETE /categories/{id}` (the last three need `can_write_staff`). A duplicate name on the board, compared case-insensitively, returns 409 `CONFLICT` for create and rename. Deleting a category sets `Card.category_id` to null for affected cards. Categories of a soft-deleted board stay stored and are unreachable because `require_access` fails first.
+
+**shared** (V10, Decision K; read-only, no Token; `Cache-Control: private, no-store`)
+- `GET /shared/{token}` → `shared_service.get_board(token, optional_actor)`: `board_repository.get_by_share_token(token)` (a hash-free equality lookup on the unique index; the token carries 256 bits, so no timing concern) loads the Board with `selectinload(Board.columns)`; a null, unknown, or soft-deleted result raises the single `NotFound` of Req 18.10. Returns `{ id, name, description, columns, has_board_access }`. `has_board_access` is true only when a valid Bearer Token is sent and `can_access(actor, board)`; an invalid Token is ignored (the route never returns 401).
+- `GET /shared/{token}/cards?search=&filter[...]=` → reuses `card_service.list_for_board(board_id, filters)` with the same filter schema as the authenticated route; the shared schema is `SharedCardSchema`, which has no `comments`, `activity`, or `activity_log` field and adds `assignee_name` (one batched `User.full_name` query for all assignees, as for comment authors) and no avatar field (round 3, Decision U).
+- `GET /shared/{token}/categories` → `category_repository.list_for_board`.
+- `GET /shared/{token}/cards/{card_id}` → the Card must belong to the Board (`Column.board_id`), else 404.
+- `GET /shared/{token}/attachments/{id}/url` → the Attachment's Card must belong to the Board, else 404; returns `{ file_url, expires_at }` signed with scope `share` (see Attachments).
+- There is no POST, PATCH, PUT, or DELETE under `/shared`, and no comments or activity route (Req 18.15). A static test lists the routes under the prefix and fails on any other method or path. The routes are `GET` only, so the mutating-route 401/403 sweep (Req 15.5) excludes them, and the sweep gets one assertion that the prefix has no mutating route.
 
 **comments**
 - `GET /cards/{id}/comments?sort=latest|popular`, `POST /cards/{id}/comments`, `POST /comments/{id}/replies`, `PATCH /comments/{id}/priority`. No like endpoint. Create and reply require a Member, Supervisor, or Manager with `can_access`; Admin gets 403.
@@ -285,7 +303,7 @@ All paths are under `/api`. Every response uses the envelope.
 4. Fetch the target column's other cards ordered by `order`. If the gap between the drop neighbours is below `1e-6`, renumber the column (excluding the moved card) and recompute the neighbours. Compute the order with `position_for`.
 5. Update the card, insert one `ActivityLog` (`card.moved`, metadata `{from_column, to_column}`), commit once.
 
-**Comment listing**: as V1 with these changes. A Guest calling a comment endpoint gets 403 on a public Board and 401 on a private Board, with no `comments` field in either case (Req 7.16); the card payload for a Guest omits `comments` entirely. For signed-in viewers, `require_access` runs first. `can_create_card = viewer.role in {supervisor, manager, admin} and author.role == "manager"` (Req 7.14, 7.15).
+**Comment listing**: as V1 with these changes. A Guest calling a comment endpoint gets 401 whatever the Board's visibility, with no `comments` field (Req 7.16, V10); no shared route returns comments. For signed-in viewers, `require_access` runs first. `can_create_card = viewer.role in {supervisor, manager, admin} and author.role == "manager"` (Req 7.14, 7.15).
 
 **Reply (`comment_service.reply`)**: load target; if `target.parent_id is not None` raise `ValidationError("cannot reply to a reply")`; `require_access`; insert reply; `parent.reply_count += 1`; log activity; commit once.
 
@@ -303,8 +321,10 @@ This replaces the V1 stable public `file_url`. Uploaded files are stored under a
 
 - `sign_file_url(attachment_id, now) -> (path, exp)`: `exp = int(now.timestamp()) + 900`; `sig = hex(HMAC_SHA256(FILE_URL_SECRET, f"{attachment_id}.{exp}"))`; the path is `/api/attachments/{id}/file?exp={exp}&sig={sig}`.
 - `verify_file_signature(attachment_id, exp, sig, now) -> bool`: recompute and compare with `hmac.compare_digest`, and require `now.timestamp() <= exp`. A bad or expired signature returns 403 `FORBIDDEN`. The route needs no bearer token because the signature is the credential and the URL must open in a plain browser tab; a missing `exp` or `sig` is treated as an invalid signature (403).
-- `card_service.serialize_card(card, viewer)` embeds a freshly signed `file_url` per uploaded attachment, only when the viewer passes `can_access` for the card's Board (which includes Guests on public boards). A viewer who fails access gets a 401 or 403 for the whole card, so no URL leaks. Link attachments return `url` exactly as stored (Req 4.27).
+- `card_service.serialize_card(card, viewer)` embeds a freshly signed `file_url` per uploaded attachment, only when the viewer passes `can_access` for the card's Board (a signed-in viewer; Guests get URLs only through the shared route, scoped to the Share_Token). A viewer who fails access gets a 401 or 403 for the whole card, so no URL leaks. Link attachments return `url` exactly as stored (Req 4.27).
 - `GET /attachments/{id}/url` re-runs `require_access` and returns a new signed URL (Req 4.26).
+- **Share scope (V10, Req 18.14, 18.16):** `sign_file_url(attachment_id, now, scope=None)` signs `f"{attachment_id}.{exp}.{scope or ''}"`. For a shared URL, `scope = "share:" + HMAC(FILE_URL_SECRET, share_token)[:16]` and the path carries `&st=<that value>`. `verify_file_signature` recomputes with the `st` it received, and the file route then loads the attachment's Board and, when `st` is present, requires `"share:" + HMAC(FILE_URL_SECRET, board.share_token)[:16] == st` with `share_token` not null. Disabling or regenerating the Share_Token therefore invalidates every outstanding shared file URL at once with a 403, while ordinary signed URLs (no `st`) are unaffected. The raw Share_Token never appears in a file URL or its logs.
+- **Avatar scope (round 2, Decision R, Req 19.24, 19.25):** the same `common/signing.py` signs avatar URLs: `sign_file_url(resource_id, now, scope="avatar", route="avatar")` signs `f"{user_id}.{exp}.avatar"` and builds `/api/users/{user_id}/avatar/file?exp=&sig=`; `verify_file_signature(resource_id, exp, sig, now, scope="avatar")` recomputes with the same scope. Because the scope is inside the signed string, an avatar signature never verifies on the attachment file route and the reverse. No new secret, expiry constant, or verification code exists.
 - The file route also re-checks that the attachment's Card and Board are not soft-deleted (404 otherwise).
 - Cost note: signed URLs add one signing function, one route, and a re-issue endpoint compared with a public URL (Open Question 2).
 
@@ -315,15 +335,22 @@ Frontend handling: `AttachmentList` renders `<a href={file_url} target="_blank" 
 | Component | Type | Notes |
 |---|---|---|
 | `AppShell` (`(app)/layout.tsx`) | Server | Renders Sidebar, header, Main, side-panel host. |
-| `Sidebar` | Client | One column. Expanded: nav items with icons and labels, then the Boards list and team members; collapsed: the icon rail only with tooltips; the choice is kept in `localStorage`. Off-canvas drawer below 960px with scrim, toggle in the persistent header. Boards list (from `GET /boards`) is the board switcher; each row shows a lock (private) or open lock (public) icon and wraps a long name. Home is the first entry. Categories entry only for supervisor, manager, admin. |
+| `Sidebar` | Client | One column. V10: no profile entry and no Log out item (Decision L). Expanded: nav items with icons and labels, then the Boards list and team members; collapsed: the icon rail only with tooltips; the choice is kept in `localStorage`. Off-canvas drawer below 960px with scrim, toggle in the persistent header. Boards list (from `GET /boards`) is the board switcher; each row shows a lock (private) or open lock (public) icon and wraps a long name. Home is the first entry. Categories entry only for supervisor, manager, admin. |
 | `BoardsHome` (`(app)/boards/page.tsx`) | Server | Lists every board the viewer may see with its visibility icon; the default destination after sign-in. |
+| `AppHeader` | Client | V10. Persistent top bar of `(app)/layout.tsx`: Sidebar toggle below 960px, a page-context slot (on a Board: `BaseVisibility`, the name, and `ShareButton`), the Inbox bell, and `UserMenu`. The Board's second row (progress, chips, search) stays in `Board`. |
+| `UserMenu` | Client | V10. `BaseMenu` with the trigger `aria-label="User menu"` (avatar or user icon); items Profile (link to `/profile`) then Log out (calls `api.auth.logout()`, which always clears the cookie and navigates to `/login`). |
+| `ProfilePage` | Client form in a Server page | V10. `/profile`: full name, avatar section, read-only Username and Email, change-password form; field errors from `ApiError.details`. |
+| `AvatarUploader` | Client | Round 2 (Decision R). Choose, preview (object URL, revoked on change and unmount), Upload, Cancel, Remove behind `BaseConfirm`; checks type and size before sending; maps `details.file`. |
+| `BaseAvatar` | Client | Existing shared component, extended in round 2 and used for every user avatar from round 3 (Decision U): takes `src` (an Avatar_URL or null) and `name`, shows the image or the Initials_Avatar from `initialsOf(name)`, uses the name as tooltip and `alt` text and never the Email; on `onError` calls `api.auth.me()` once, retries once with the fresh URL, then shows initials (Req 19.30). |
+| `ShareButton` | Client | V10. Shown only to the Board_Owner, Manager, Admin; `BasePopover` with enable toggle, link field with Copy, Regenerate and Disable behind `BaseConfirm`. |
+| `SharedBoard`, `SharedCardModal` | Server page, Client interaction | V10. `/shared/[token]`: read-only board and card modal; no drag, edit, comments, activity, Sidebar, or User_Menu; a "Shared view, read only" banner and a Sign in link. The page calls `GET /shared/{token}` with the cookie Token when present and redirects to `/boards/{id}` when `has_board_access` is true. |
 | `SidePanel` | Client | One `toggleSidePanel("inbox" \| "activity")` shared by sidebar items and the header bell. Renders only when the API returned the data. |
 | `Board` | Client | Viewport-locked: the header stays fixed, columns scroll sideways, each column scrolls inside itself with its add-card action pinned at the bottom. HTML5 drag-and-drop (draggable cards, `dragover` and `drop` on each column body) with placeholder and FLIP; calls `PATCH /cards/{id}/move` once on drop, reconciles with the response, reverts on failure. |
 | `FilterRow` | Client | Chips from `GET /boards/{id}/categories`; search input. |
 | `CardModal` | Client | Large two-pane modal. Header: "card title | board name" (live from the draft title) and the column badge. Footer, right-aligned: Archive, Delete, Save changes. Left: Details, Attachments (bordered tiles), and Subtasks cards. Right: a Comments card (composer, thread) and an Activity card. No column select. |
 | `CardChips` | Client | Category, Priority, dates, and assignee chips; each opens a `BasePopover` that edits the modal's draft form. |
 | `DateRangePicker` | Client | One `BaseCalendar` in range mode plus optional Start date and End date fields; rules in `lib/dates.ts`. |
-| `MemberPicker` | Client | Popover with a search box and the board's members; single choice and Remove. |
+| `MemberPicker` | Client | Popover with a search box and the board's members (full name and Email, from `GET /boards/{id}/members?include=email`); the search matches full name, Username, and Email; single choice and Remove. Hidden from a Member (Decision S). |
 | `CardDescription`, `ActivityList` | Server | Plain rendering. |
 | `AttachmentList` | Client | Opens signed URLs with `target="_blank" rel="noopener noreferrer"`; refreshes an expired URL first. |
 | `SubtaskChecklist` | Client | Flat checkbox list, inline-editable titles, drag handle. |
@@ -332,9 +359,10 @@ Frontend handling: `AttachmentList` renders `<a href={file_url} target="_blank" 
 | `BoardMembersScreen` | Client | Add and remove members; shown to the owner, Manager, Admin. |
 | `AuthSplitLayout` | Server | Brand panel hidden at mobile width; form card elevated and rounded. |
 | `BaseCard`, `BaseVisibility` | Shared | `BaseCard` is a titled bordered section (heading bar plus content) used to group the card modal; `BaseVisibility` is the lock or open-lock icon with its label. |
+| `BaseMenu` | Shared | V10. Thin wrapper over shadcn/ui `DropdownMenu` (`@radix-ui/react-dropdown-menu`); the only file group that imports it. |
 | `BaseButton`, `BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar` | Shared | Only place buttons, badges, modals (header, scrolling body, footer slot), popovers, and calendars are defined; thin wrappers over shadcn/ui `Button`, `Badge`, `Dialog`, `Popover`, `Calendar` (Decisions H and I), themed from the tokens. |
 
-`lib/api.ts` adds the Bearer token, unwraps `data` from `{ status, message, data }`, and throws a typed `ApiError(httpStatus, code, message, details)`: `httpStatus` comes from the `Response` object, `code` from `error.code`, `message` from the top-level `message`, and `details` from `error.details` (a field → list-of-messages map, present for `VALIDATION_ERROR`). Forms map `details` onto their fields. A 401 clears the stored token and redirects to login; logout calls `POST /auth/logout` and then discards the token. Styles use `min-width` queries (960px breakpoint) over a 360 to 414px base, and only CSS custom properties.
+`lib/api.ts` adds the Bearer token, unwraps `data` from `{ status, message, data }`, and throws a typed `ApiError(httpStatus, code, message, details)`: `httpStatus` comes from the `Response` object, `code` from `error.code`, `message` from the top-level `message`, and `details` from `error.details` (a field → list-of-messages map, present for `VALIDATION_ERROR`). Forms map `details` onto their fields. A 401 clears the stored token and redirects to login (except on `POST /auth/login`, where a 401 is the Generic_Login_Error); a 429 throws an `ApiError` whose `retryAfter` is read from `error.details.retry_after` (or the `Retry-After` header), which the login and register forms turn into a countdown (Req 20.15); logout calls `POST /auth/logout` and then discards the token whether the call succeeds or fails (Req 19.4). Styles use `min-width` queries (960px breakpoint) over a 360 to 414px base, and only CSS custom properties.
 
 Stretch features (Req 16) are additive: nullable `progress` and `views_count` columns in a later migration, and the decorative tabs behind a feature flag. They are not in the first migration.
 
@@ -364,8 +392,8 @@ erDiagram
 
 | Entity | Columns |
 |---|---|
-| `User` | `id`, `full_name`, `login_identifier` (String(255), not null, trimmed, unique case-insensitively through a unique index on `lower(login_identifier)`), `password_hash` (argon2), `role` enum(`member`,`supervisor`,`manager`,`admin`), `avatar_url` (nullable), timestamps. Guest is the absence of a user. No format validation of the identifier pending Open Question 1. |
-| `Board` | `id`, `name`, `visibility` enum(`public`,`private`, default `private`), `owner_id` (nullable FK User, must reference a supervisor when set), `deleted_at`, `archived_at`, timestamps. |
+| `User` | `id`, `full_name`, `username` (String(30), not null, stored lower-case, unique through `uq_users_username_lower` on `lower(username)`), `email` (String(255), stored lower-case, unique through `uq_users_email_lower` on `lower(email)`; **nullable in the database only** so that migrated accounts without an address can exist, and required by every register and admin-create schema), `password_hash` (argon2), `role` enum(`member`,`supervisor`,`manager`,`admin`), `avatar_path` (String(64), nullable; the generated file name `<hex32>.<png|jpg|webp>`, never a URL; the `user` payload computes `avatar_url` from it, Decision R), timestamps. `login_identifier` and `uq_users_login_identifier_lower` are removed by the V10 migration. Guest is the absence of a user. |
+| `Board` | `id`, `name`, `description` (nullable, at most 500), `visibility` enum(`public`,`private`, default `private`), `owner_id` (nullable FK User, must reference a supervisor when set), `share_token` (nullable String(64), unique index `uq_boards_share_token` where not null; V10, Decision K), `deleted_at`, `archived_at`, timestamps. |
 | `BoardMember` | `id`, `board_id` (FK Board), `user_id` (FK User), timestamps. Unique `(board_id, user_id)`. |
 | `Column` | `id`, `board_id` (FK), `name`, `order` (Float), timestamps. |
 | `Card` | `id`, `column_id`, `category_id` (nullable FK, `ON DELETE SET NULL`), `assignee_id` (nullable FK), `title`, `description`, `priority` enum(`high`,`medium`,`low`), `start_date` (nullable Date), `end_date` (nullable Date), `order` (Float), `deleted_at`, `archived_at`, timestamps. Check constraint `end_date >= start_date` when both set. Stretch: `progress`, `views_count`. A Card's Board is reached through its Column. |
@@ -375,6 +403,7 @@ erDiagram
 | `Comment` | `id`, `card_id`, `author_id`, `parent_id` (nullable self FK), `content`, `is_priority` (default false), `reply_count` (default 0), timestamps. No `deleted_at`. |
 | `ActivityLog` | `id`, `actor_id`, `action`, `target_type`, `target_id`, `metadata` (JSON), `created_at`. The repository exposes no update or delete function. |
 | `Notification` | `id`, `user_id`, `type` enum(`assigned`,`deadline`), `card_id`, `is_read` (default false), `notify_date` (Date), timestamps. Unique `(user_id, card_id, type, notify_date)`. |
+| `RateLimitAttempt` | `id`, `scope` enum(`login_pair`,`login_ip`,`availability`), `key_hash` (String(64): hex HMAC-SHA256, keyed with `JWT_SECRET` and a `ratelimit:` prefix, of `identifier|ip` for `login_pair` and of the IP for the other scope), `created_at` (timestamptz, server clock via the injectable `clock.now()`). Index `(scope, key_hash, created_at)`. No `updated_at` (rows are only inserted and deleted; a documented exception like `ActivityLog`). V10, Decision O. |
 
 ### Relationships (Decision F, Req 13.16)
 
@@ -401,7 +430,7 @@ The relationships are mapper-level only. They add no column, constraint, or inde
 
 ### No `to_dict` on models (Decision F, Req 13.17)
 
-Models carry no `to_dict()` or other serialization method. What a response contains depends on the viewer: a Guest's payload omits `comments` and `activity`, `can_create_card` depends on the viewer's role and the comment author's role, and `file_url` is signed per request for a viewer with Board_Access. The marshmallow schemas in each `schema.py` therefore serialize plain DTOs, with the viewer passed as schema `context`. Putting this on the model would force the model to know the viewer, or would leak unfiltered fields.
+Models carry no `to_dict()` or other serialization method. What a response contains depends on the viewer: a shared (Guest) payload has no `comments` or `activity` field, `can_create_card` depends on the viewer's role and the comment author's role, and `file_url` is signed per request for a viewer with Board_Access. The marshmallow schemas in each `schema.py` therefore serialize plain DTOs, with the viewer passed as schema `context`. Putting this on the model would force the model to know the viewer, or would leak unfiltered fields.
 
 Notes:
 - Board and Card queries add `deleted_at IS NULL` by default. Subtask, Attachment, and Comment queries join their parent Card and filter on `Card.deleted_at IS NULL`, so a soft-deleted Card hides its children (Req 4.29).
@@ -424,7 +453,7 @@ Because relationships are `lazy="raise"`, the repository function that returns r
 | `comment_repository.get_by_id(id)` | one Comment | nothing (a reply check reads `parent_id`, a column) |
 
 Notes:
-- Card assignee and category are only ids in the payload (`assignee_id`, `category_id`), and neither is a declared relationship, so no `joinedload` is used for them. If a later payload needs the assignee's name, the repository adds a `select(Card, User.full_name).join(User, ...)` column join, not a new relationship (Req 13.16 lists the only allowed relationships).
+- Card assignee and category are only ids in the payload (`assignee_id`, `category_id`), and neither is a declared relationship, so no `joinedload` is used for them. From round 3 the Card payloads also carry `assignee_name` and `assignee_avatar_url`; the service reads them with the same batched lookup as comment authors (`user_repository.identities(ids)`, one `IN` query that returns `id`, `full_name`, and `avatar_path` and never `email`), not with a relationship (Req 13.16 lists the only allowed relationships).
 - The card's Board is reached through `Card.column_id` and a join on `Column`, in the repository query (`WHERE Column.board_id = :board_id`), not through a relationship.
 - `can_create_card` needs each comment author's role. `comment_repository.list_for_card` selects `Comment` together with `User.role` in one joined query, and loads replies with `selectinload`, so the author lookup adds no per-comment query. The same applies to author names in replies, loaded in one extra batched query.
 - Subtask and attachment lists are ordered by the relationship's `order_by`, so the schema never sorts.
@@ -452,6 +481,7 @@ Existing repositories (tasks 1 to 13, migrated in V4) are plain column queries. 
 ```json
 { "status": true, "message": "OK", "data": { "id": "…", "title": "Fix login", "priority": "high", "order": 1.5,
   "column_id": "…", "category_id": null, "assignee_id": "…",
+  "assignee_name": "Ada Lovelace", "assignee_avatar_url": "/api/users/…/avatar/file?exp=…&sig=…",
   "start_date": "2025-01-01", "end_date": "2025-01-05",
   "subtasks": [],
   "attachments": [
@@ -461,7 +491,7 @@ Existing repositories (tasks 1 to 13, migrated in V4) are plain column queries. 
   "comments": [], "activity": [] } }
 ```
 
-Guest card payloads omit `comments` and `activity` entirely. `file_url` is present only for uploaded files and is valid for 15 minutes.
+Shared card payloads (`/api/shared/{token}/cards/{id}`) omit `comments` and `activity` entirely and add `assignee_name`; a Guest has no other card payload. `file_url` is present only for uploaded files and is valid for 15 minutes.
 
 ```json
 { "status": true, "message": "OK", "data": [ { "id": "…", "content": "…", "is_priority": true, "reply_count": 3,
@@ -477,15 +507,15 @@ Reflection notes: the many per-endpoint 401/403 criteria collapse into the permi
 
 ### Property 1: Registration and login round trip
 
-*For any* valid registration (non-blank full name, non-blank identifier of at most 255 characters after trimming, password of at least 8 characters), registering returns a user and token, the stored password hash differs from the plaintext, and logging in with the same credentials, with the identifier in any letter case, returns the same user and a valid token. *For any* different password, login returns 401.
+*For any* valid registration (non-blank full name; a Username of 3 to 30 characters from `a-z`, `0-9`, `_`, `.` in any letter case; a valid Email of at most 255 characters in any letter case; a password of at least 8 characters), registering returns a user and token, the stored `username` and `email` are the lower-cased values, the stored password hash differs from the plaintext, and logging in with the same password and either the Username or the Email, in any letter case, returns the same user and a valid token. *For any* different password, and *for any* well-formed Identifier that belongs to no account, login returns the same 401 status, code, and message.
 
-**Validates: Requirements 1.1, 1.2, 1.3, 1.13**
+**Validates: Requirements 1.1, 1.2, 1.3, 1.13, 1.44, 1.45**
 
-### Property 2: Registration validation and unique login identifier
+### Property 2: Registration validation and unique username and email
 
-*For any* registration with a missing or blank field, an identifier longer than 255 characters after trimming, or a password shorter than 8 characters, the Backend returns 400 `VALIDATION_ERROR` and creates no user. *For any* registration whose identifier equals an existing identifier ignoring letter case, the Backend returns 409 and the user count is unchanged. *For any* other trimmed identifier string, no format check rejects it.
+*For any* registration with a missing or blank field, a Username outside the Username format, an Email outside the Email format or longer than 255 characters, or a password shorter than 8 characters, the Backend returns 400 `VALIDATION_ERROR`, `error.details` has an entry for exactly each failing field, and no user is created. *For any* registration whose Username equals an existing Username, or whose Email equals an existing Email, ignoring letter case, the Backend returns 409 `CONFLICT`, `error.details` names exactly the duplicated fields, and the user count is unchanged. *For any* two concurrent registrations of the same Username, one succeeds and one returns 409.
 
-**Validates: Requirements 1.4, 1.5, 1.12, 1.17**
+**Validates: Requirements 1.4, 1.5, 1.12, 1.43, 1.47, 1.48**
 
 ### Property 3: Permission matrix and role source
 
@@ -495,13 +525,13 @@ Reflection notes: the many per-endpoint 401/403 criteria collapse into the permi
 
 ### Property 4: Board_Access function
 
-*For any* board and any user (or Guest), `can_access` is true exactly when the board is not soft-deleted and either the board is public, or the user is signed in and is the owner, a BoardMember, a Manager, or an Admin. *For any* board-scoped read or write routed through a Card, Column, Comment, Category, or Attachment, access equals `can_access` on the owning board.
+*For any* board and any user (or Guest), `can_access` is true exactly when the board is not soft-deleted, the user is signed in, and either the board is public, or the user is the owner, a BoardMember, a Manager, or an Admin; a Guest never passes it. *For any* board-scoped read or write routed through a Card, Column, Comment, Category, or Attachment, access equals `can_access` on the owning board.
 
 **Validates: Requirements 3.4, 6.5, 7.1, 8.3, 8.4, 11.6, 11.11, 12.1, 12.7**
 
 ### Property 5: 401 versus 403 versus 404
 
-*For any* board-scoped or role-gated endpoint and any request, the status is 401 when no valid Token is present and the endpoint requires one or the actor is a Guest on a private board; 403 when a valid Token is present but the role or Board_Access is insufficient; 404 when the target is unknown or soft-deleted. Guests may read public boards without a Token. The same status is returned on every endpoint for the same condition.
+*For any* board-scoped or role-gated endpoint and any request, the status is 401 when no valid Token is present and the endpoint requires one (every Board route outside `/api/shared`, public Boards included); 403 when a valid Token is present but the role or Board_Access is insufficient; 404 when the target is unknown or soft-deleted. The routes that need no Token are register, login, availability, and `/api/shared/...`. The same status is returned on every endpoint for the same condition.
 
 **Validates: Requirements 2.8, 2.9, 11.5, 12.7, 13.10**
 
@@ -573,7 +603,7 @@ Reflection notes: the many per-endpoint 401/403 criteria collapse into the permi
 
 ### Property 17: Categories are board-scoped and name-unique
 
-*For any* set of categories distributed across boards, listing a board's categories returns exactly the categories whose `board_id` equals that board, for any viewer with Board_Access, including a Guest on a public board. *For any* create, rename, or delete, the call succeeds exactly when the actor has Board_Staff_Access; a Member or an unrelated Supervisor gets 403, and no Token gets 401. *For any* create or rename whose name equals an existing name on the same board ignoring letter case, the Backend returns 409 `CONFLICT`; the same name on a different board is accepted. Categories of a soft-deleted board are unreachable but remain stored.
+*For any* set of categories distributed across boards, listing a board's categories returns exactly the categories whose `board_id` equals that board, for any signed-in viewer with Board_Access; a Guest gets 401 here and reads categories only through `GET /api/shared/{token}/categories`. *For any* create, rename, or delete, the call succeeds exactly when the actor has Board_Staff_Access; a Member or an unrelated Supervisor gets 403, and no Token gets 401. *For any* create or rename whose name equals an existing name on the same board ignoring letter case, the Backend returns 409 `CONFLICT`; the same name on a different board is accepted. Categories of a soft-deleted board are unreachable but remain stored.
 
 **Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.12**
 
@@ -597,7 +627,7 @@ Reflection notes: the many per-endpoint 401/403 criteria collapse into the permi
 
 ### Property 21: Attachment access gating
 
-*For any* uploaded attachment and viewer, `GET /attachments/{id}/url` and the card payload include a signed `file_url` exactly when the viewer passes `can_access` for the owning card's board (including a Guest on a public board); an unrelated Member on a private board gets 403, and a Guest on a private board gets 401. A re-issued URL is valid for 15 minutes from its issue time.
+*For any* uploaded attachment and viewer, `GET /attachments/{id}/url` and the card payload include a signed `file_url` exactly when the signed-in viewer passes `can_access` for the owning card's board; an unrelated Member on a private board gets 403, and a Guest gets 401 on this route (a Guest's only route is the share-scoped one of Property 41). A re-issued URL is valid for 15 minutes from its issue time.
 
 **Validates: Requirements 4.18, 4.26, 15.7**
 
@@ -639,9 +669,9 @@ Reflection notes: the many per-endpoint 401/403 criteria collapse into the permi
 
 ### Property 28: Guest responses never include comments or activity
 
-*For any* guest request to a board, card, search, or direct comment or activity endpoint, the response contains no `comments`, `activity`, or `activity_log` field, even when the request asks for them explicitly. *For any* guest call to a comment endpoint, the status is 403 on a public board and 401 on a private board.
+*For any* request without a Token to a board, card, search, comment, or activity endpoint outside `/api/shared`, the status is 401 and the body has no `comments`, `activity`, or `activity_log` field, whatever the board's visibility. *For any* response of a shared route, for a public or a private board, and for any query string that asks for these fields, the body contains no `comments`, `activity`, or `activity_log` field at any depth.
 
-**Validates: Requirements 7.16, 8.5, 11.7, 12.6, 14.3**
+**Validates: Requirements 7.16, 8.5, 11.4, 11.5, 11.7, 12.6, 12.7, 14.3, 18.9, 18.15**
 
 ### Property 29: One activity row per state change
 
@@ -675,9 +705,9 @@ Reflection notes: the many per-endpoint 401/403 criteria collapse into the permi
 
 ### Property 34: Board list visibility
 
-*For any* set of boards, memberships, and viewer, a Guest's board list is exactly the boards with `visibility = public` and null `deleted_at`. A signed-in viewer's list is exactly the public non-deleted boards plus the non-deleted boards for which `can_access` is true. Fetching a board by id succeeds exactly when `can_access` is true.
+*For any* set of boards, memberships, and viewer, a request without a Token for the board list returns 401. A signed-in viewer's list is exactly the public non-deleted boards plus the non-deleted boards for which `can_access` is true; a Member sees every public board (Decision A). Fetching a board by id succeeds exactly when `can_access` is true.
 
-**Validates: Requirements 11.4, 11.6, 11.12**
+**Validates: Requirements 11.4, 11.6, 11.12, 11.13**
 
 ### Property 35: Search and filter correctness
 
@@ -687,21 +717,79 @@ Reflection notes: the many per-endpoint 401/403 criteria collapse into the permi
 
 ### Property 36: Response envelope
 
-*For any* `/api` endpoint (excluding the documentation routes and the successful bytes of the signed file route) and any request, the body carries a boolean `status` that is true exactly when the HTTP status is 2xx, a non-empty string `message`, and no numeric HTTP status. A success body is exactly `{ "status": true, "message", "data" }`. A failure body is exactly `{ "status": false, "message", "error": { "code", "details"? } }` with a status in {400, 401, 403, 404, 405, 409, 500}; `error` contains `code` and no `message` field. *For any* request body or query that fails marshmallow validation, the HTTP status is 400 (never 422), `error.code` is `VALIDATION_ERROR`, and `error.details` maps every failing field to a non-empty list of strings. *For any* failure other than validation, `error.details` is absent.
+*For any* `/api` endpoint (excluding the documentation routes and the successful bytes of the signed file route) and any request, the body carries a boolean `status` that is true exactly when the HTTP status is 2xx, a non-empty string `message`, and no numeric HTTP status. A success body is exactly `{ "status": true, "message", "data" }`. A failure body is exactly `{ "status": false, "message", "error": { "code", "details"? } }` with a status in {400, 401, 403, 404, 405, 409, 429, 500}; `error` contains `code` and no `message` field. *For any* request body or query that fails marshmallow validation, the HTTP status is 400 (never 422), `error.code` is `VALIDATION_ERROR`, and `error.details` maps every failing field to a non-empty list of strings. *For any* failure other than validation, `error.details` is absent, with two exceptions: the 409 `CONFLICT` of a registration or an email save carries `details` per duplicated field, and a 429 `RATE_LIMITED` carries `details.retry_after`, an integer of at least 1 that equals the `Retry-After` header (V10, Decision O).
 
-**Validates: Requirements 13.2, 13.3, 13.4, 13.11, 13.13**
+**Validates: Requirements 13.2, 13.3, 13.4, 13.11, 13.13, 20.5**
+
+### Property 40: Share_Token lifecycle
+
+*For any* board, any sequence of enable, regenerate, and disable calls by the owner, a Manager, or an Admin, and any earlier token `t`: enabling when off creates a token of at least 43 URL-safe characters and writes one row; enabling when on returns the same token and writes no row; regenerating returns a token different from every earlier token and writes one row; disabling sets `share_token` to null. After any call, every shared route answers 200 for the current token and the same 404 for every other token, including `t` after a regenerate or disable. A call by anyone else gets 403 (401 with no Token). No Activity_Log `metadata` contains any token.
+
+**Validates: Requirements 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7, 18.8, 18.10**
+
+### Property 41: Shared routes stay inside the token's board
+
+*For any* two boards with Share_Tokens, any card or attachment id, and any token, a shared card, shared attachment, or shared categories request returns data only when the card, attachment, or category belongs to the board of that token, and 404 otherwise. *For any* Signed_File_URL issued through a Share_Token, the file route returns the bytes before the token is disabled or regenerated and within 15 minutes of issue, and 403 after the board's token changes or is cleared, or after expiry. A signed URL issued on the authenticated route (no `st`) is unaffected by the token. No route under `/api/shared` accepts a method other than GET.
+
+**Validates: Requirements 18.11, 18.12, 18.13, 18.14, 18.15, 18.16**
+
+### Property 42: Login identifier classification
+
+*For any* string `x`, `classify_identifier(x)` (after trim and lower-casing) returns `email` exactly when `x` contains `@` and has the Email shape, returns `username` exactly when `x` contains no `@` and matches the Username format, and otherwise the login returns 400 `VALIDATION_ERROR` with `details.identifier`, performs no user lookup, and adds no row to the Rate_Limiter. The frontend helper `classifyIdentifier` gives the same answer as the backend function for every generated string.
+
+**Validates: Requirements 1.44, 1.45, 1.46, 1.51**
+
+### Property 43: Username and Email normalisation and uniqueness
+
+*For any* Username or Email `x` accepted by the format rules, the stored value is `x.strip().lower()`, and `availability` reports `available = false` exactly when a stored value equals it. *For any* two users, the stored Usernames differ and the stored Emails differ when both are present; two null Emails are allowed. *For any* string with a character outside `a-z0-9_.` after lower-casing, or of length below 3 or above 30, the Username is rejected with 400 and an entry in `details.username`.
+
+**Validates: Requirements 1.43, 1.47, 1.48, 1.49**
+
+### Property 44: Rate limit window
+
+*For any* sequence of timed login attempts (success, wrong password, unknown identifier, malformed identifier) from any set of Identifiers and Client_IPs, with any thresholds `P` (pair) and `I` (IP) and window `W`, using the injectable clock: an attempt is blocked (429) exactly when the pair has at least `P` counted failures in the half-open window `(now - W, now]` or the IP has at least `I`; a 401 adds one counted failure; a 400 and a 429 add none; a successful login removes the pair's failures and leaves the IP's; a blocked pair is blocked even with the correct password. When blocked, `retry_after` equals `ceil(t + W - now)` for the oldest counted failure `t` whose expiry brings the count below the limit, is at least 1, equals the `Retry-After` header, and waiting that long (clock advanced) makes the next attempt unblocked. Counters of different pairs and different IPs are independent. Availability blocks exactly when the IP has more than its maximum in the window; registration is never blocked, whatever the number of requests (Decision Q). A change-password call is blocked exactly when the user has at least `C` counted failures (400 with `details.current_password`) in the window; every other 400, a 401, and a 429 add none; a success removes the user's failures; counters of different users are independent and do not depend on the Client_IP (Decision W). Rows older than `W` are deleted on the next record.
+
+**Validates: Requirements 20.1, 20.2, 20.3, 20.4, 20.5, 20.6, 20.7, 20.8, 20.13, 20.14, 20.19, 20.20, 20.21**
+
+### Property 45: Migration reset
+*For any* generated set of rows in `users` and in the tables that reference it, `upgrade` with `APP_ENV` equal to `development` or `testing` leaves `users` and every referencing table empty, leaves `username` and `email` NOT NULL with case-insensitive unique indexes, and leaves no `login_identifier` column; with any other `APP_ENV`, including unset, `upgrade` raises before it changes a row or the schema; `downgrade` after `upgrade` restores a `login_identifier` column with its unique index. *For any* seed run, every seeded user has a valid Username, a valid Email, and a non-blank full name, the Test_Account `member` logs in with its Username and with its Email, and a second run creates no duplicate (Decision V).
+**Validates: Requirements 1.43, 1.63, 1.64, 15.18, 15.27**
+### Property 46: Profile update rules
+
+*For any* `PATCH /auth/me` body: an unknown field (including `username` and `role`) returns 400 and changes nothing; `email` is an unknown field and returns 400 (Decision V); `full_name` follows the format of Req 19.10, and `avatar_url` is an unknown field and returns 400 (Req 19.27). *For any* `change-password` call, a wrong `current_password` returns 400 with `details.current_password` (never 401), a `new_password` under 8 characters returns 400, and a valid call lets the user log in with the new password only. Each success writes exactly one Activity_Log row with no secret in `metadata`.
+
+**Validates: Requirements 19.9, 19.10, 19.11, 19.12, 19.15, 19.16**
+
+### Property 47: Avatar image type and size
+
+*For any* byte string and any file name and declared Content-Type, `detect_image_type(head)` returns `png` exactly when the bytes start with the eight PNG signature bytes, `jpg` exactly when they start with `FF D8 FF`, `webp` exactly when bytes 0 to 3 are `RIFF` and bytes 8 to 11 are `WEBP`, and nothing otherwise; the upload is accepted exactly when the type is detected and the length is from 1 to 2,097,152 bytes, whatever the file name or declared type; an accepted upload yields a stored name that matches `^[0-9a-f]{32}\.(png|jpg|webp)$` and contains no part of the original name.
+**Validates: Requirements 19.19, 19.20, 19.21**
+
+### Property 48: Safe return path and usable Token
+
+*For any* string `next`, `safeReturnPath(next)` returns it unchanged exactly when it starts with a single `/` (not `//`, not `/\`), has no control character, has at most 512 characters, and starts with `/boards`, `/profile`, or `/admin`, and returns `/boards` otherwise; the result never has a scheme or host. *For any* cookie value and time, `isUsableToken(value, now)` is true exactly when the value has three base64url segments, the payload is a JSON object with string `sub`, string `role`, and numeric `exp`, and `exp > now`; the function never throws.
+**Validates: Requirements 1.57, 1.59**
+
+### Property 49: Email exposure
+
+*For any* Board, viewer role and relationship, and any search text, the candidate response contains `email` exactly when the call is allowed (Board_Owner, Manager, Admin) and the trimmed search has at least 2 characters (a shorter search returns 400 with `details.search` and queries nothing); `GET /boards/{id}/members` contains `email` exactly when `include=email` is sent by a viewer with Board_Staff_Access (403 otherwise); and *for any* generated Board with Comments, Activity_Log rows, Notifications, and a Share_Token, no Comment, activity, notification, shared, or default member response body contains the Email of a user other than the viewer.
+**Validates: Requirements 3.25, 3.30, 3.31, 15.24**
+### Property 50: Avatar exposure and query count
+*For any* generated Card with Comments and Replies by up to 50 distinct authors, Board members, candidates, and an assignee, each `author_avatar_url`, `avatar_url`, and `assignee_avatar_url` is null exactly when that user has no `avatar_path`, and otherwise is a signed URL that verifies with the scope `avatar` for exactly that user id and fails for another user id, for an Attachment id, and after 15 minutes; none of these fields, and no Email, appears in a shared, Activity_Log, or Notification response; the number of SQL statements of the Comment list and of the Card list is the same for 5 and for 50 distinct users; and *for any* full name, `initialsOf(name)` returns the upper-cased first letters of the first two whitespace-separated words, one letter for one word, and `?` for a blank name, and never contains an `@`.
+**Validates: Requirements 7.21, 19.34, 19.35, 19.36, 19.37, 19.39, 15.25**
 
 ## Error Handling
 
-Every row renders `{ "status": false, "message": <text>, "error": { "code": <Code> } }` with the HTTP status on the HTTP line; the `VALIDATION_ERROR` row also carries `"details": { "<field>": ["<message>", ...] }` inside `error`. The message text appears once, at the top level.
+Every row renders `{ "status": false, "message": <text>, "error": { "code": <Code> } }` with the HTTP status on the HTTP line; the `VALIDATION_ERROR` row also carries `"details": { "<field>": ["<message>", ...] }` inside `error`. The message text appears once, at the top level. V10 (Decision O): `details` also appears on a registration or email-save `CONFLICT` (per field) and on `RATE_LIMITED` (`retry_after`).
 
 | Condition | Status | Code |
 |---|---|---|
-| Missing or malformed body field or query value (smorest's default 422 is mapped to 400, with `error.details`), bad priority, `end_date < start_date`, unsupported filter, bad attachment, blank comment, reply to a reply, password under 8 characters, identifier blank or over 255 characters, move to a column of another board, owner reassigned to a non-supervisor | 400 | `VALIDATION_ERROR` |
-| Missing, invalid, or expired Token; bad login credentials; Guest requesting a private board, its cards, its comments, or its attachments | 401 | `UNAUTHORIZED` |
-| Valid Token but role, Board_Access, or Board_Staff_Access insufficient; Member editing a card not assigned to them; Supervisor without Board_Staff_Access writing, or without ownership requesting analytics; Guest calling a comment endpoint on a public board; Admin commenting or requesting analytics; expired, invalid, or missing file signature | 403 | `FORBIDDEN` |
-| Unknown or soft-deleted resource id; another user's notification id; removing a non-member | 404 | `NOT_FOUND` |
-| Duplicate `login_identifier` (case-insensitive), duplicate category name on a board (case-insensitive), adding an existing BoardMember | 409 | `CONFLICT` |
+| Missing or malformed body field or query value (smorest's default 422 is mapped to 400, with `error.details`), bad priority, `end_date < start_date`, unsupported filter, bad attachment, blank comment, reply to a reply, password under 8 characters, a Username, Email, or login `identifier` outside its format (`details` per field), a bad profile or avatar value, a wrong current password on change-password (`details.current_password`), a second email save, move to a column of another board, owner reassigned to a non-supervisor | 400 | `VALIDATION_ERROR` |
+| Missing, invalid, or expired Token; bad login credentials (one generic message for unknown user and wrong password); a request without a Token to any board, card, comment, activity, or attachment route outside `/api/shared`, public boards included | 401 | `UNAUTHORIZED` |
+| Valid Token but role, Board_Access, or Board_Staff_Access insufficient; Member editing a card not assigned to them; Supervisor without Board_Staff_Access writing, or without ownership requesting analytics; a non-owner (including a BoardMember Supervisor) calling a share endpoint; Admin commenting or requesting analytics; expired, invalid, or missing file signature | 403 | `FORBIDDEN` |
+| Unknown or soft-deleted resource id; another user's notification id; removing a non-member; an unknown, disabled, replaced, or soft-deleted Share_Token; a card or attachment outside the token's board | 404 | `NOT_FOUND` |
+| Duplicate Username or Email (case-insensitive; `details` names each duplicate field), duplicate category name on a board (case-insensitive), adding an existing BoardMember | 409 | `CONFLICT` |
+| A login or availability request over its Rate_Limiter threshold (`details.retry_after`, header `Retry-After`) | 429 | `RATE_LIMITED` |
 | Unknown route (not a resource id) | 404 | `NOT_FOUND` |
 | Wrong HTTP method for a route | 405 | `METHOD_NOT_ALLOWED` |
 | Unhandled exception | 500 | `INTERNAL_ERROR` (generic message, details logged server-side only) |
@@ -721,19 +809,21 @@ Property-based testing applies to the service layer, because services are pure b
 
 ### Property-based tests
 
-- Libraries: `hypothesis` for the backend, `fast-check` for TypeScript helpers (`lib/ordering.ts`).
-- Each of Properties 1 to 39 is implemented by a single property-based test, run with at least 100 iterations (`@settings(max_examples=100)`).
+- Libraries: `hypothesis` for the backend, `fast-check` for TypeScript helpers (`lib/ordering.ts`, `lib/session.ts`, `lib/return-path.ts`, `lib/initials.ts`).
+- Each of Properties 1 to 50 is implemented by a single property-based test, run with at least 100 iterations (`@settings(max_examples=100)`).
 - Each test carries a tag comment in the form `Feature: kanban-task-management, Property N: <property text>`.
-- Services are tested against in-memory fake repositories, never a real database. Properties that need atomicity (12, 16, 29) use a fake unit of work that can be forced to fail. Time-dependent properties (20, 31, 33) use the injectable clock.
+- Services are tested against in-memory fake repositories, never a real database. Properties that need atomicity (12, 16, 29) use a fake unit of work that can be forced to fail. Time-dependent properties (20, 31, 33, 44) use the injectable clock. Property 44 runs the Rate_Limiter against the real table on a test PostgreSQL session (advisory locks and `ON COMMIT` behaviour need Postgres) with two app instances sharing it, to show the counts hold across workers; Property 45 runs the migration functions (reset and abort) on generated user rows in a test database; Properties 40, 41, and 46 use the Flask test client with fake repositories. Properties 47 and 48 are pure functions (`detect_image_type`, `safeReturnPath`, `isUsableToken`) and run without a database; Property 49 uses the Flask test client; Property 50 uses the Flask test client with the real repositories on a test database (statement count through the same event listener as Property 39) and a fast-check test of `initialsOf`.
 - Property 39 runs against an in-memory SQLite or test PostgreSQL session with the real repositories, counting statements through a SQLAlchemy `before_cursor_execute` event listener on the engine, for boards seeded with 5 and with 50 cards (each with subtasks and attachments), and asserts the two counts are equal (Req 15.8). The generator varies the number of cards, subtasks, and attachments per card.
-- Property 36 runs against the Flask test client with the real routes and fake repositories, over generated requests to every registered `/api` route except the documentation routes, including unknown routes and wrong methods. Properties 37 and 38 run against the app built with each `APP_ENV` value.
+- Property 36 runs against the Flask test client with the real routes and fake repositories, over generated requests to every registered `/api` route except the documentation routes, including unknown routes and wrong methods, plus the 429 response of an over-limit login. Properties 37 and 38 run against the app built with each `APP_ENV` value.
 
+### End-to-end tests (Playwright)
+- The Kanban journey (task 20.1) and the sign-in and sign-out suite (V9, section "Auth End-to-End Tests (V9)") run against the deployed URL with web-first assertions and no `waitForTimeout`. They are example-based, not property-based, because the behaviour does not vary meaningfully with generated input.
 ### Unit and example tests (pytest)
 
 - Comment creation: success, validation failure (blank body), unauthenticated (401), unauthorized (guest 401, admin 403). Mandatory per Req 15.1.
-- **Board_Access matrix**: every combination of {guest, member, supervisor owner, supervisor BoardMember, supervisor unrelated, manager, admin} against {public board, private board} for read and write on columns, cards, categories, comments, activity, search, and attachments, with the expected 200, 401, or 403. This includes an unrelated Supervisor getting 403 on writes to a public board (Board_Staff_Access), and a Guest getting 403 on a public board and 401 on a private board from the comment endpoints. This includes the unrelated Member getting 403 on a private board (Req 15.6).
+- **Board_Access matrix**: every combination of {guest, member, supervisor owner, supervisor BoardMember, supervisor unrelated, manager, admin} against {public board, private board} for read and write on columns, cards, categories, comments, activity, search, and attachments, with the expected 200, 401, or 403. This includes an unrelated Supervisor getting 403 on writes to a public board (Board_Staff_Access), and a Guest getting 401 on every board, comment, and activity endpoint outside `/api/shared` whether the board is public or private (V10). This includes the unrelated Member getting 403 on a private board (Req 15.6).
 - **401 and 403 for every mutating endpoint**: a test enumerates the registered mutating routes (POST, PATCH, PUT, DELETE) and asserts 401 with no Token and 403 with a Token of an insufficient role, except the public auth routes. A fixture fails the build if a mutating route is missing from the list (Req 15.5, 2.10).
-- **Attachment signature and expiry**: permitted viewer gets a working URL; unrelated Member gets 403 on re-issue; Guest on a private board gets 401; a URL used after 15 minutes returns 403; a URL with a modified `sig` or `exp` returns 403; a Guest on a public board gets a URL (Req 15.7).
+- **Attachment signature and expiry**: permitted viewer gets a working URL; unrelated Member gets 403 on re-issue; Guest on a private board gets 401; a URL used after 15 minutes returns 403; a URL with a modified `sig` or `exp` returns 403; a Guest gets 401 on the authenticated route and a URL only through the share-scoped route, which stops working after disable or regenerate (Req 15.7, 15.17).
 - Token expiry is 24 hours after issue; `POST /auth/logout` returns `{ "status": true, "message": "Logged out", "data": null }` and the token still validates.
 - Validation failures from `@blp.arguments` (body and query) return 400 `VALIDATION_ERROR` and never 422; 404, 405, 401 from JWT errors, and a forced 500 all render the error envelope with `status` false and no `error.message`; a blank comment body returns `error.details.content` as a list of strings; the success `status` is the boolean `true`, never the number 200.
 - Board seed order, owner assignment, cross-board analytics shape, CORS origin parsing (rejects `*`), `.env.example` lists the five backend variables.
@@ -741,17 +831,18 @@ Property-based testing applies to the service layer, because services are pure b
 - Schema check: every blueprint view carries `@blp.response` with an `envelope(...)` schema (Req 13.15).
 - **lazy="raise" check** (Req 15.9): load a Card without `selectinload` and access `card.subtasks`; assert `sqlalchemy.exc.InvalidRequestError` is raised. Repeat for `Board.columns`, `Board.members`, `Card.attachments`, and `Comment.replies`. A second assertion confirms the same access succeeds when the repository function loads it.
 - Static check: no model defines `to_dict` (Req 13.17); each of the five relationships has `lazy="raise"`, `back_populates`, and no `cascade` (Req 13.16).
-- Category deletion sets affected cards' `category_id` to null; soft-deleted board's categories are unreachable (integration test with a test database, including the functional unique indexes on `lower(login_identifier)` and `(board_id, lower(name))`).
+- Category deletion sets affected cards' `category_id` to null; soft-deleted board's categories are unreachable (integration test with a test database, including the functional unique indexes on `lower(username)`, `lower(email)`, and `(board_id, lower(name))`).
 
 ### Frontend tests
 
+- V10 component tests: `UserMenu` lists Profile above Log out and Log out clears the cookie even when the call fails; `Sidebar` has neither item; the login form chooses email or username validation by `@` and disables submit with a countdown on a 429; the register form maps `details.username` and `details.email` onto fields and shows availability results; `ShareButton` shows only for the owner, Manager, and Admin and asks for confirmation before Regenerate and Disable; `SharedBoard` renders with no edit, comment, or activity control; `proxy.ts` redirects a request without the cookie for each `(app)` path and passes `/login`, `/register`, and `/shared/x`, and (round 2) also redirects a malformed or expired cookie with the cookie removed on the response; `AvatarUploader` shows a preview, the two client-side error messages, and a server `details.file` message, and `BaseAvatar` falls back to initials after one refresh; `MemberSearch` and `MemberPicker` show the Email, and the Sidebar member rows and `CommentThread` show none; `BaseAvatar` renders the image, or the initials when the URL is null; `CommentThread`, the Sidebar member rows, `MemberSearch`, `MemberPicker`, the board Card, and the Card modal chip render it; `MemberSearch` sends no request below 2 characters; the Profile password form shows a countdown on a 429 and keeps the session.
 - Component tests (React Testing Library): `CommentThread` shows Reply only on top-level comments and the create-card button only when `canCreateCard`; sections are omitted when the API omits `comments`, `activity`, or inbox data; filter chips come from the API response; `AttachmentList` renders `target="_blank" rel="noopener noreferrer"` and requests a fresh URL when `exp` has passed.
 - Pure helper tests: `computeDropOrder` (fast-check, Property 15 mirror).
 - Responsive checks at 360, 414, and 960 pixel widths via Playwright viewport tests.
 
 ### End-to-end (Playwright)
 
-- One Kanban journey against the deployed URL: register, log in, open a board, add and drag a card, reload and confirm position, open the card modal, comment, reply, toggle Latest and Popular.
+- One Kanban journey against the deployed URL: register (with Username and Email), log in, open a board, add and drag a card, reload and confirm position, open the card modal, comment, reply, toggle Latest and Popular.
 - No `waitForTimeout` anywhere; use `expect(locator).toBeVisible()` and other web-first assertions (Req 15.3). A CI grep step fails the build if `waitForTimeout` appears.
 - Performance (Req 14.1, 14.2) is checked by a load script for p95 latency and a Lighthouse run on a 200-card seeded board with Fast 3G throttling. These are integration checks, not property tests.
 
@@ -903,7 +994,7 @@ Changes from V5 to V6 (Decision G; URLs, HTTP status codes, role rules, and prop
 - **Font:** `@fontsource-variable/inter` is imported once in `app/layout.tsx`; `--font-stack` starts with `"Inter Variable"` then the system stack. No request leaves the app.
 - **Drag:** `Board` uses the HTML5 API: `CardTile` is `draggable`; `onDragOver` on a column body (`data-column-id`) computes the target index with `dropIndex` over the card centres and inserts the placeholder; `onDrop` calls `onMove` once; the browser scrolls a column body natively during a drag. The dragged card is hidden after the drag image is taken, as in the first V8 build.
 - **Pane scrolling:** the modal body is a flex column that does not scroll; the pane grid is `lg:grid-rows-1` so its single row is as tall as the body, and each pane is `lg:overflow-y-auto`. Without the fixed row the grid grows to its content and the panes clip instead of scrolling. `BaseCard` is `shrink-0` (it has `overflow-hidden`, so in a flex-column pane it would otherwise shrink to fit and clip its content instead of letting the pane scroll).
-- **Names:** `activity_repository.serialize_many` (via `actor_names`) and `comments_repository.author_names` each run one `IN` query on `User.id` for all actors or authors of a response, and the serializers add `actor_name` and `author_name`; the models gain no relationship (Decision F). The frontend reads those fields first, then the board-member map, then shows "Someone" only when the API sent no name.
+- **Names:** `activity_repository.serialize_many` (via `actor_names`) and `comments_repository.author_names` each run one `IN` query on `User.id` for all actors or authors of a response, and the serializers add `actor_name` and `author_name` (from round 3 the author, member, candidate, and assignee lookups also select `avatar_path`, so the serializers add `author_avatar_url`, `avatar_url`, and `assignee_avatar_url` without a further query); the models gain no relationship (Decision F). The frontend reads those fields first, then the board-member map, then shows "Someone" only when the API sent no name.
 - **Brand and radii:** the application is named RevoTask (Sidebar, page titles, sign-in layout). `--radius-sm` is 4px, `--radius-md` and `--radius-card` 6px, `--radius-lg` 8px; columns, cards, buttons, popovers, and the modal take those tokens.
 - **Card modal draft:** the modal keeps one `form` state. Chips and popovers write to it; `Save changes` diffs it against the loaded card and sends one `PATCH`. Save is disabled while the dates are invalid.
 - **Dates (`lib/dates.ts`):** `normalizeRange(start, end, picked)` implements the rules: picking a day when no start exists sets the start; picking later than the start sets the end; picking earlier than the start restarts the range at that day; moving the start past an existing end clears the end; start equal to end is valid. `isRangeValid(start, end)` is true when either is empty or `end >= start`. The calendar passes `disabled` for days before the start while the end is being picked. Dates are ISO `YYYY-MM-DD` strings, no time zone and no time of day.
@@ -944,7 +1035,7 @@ The frontend built for tasks 15 to 18 uses `styles/globals.css` and `styles/shel
 
 - **Type and spacing system:** tokens `--text-page-title: 18px` (semibold) for page and modal titles; section headings `text-sm font-semibold`; body and controls `text-sm`; secondary `text-meta text-ink-muted`; labels `text-xs font-medium text-ink-muted`. Spacing on the 8px grid: `p-4` (16px) inside every card and section, `gap-3` (12px) between rows, `gap-6` (24px) between sections. This supersedes the round 3 values of 20px card padding and 16px inner gap.
 - **Sidebar:** one `NavItem` component renders every navigation entry and Board row (same height `min-h-control`, same left padding `px-3`); brand `text-heading font-semibold`; section labels `text-2xs uppercase tracking-wide text-ink-muted`; member rows name `text-meta font-medium`, login `text-xs text-ink-muted`. The "Members" nav entry is removed; the Team members section has an add button (opens `MemberSearch`) and a remove button per member (opens the confirmation popover) for the owner, Manager, and Admin.
-- **`MemberSearch`:** a search field over `GET /api/boards/{id}/candidates?search=`, debounced; renders in a `BasePopover`, or in a `BaseModal` when the viewport is below 960px; choosing a user calls `POST /api/boards/{id}/members`.
+- **`MemberSearch`:** a search field over `GET /api/boards/{id}/candidates?search=`, debounced, each result showing the full name and, beneath it, the Username and the Email (round 2, Decision S); renders in a `BasePopover`, or in a `BaseModal` when the viewport is below 960px; choosing a user calls `POST /api/boards/{id}/members`.
 - **Board header:** one row (`flex items-center gap-4`): `BaseVisibility` and the Board name, a progress bar `w-progress-track` with the percent, `FilterRow` (`overflow-x-auto`, chips `border border-line`, active `border-brand`), then search, bell, and user. No Add Member and no settings gear. Below 960px the search is an icon button that opens a `BaseModal` holding the search field.
 - **`BaseTooltip`:** wraps shadcn `Tooltip` (`@radix-ui/react-tooltip`), with one `TooltipProvider` in `AppShell`; it replaces the CSS tooltips on the Sidebar and wraps every `BaseAvatar` (the avatar takes the name as the tooltip text).
 - **`BaseCombobox`:** wraps shadcn `Command` (`cmdk`) inside `BasePopover`; props `options`, `value`, `onChange`, `placeholder`, `searchable` (default: six or more options). The trigger is a 40px button that shows the selected option. It replaces every `BaseSelect` (attachment type, new board visibility, and the Card modal Category, Priority, and assignee pickers; the assignee picker keeps the member avatars in its options).
@@ -1006,3 +1097,307 @@ Changes from V7 to V8 (Decision I; the backend, API, data model, and property nu
 - Requirements: 3.23 reworded (two-row header); 3.26 to 3.29, 4.46 to 4.50, 6.14, 10.8 added.
 - Backend: four counts on the board list (one query per count kind), a nullable `Board.description` with a migration.
 - Frontend: two-row header with a scrolling chip strip, richer Home with tiles and the analytics strip, modal title and date alignment, a file drop zone, the close icon in the header row, two badge types, lowercase category names.
+
+## Auth End-to-End Tests (V9, updated in V10)
+
+Test specifications only; the product changes of V10 are in the next section. Covers Req 1.19 to 1.42, 1.55, 1.56, and Req 15.10 to 15.19.
+
+- **Layout:** `frontend/tests/e2e/auth/signin.spec.ts`, `signout.spec.ts`, `pages/AuthPage.ts` (the Auth_Page_Object), and `env.ts` (reads and checks the three environment variables). `frontend/playwright.config.ts` sets `testDir: "tests/e2e"`, `use.baseURL` from `E2E_BASE_URL`, and no `webServer`, because the tests target the deployed URL. Vitest only includes `tests/**/*.test.{ts,tsx}`, so `*.spec.ts` files are not picked up by `vitest run`.
+- **Environment:** `E2E_BASE_URL`, `E2E_USER_IDENTIFIER` (a Username or an Email), `E2E_USER_PASSWORD` in `frontend/.env.example` (placeholders). `env.ts` throws an error naming the first missing variable (Req 15.12). No credential literal exists in any spec. The Test_Account is seeded outside the suite (Member role assumed).
+- **Auth_Page_Object (`AuthPage`), V10 locators:** `getByLabel("Username or email")`, `getByLabel("Password")`, `getByRole("button", { name: "Log in" })`, `getByRole("alert")` for the form error, field error text through `aria-describedby`, `userMenuTrigger = getByRole("button", { name: "User menu" })`, `profileItem = getByRole("menuitem", { name: "Profile" })`, `signOutItem = getByRole("menuitem", { name: "Log out" })`, `sidebar = getByRole("navigation", { name: "Sidebar" })`. Methods: `goto()`, `signIn(identifier, password)`, `openUserMenu()`, `signOut()` (opens the menu, then activates Log out), `sessionCookie()` (reads `kanban_token` through `context.cookies()`), `brandPanel`, `waitTimeText`. The User_Menu lives in the App_Header, which is persistent at every width, so `signOut()` needs no drawer step (V9 opened the Sidebar drawer below 960 pixels). Specs never write a raw selector.
+- **Waiting:** only web-first assertions (`expect(locator).toBeVisible()`, `expect(page).toHaveURL(...)`, `expect.poll` for the cookie). Negative paths wait on `page.waitForResponse` for the login or logout call, never on a fixed delay.
+- **Network control (negative cases):** `page.route("**/api/auth/logout", ...)` fulfils HTTP 500, aborts, or returns a 401 error Envelope for SO-07 and SO-08; `page.route` returns a 401 Envelope for one client call (for example `GET /api/notifications`) for SO-06. Sign-in negatives use the real Backend.
+- **Back button and route guard (SO-03, SO-04, SO-05):** `frontend/proxy.ts` now redirects every `(app)` request without the cookie, so the three tests are real tests (V9 had `test.fixme` for SO-03 and SO-05). SO-04 calls `page.goBack()` after sign-out and asserts `toHaveURL(/\/login/)` with no `User menu` button; the protected pages are dynamic, so Next.js sends `Cache-Control: private, no-cache, no-store` and the browser does not restore a signed-in page from its cache.
+- **Password hygiene (SI-10):** assert `page.url()` does not contain the password, the password input has `type="password"`, and `page.content()` does not contain the password string after a failed submit.
+- **Case-insensitive login (SI-02):** the test upper-cases `E2E_USER_IDENTIFIER`; if the identifier has no letters the test is skipped with an annotation naming the reason.
+- **Identifier validation (SI-08, SI-09, SI-12):** SI-08 submits both fields empty, SI-09 a 256-character value without `@` (username-shape message), SI-12 `"a@b"` (email-shape message); none sends a request, so `page.route("**/api/auth/login", ...)` counts calls and the test asserts zero.
+- **Unknown account (SI-07):** a Throwaway_Identifier `e2e-rl-<random>` that matches the Username format and belongs to no account.
+- **Rate limit (SI-11):** the test submits wrong passwords for a fresh Throwaway_Identifier (up to 10 attempts, Req 15.19) until `waitTimeText` is visible, then asserts the submit button is disabled and a further click sends no login request (a request counter on `page.route`), and that no cookie is set. It never waits for the block to end (the window is 15 minutes); the unblock path is covered by Property 44 with a fake clock. Because the key is the pair (identifier, IP) and failures against an unknown identifier count the same as against a known one, the test creates no account and never touches `E2E_USER_*`. Each run adds up to 5 failures to the per-IP counter (limit 20) and SI-06 and SI-07 add 2, so three or more runs inside 15 minutes from one address would reach the per-IP limit; the deployed environment for the suite should set `RATE_LIMIT_LOGIN_IP_MAX` above 20, or the suite runs once per window (recorded as a risk in task 32.6).
+- **Menu and Sidebar (SO-09, SO-10):** SO-09 opens the menu and compares the vertical order of the two items; SO-10 asserts `sidebar.getByRole("button", { name: /Log out/ })` and `sidebar.getByRole("link", { name: /Profile/ })` have count zero.
+- **Findings recorded in the specification:** Open Questions 5 and 6 are resolved (Decisions P and L). Open Question 7 (invalid Token on a server render) was open here and is resolved in round 2 by Decision T (criteria 55 and 56 below).
+- **Invalid cookie (SO-11, SO-12, round 2):** SO-11 adds the cookie `kanban_token=bogus` through `context.addCookies`, opens `/boards`, expects the URL path `/login` and the login form, and polls `context.cookies()` until no `kanban_token` remains (the proxy removes it, criterion 57). SO-12 builds a well-formed Token in the test from a fixed header, a payload `{ sub, role: "member", exp: now + 3600 }`, and the signature text `invalid` (no secret is involved), sets it, opens `/boards`, and expects the same end state, which exercises the server-render path (the Backend returns 401, `/session-expired` removes the cookie, criterion 58). Both compare the URL path only (criterion 62) and neither uses the Test_Account. Both are web-first assertions with no fixed delay.
+- **Traceability:** each test title starts with its ID (`AUTH-E2E-SI-01 ...`), one test per ID in criteria 19 to 36, 39 to 42, 55, and 56. A static check (task 32.5) fails when an ID has no test or a test title has no ID.
+
+## V9 Revision Notes
+- Requirements: 1.19 to 1.38 added (sign-in and sign-out end-to-end criteria with IDs `AUTH-E2E-SI-01` to `-10` and `AUTH-E2E-SO-01` to `-08`); 15.10 to 15.15 added (suite location, environment, `.env.example`, no `waitForTimeout`, isolation); Glossary terms E2E_Auth_Suite, Test_Account, Auth_Page_Object, Sign_Out_Control, Session_Cookie, Generic_Login_Error, Protected_Route; Open Questions 5 to 7.
+- Design: section "Auth End-to-End Tests (V9)"; Testing Strategy gains an end-to-end paragraph.
+- Backend and Frontend code: unchanged. No API, schema, or UI change.
+
+## V10 Design: Share Links, Identity, Header, Rate Limiting, Route Guard
+
+Implements Decisions K to P and Requirements 1.39 to 1.54, 18, 19, 20, and the criteria reworded in 3, 4, 6, 7, 8, 11, 12, 13, 14, 15, and 17. Endpoint, table, and component details are in the sections above; this section records the algorithms and the decisions that cut across them.
+
+### Share links (Decision K)
+
+```mermaid
+sequenceDiagram
+  participant V as Visitor
+  participant F as Next.js /shared/[token]
+  participant A as API /api/shared/{token}
+  V->>F: open link (no Token needed)
+  F->>A: GET /shared/{token} (+ Bearer when a cookie exists)
+  A-->>F: 200 board, columns, has_board_access  |  404
+  alt has_board_access
+    F-->>V: redirect /boards/{id} (normal view)
+  else Guest or no access
+    F->>A: GET /shared/{token}/cards, /categories
+    F-->>V: read-only Shared_View
+  end
+```
+
+- The Share_Token is `secrets.token_urlsafe(32)`: 43 URL-safe characters, 256 bits. It is stored as plain text because the owner must be able to copy the link again. Anyone with read access to the database can therefore read links; this is accepted because the same person can already read every card.
+- Every shared lookup is one equality query on the unique index. An unknown, cleared, or replaced token and a soft-deleted board all produce the same `NotFound`, so a caller learns nothing about why a link fails (Req 18.10). An archived board stays viewable; archiving hides it from nobody who already holds the link.
+- Shared payloads use separate marshmallow schemas (`SharedBoardSchema`, `SharedCardSchema`, `SharedCategorySchema`) that declare no `comments`, `activity`, `activity_log`, `owner_id`, `share_token`, or member field. With marshmallow's default `unknown=EXCLUDE` on output and `only` fields declared explicitly, Property 28 holds by construction and a test walks the response to confirm it.
+- The frontend page `/shared/[token]` sets `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex` through `next.config.ts` `headers()`, so the token does not leak through a `Referer` header when an attachment link opens and the page is not indexed. Attachment links already use `rel="noopener noreferrer"`.
+- A share link does not widen any other route: `/api/boards/...` still returns 401 or 403 under `can_access`, so a private board stays private to unrelated signed-in users (Req 18.17).
+- No rate limit is applied to `/api/shared`: guessing a 256-bit token is infeasible, and a limit would let an attacker lock out a real viewer sharing the same address. Revisit if tokens get shorter.
+
+### Identity (Decisions M and N)
+
+```python
+USERNAME_RE = re.compile(r"^[a-z0-9_.]{3,30}$")
+
+def classify_identifier(raw: str) -> tuple[str, str]:
+    value = raw.strip().lower()
+    if "@" in value:
+        if is_email_shape(value):            # one "@", local part, dotted domain, no spaces, <= 255
+            return ("email", value)
+    elif USERNAME_RE.fullmatch(value):
+        return ("username", value)
+    raise ValidationError("Enter a valid username or email", details={"identifier": [...]})
+```
+
+- `is_email_shape` is one function in `common/validation.py`, used by the register schema, the login classifier, the profile schema, and the candidate search; the Frontend mirrors it in `lib/validation.ts`, and a fast-check test compares the two against the same table of cases (Property 42).
+- Register and admin-create validate `username` and `email` with the same functions. Required in every request schema and NOT NULL in the database after the round 3 reset (Decision V).
+- Candidate search: `user_repository.search_candidates(board_id, text)` runs one query: `lower(full_name) LIKE '%t%' OR lower(username) LIKE 't%' OR lower(email) = 't'`, excludes current BoardMembers, orders by `full_name`, limits to 20, and the schema serializes `id`, `full_name`, `username`, `email`, and `avatar_url` (round 2, Decision S; round 3, Decision U). `candidate_service` first rejects a `search` of fewer than 2 characters after trimming with `ValidationError(details={"search": [...]})` and runs no query (round 3, Decision W). `%` and `_` in the search text are escaped for `LIKE`. Because `full_name` matches by substring, the Email of an account is reachable by a 2-character search; the minimum length narrows that exposure and Open Question 16 records what stays.
+- Availability intentionally reveals whether a Username or Email is taken (the register form needs it). The Rate_Limiter bounds the abuse, and the 409 on submit gives the same information, so the endpoint adds no new exposure beyond a higher request rate.
+
+### Migration `b7d2e4f6a801` (one revision, local-development reset; Decision V)
+
+The application is not deployed and the only database is a local development one, so the revision resets user data instead of converting it (round 3). Rounds 1 and 2 described a Python backfill, a derived-Username rule, a printed mapping, and a count of dropped `avatar_url` values; all of that is removed.
+
+1. **Guard and reset.** `upgrade()` first reads `APP_ENV`; unless it is `development` or `testing` it raises `RuntimeError("This migration resets local data; set APP_ENV=development to run it")` before any statement runs (the same rule as the seed commands, and `APP_ENV` defaults to `production`, so a deployed database is never reset by accident). It then runs `TRUNCATE TABLE users CASCADE`, which empties every table that references `users`, directly or through `boards`, and prints one line: local data was reset, run `flask seed-users` or `flask seed-data`. Files under `UPLOAD_DIR` are left alone.
+2. **Users.** Because the table is empty, add `username VARCHAR(30) NOT NULL` and `email VARCHAR(255) NOT NULL` directly, create `uq_users_username_lower` and `uq_users_email_lower`, drop `uq_users_login_identifier_lower` and `login_identifier`, add `avatar_path VARCHAR(64) NULL`, and drop `avatar_url`.
+3. **Boards.** Add `share_token VARCHAR(64) NULL` and the unique index `uq_boards_share_token`.
+4. **Rate limiter.** Create `rate_limit_attempts` and its index (scopes `login_pair`, `login_ip`, `availability`, and `change_password`; no `register`).
+
+`downgrade()` re-adds `login_identifier` filled with `email`, recreates its unique index, re-adds `avatar_url` as `VARCHAR(1024)` empty, and drops the new columns, indexes, and the table. Data lost on downgrade: the Username, the Share_Tokens, and the avatar paths (the files stay on disk and are listed in the log). To keep a local database, dump it before upgrading; the dump cannot be loaded into the new schema. Old Signed_File_URLs minted before the change do not verify after the signature string gains a scope suffix; they live 15 minutes, so the Frontend's existing refresh path (`GET /attachments/{id}/url`) covers them.
+
+**Seed.** `app/seed.py` creates every user with `username`, `email`, and `full_name`: `member`, `supervisor`, `manager`, `admin` (`flask seed-users`) and `member2`, `supervisor2` (`flask seed-data`), with Email `<username>@example.com` and full names "Member One", "Supervisor One", "Manager One", "Admin One", "Member Two", "Supervisor Two". The lookup for an existing user uses `lower(username)`. `member` is the Test_Account of the e2e suite (`E2E_USER_IDENTIFIER=member`, password from `SEED_PASSWORD`).
+
+### Rate_Limiter (Decision O)
+
+`common/rate_limiter.py` has a pure policy part and a store part, so the policy tests need no database.
+
+```python
+def blocked_until(times: list[datetime], now, window, limit) -> int | None:
+    live = sorted(t for t in times if t > now - window)      # half-open window (now - W, now]
+    if len(live) < limit:
+        return None
+    return max(1, ceil((live[len(live) - limit] + window - now).total_seconds()))   # retry_after
+```
+
+- **Keys.** `login_pair`: `HMAC(JWT_SECRET, "ratelimit:pair:" + identifier + "|" + ip)`; `login_ip` and `availability`: `HMAC(JWT_SECRET, "ratelimit:<scope>:" + ip)`. The identifier is the lower-cased, trimmed value before classification, so `A@x.com` and `a@x.com` share a counter, and so do a Username and its upper-case form.
+- **Login flow.** After classification (400 counts nothing): `check_login` reads both scopes and raises `RateLimited(retry_after = max(pair_wait, ip_wait))` before any password work. A failed login calls `record_login_failure`, which in its own short transaction takes `pg_advisory_xact_lock(hashtextextended(scope || key_hash, 0))`, inserts one row per scope (`login_pair` and `login_ip`), purges rows of that scope older than the window, and commits, and only then does the service raise `Unauthorized`. The error handler rolls back the request's session after an exception, which would discard a row written in that session; the separate commit avoids that (Req 20.9). A success calls `reset_pair`, which deletes the pair's rows.
+- **Race.** Two simultaneous wrong guesses both pass `check_login` and both insert, so the counter can exceed the limit by the number of simultaneous requests. The advisory lock serializes the insert but not the earlier check. This overshoot is bounded by the worker count and accepted; the next request sees the true count.
+- **Availability only.** Registration has no limiter call (Decision Q, Req 20.18); the limiter on availability is kept by the specifier and can be reversed by deleting the `hit("availability", ip)` call, the scope, and the setting (Open Question 14). `hit(scope, ip)` takes the lock, counts live rows, raises `RateLimited` when the count is already at the maximum (the blocked request adds no row), and otherwise inserts a row, in the same short transaction.
+- **IP.** `create_app` wraps `wsgi_app` in `ProxyFix(x_for=TRUSTED_PROXY_COUNT)` when the count is above 0; the route passes `request.remote_addr` to the service as `client_ip`. With the default 0, `X-Forwarded-For` is ignored, so a client cannot choose its own address. Behind one trusted reverse proxy set `TRUSTED_PROXY_COUNT=1`; a wrong value either puts every user behind the proxy's address (one shared limit) or lets a client forge it. The deployment topology is not in this repository, so the value is set per environment.
+- **Response.** `RateLimited` is an `AppError` subclass (429, `RATE_LIMITED`, `details={"retry_after": n}`); `EnvelopeApi` renders it and adds the `Retry-After` header. CORS gets `expose_headers=["Retry-After"]` (Req 20.17).
+- **Database portability.** Unit tests on SQLite skip the advisory lock (the store checks the dialect); Property 44 runs on PostgreSQL.
+- **Frontend.** `useCountdown(retryAfter)` drives the message "Too many attempts. Try again in mm:ss." and the disabled state; the form re-enables when the counter reaches zero. `lib/api.ts` exposes `ApiError.retryAfter`.
+
+### App_Header, User_Menu, Profile (Decision L)
+
+- `(app)/layout.tsx` renders `AppHeader` above the Sidebar and Main on every `(app)` page; the Board page provides the page-context slot (visibility icon, name, `ShareButton`) and keeps its second row. The Board header's old first row (name, bell, signed-in user) is replaced by the App_Header, so there is one header, not two.
+- `UserMenu` is a `BaseMenu` (`@radix-ui/react-dropdown-menu`): Radix supplies keyboard navigation, Escape, and focus return (Req 19.6). Items are in the order Profile, Log out.
+- `api.auth.logout()` posts, ignores any error, clears the cookie, and calls `router.replace("/login")`.
+- `/profile` is a Server Component page that loads `GET /auth/me` and renders a Client form with the `AvatarUploader` (round 2).
+
+### Route guard (Decision P)
+
+```ts
+// frontend/proxy.ts  (Next.js 16: the file convention formerly called middleware)
+export function proxy(request: NextRequest) {
+  if (!request.cookies.has("kanban_token")) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+  return NextResponse.next();
+}
+export const config = { matcher: ["/boards/:path*", "/profile/:path*", "/admin/:path*"] };
+```
+
+The matcher lists the `(app)` paths instead of excluding public ones, so `/login`, `/register`, `/shared/*`, `/`, and assets are untouched. `/` redirects to `/boards` and so reaches the guard. The check is optimistic by design (Next.js guidance: a proxy should not be the only gate): a stale cookie that still decodes passes the proxy and then meets the Backend 401, which round 2 handles through `/session-expired` (Decision T, section "Round 2 within V10").
+
+## Round 2 within V10: Register Limiter Removed, Avatar Upload, Staff Email, Invalid Token (Decisions Q to T)
+
+Implements Decisions Q to T, Requirements 1.55 to 1.62, 3.30 to 3.32, 4.33, 13.10, 14.28, 15.20 to 15.24, 18.24, 19.18 to 19.33, and 20.18, and the reworded criteria 1.6, 3.25, 19.1 to 19.3, 20.7, 20.10, and 20.15. V10 is still unimplemented, so this is an amendment of the V10 design, not a new version. Properties 47 to 49 are new; Properties 44 and 46 are revised.
+
+### Register is not rate limited (Decision Q)
+
+- `auth_service.register` has no limiter call and `rate_limit_attempts.scope` has no `register` value. `RATE_LIMIT_REGISTER_MAX` is removed from config, `create_app` overrides, and `.env.example`.
+- Protection left on registration: validation (400), the unique indexes (409), and the argon2 cost per request. The 409 `details` answers the same question as the availability endpoint, so the availability limiter alone does not stop enumeration. The specifier kept that limiter because it is cheap to keep and to remove; it is Open Question 14.
+- Reversal is local: restore the `register` scope, one `hit("register", ip)` call at the top of `register`, one setting, and RL-07.
+
+### Avatar upload (Decision R)
+
+```mermaid
+sequenceDiagram
+  participant U as Profile page
+  participant A as POST /api/users/me/avatar
+  participant S as user_service.set_avatar
+  participant F as common/file_store
+  participant DB as users row (FOR UPDATE)
+  U->>A: multipart file (checked client-side first)
+  A->>S: stream, user id
+  S->>S: read at most 2 MB + 1, detect type from bytes
+  S->>F: write UPLOAD_DIR/avatars/<hex32>.<ext>
+  S->>DB: lock row, set avatar_path, add activity row, commit
+  S->>F: delete previous file (best effort)
+  S-->>U: 200 user with signed avatar_url
+```
+
+- **Detection** is a pure function in `common/images.py`: `detect_image_type(head: bytes) -> "png" | "jpg" | "webp" | None` from the leading bytes only (PNG signature, `FF D8 FF`, `RIFF....WEBP`). The file name and the declared Content-Type are not read. SVG and GIF return `None`.
+- **Size.** The route passes `request.files["file"].stream`; the service reads `MAX_AVATAR_BYTES + 1` bytes and rejects an empty or longer body with `ValidationError(details={"file": [...]})`. Werkzeug buffers a multipart body before the route runs, so this bound limits what is kept, not what is received; the reverse proxy should also cap the request body (about 3 MB; recorded as a risk in task 33.28). A `RequestEntityTooLarge` raised by a server-wide limit is mapped to the same 400 `details.file`, not to 413, because 413 is not in the status list of Req 13.3.
+- **Storage reuses one module.** Attachments today write inline in `cards/service.py` (`uuid4().hex + ext` under `UPLOAD_DIR`, `os.remove`, a path join in the file route). Task 33.28 extracts those three operations into `common/file_store.py` (`FileStore(upload_dir)` with `save(subdir, name, data)`, `delete(subdir, name)`, `path(subdir, name)`, which rejects any name that is not a bare file name). Attachments call it with `subdir=""` and keep their behaviour; avatars call it with `subdir="avatars"`. The service receives the store as an argument, so it stays free of Flask imports and a fake store works in unit tests (Req 13.14, 15.4).
+- **Signing reuses one module.** `common/signing.py` gains the `scope` parameter that V10 already adds for share links; the avatar scope is the literal `avatar`, and the path builder takes the route name. No second secret, TTL, or comparison code exists (see Attachments, "Avatar scope").
+- **Serving.** `GET /users/{user_id}/avatar/file` verifies the signature (403 on any failure, as for attachments), loads the user's `avatar_path` (404 when null), and returns `send_file(path, mimetype=<from extension>, as_attachment=False)` with `X-Content-Type-Options: nosniff` and `Cache-Control: private, max-age=300`. The extension was fixed by `detect_image_type` at upload, so the served type is the detected type.
+- **Replace, remove, and failure order.** Write the new file first, then change the row and commit, then delete the old file. If the commit raises, the new file is deleted and the error propagates. If the process dies between the write and the commit, one orphan file remains (accepted; no sweep job in V10). `DELETE` sets `avatar_path` to null, commits, then deletes the file.
+- **Concurrency.** `user_repository.get_for_update(id)` takes `SELECT ... FOR UPDATE`, so two uploads for one user serialize and the second deletes the first's file; exactly one file remains (Req 19.33).
+- **Payload.** `UserSchema.avatar_url` is a `fields.Method` that returns `signing.avatar_url(user.id, clock.now())` when `avatar_path` is set and `None` otherwise. It runs only inside responses to authenticated requests. Round 3 (Decision U) adds an avatar field to the Comment author, member, candidate, and Card assignee schemas (Req 19.34); the shared, activity, and Notification schemas still declare none, so they have none by construction (Req 19.26). Each response that carries a `user` signs a fresh URL, so the URL changes on every response and the browser cache is keyed on a new URL each time; `max-age=300` only helps within one page lifetime. If that costs too much, the fix is a stable `exp` per 15-minute bucket (Open Question 17 records this).
+- **Admin endpoints.** `POST /users` and `PATCH /users/{id}` drop `avatar_url` from their schemas and use `unknown=RAISE` for that field, which is a breaking change for any client that sent it (Req 19.27). The admin user list shows each user's signed avatar URL.
+- **Frontend.** `api.auth.uploadAvatar(file)` uses the existing `form` option of `lib/http.ts` (the multipart path the attachment upload uses), and `api.auth.removeAvatar()` calls `DELETE`. `AvatarUploader` keeps `file`, `previewUrl`, `error`, and `busy` in state, revokes the object URL when the file changes or the component unmounts, checks `file.type` against the three types and `file.size <= 2 * 1024 * 1024` before any request, and treats those checks as a convenience only. On success it calls `setSession(token, user)` with the stored token to refresh the stored user and a small `useCurrentUser` store so the header trigger and the Profile page update without a reload (Req 19.31). Remove uses `BaseConfirm` and the danger button.
+- **Guests.** The Shared_View never receives `avatar_url` and shows initials. No reason was found to do otherwise: a share-scoped avatar URL would need its own scope tied to the Share_Token and a new field on `SharedCardSchema`, for a view that is deliberately status-only (Decision K); round 3 confirms the choice (Decision U, Req 19.37).
+- **Privacy note.** The file is stored as uploaded, so EXIF data (including GPS) stays in it, and a polyglot file that begins with valid image bytes would still be accepted. `nosniff` and a fixed served type limit browser impact; decoding and re-encoding with an image library would remove both and is not part of V10 (risk recorded in task 33.28).
+
+### Email shown to staff (Decision S)
+
+- `user_repository.search_candidates` is unchanged; `CandidateSchema` gains `email`. Access is unchanged (`require_role` owner, Manager, Admin through `board_service.can_manage_members`).
+- `GET /boards/{id}/members` accepts `include=email`. `MembersQuerySchema` declares `include` as an optional `OneOf(["email"])`. The service calls `can_write_staff(user, board)` when `include == "email"` and raises `Forbidden` otherwise, then `MemberSchema` (without email) or `MemberWithEmailSchema` is chosen. The default path never reads `User.email`, which makes Property 49 true by construction for member lists.
+- **Audience differs between the two places.** Candidate search: Board_Owner, Manager, Admin. Assignee popover: Board_Staff_Access, which also includes a Supervisor who is only a BoardMember. A Supervisor BoardMember therefore sees the Email of the Board's members but cannot search all users.
+- The Sidebar's Team members rows keep calling the default members endpoint and render name and Username only. `MemberPicker` and `MemberSearch` are the only components that render `email`; a lint rule is not added, and the component tests of Req 15.24 and the design's frontend tests cover it.
+- Emails reach logs only if request or response bodies are logged; the Backend logs neither.
+
+### Invalid Token on any request (Decision T)
+
+Two layers, because a Server Component can redirect but cannot remove a cookie:
+
+```ts
+// lib/session-token.ts (pure, shared by proxy.ts and tests)
+export function isUsableToken(value: string | undefined, nowSeconds: number): boolean {
+  if (!value) return false;
+  const parts = value.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const claims = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof claims?.sub === "string" && typeof claims?.role === "string"
+      && typeof claims?.exp === "number" && claims.exp > nowSeconds;
+  } catch { return false; }
+}
+// lib/return-path.ts
+export function safeReturnPath(next: string | null | undefined): string {
+  const ok = typeof next === "string" && next.length <= 512 && /^\/(?![/\\])/.test(next)
+    && !/[\u0000-\u001f\u007f]/.test(next) && /^\/(boards|profile|admin)(?=$|[/?#])/.test(next);
+  return ok ? next! : "/boards";
+}
+
+// frontend/proxy.ts
+export function proxy(request: NextRequest) {
+  const token = request.cookies.get("kanban_token")?.value;
+  const path = request.nextUrl.pathname + request.nextUrl.search;
+  if (!isUsableToken(token, Math.floor(Date.now() / 1000))) {
+    const url = new URL("/login", request.url);
+    url.searchParams.set("next", safeReturnPath(path));
+    const res = NextResponse.redirect(url);
+    if (token !== undefined) res.cookies.delete("kanban_token");   // Path=/ matches how setSession wrote it
+    return res;
+  }
+  const headers = new Headers(request.headers);
+  headers.set("x-return-path", path);                                // read by serverGet
+  return NextResponse.next({ request: { headers } });
+}
+```
+
+- **Layer 1, `proxy.ts`.** Decodes the cookie payload without verifying the signature (the secret is Backend-only), so it rejects `bogus`, a non-JWT, a payload without the three claims, and an `exp` in the past, with no network call. The matcher is unchanged. A forged but well-formed Token with a future `exp` passes this layer by design.
+- **Layer 2, server-render 401.** `lib/server.ts` `serverGet` already redirects to `/login` on a 401 when a Token was sent, but it leaves the cookie, so the next click repeats the failure. Round 2 changes the target: `redirect("/session-expired?next=" + encodeURIComponent(safeReturnPath(returnPath)))`, where `returnPath` is the `x-return-path` request header set by the proxy. `app/session-expired/route.ts` is a GET Route Handler outside the matcher: it deletes `kanban_token` on a `NextResponse.redirect` to `/login?next=<safe path>` and has no other target (Req 1.61). `redirect()` inside a streamed Server Component can become a client-side navigation; the handler therefore does not depend on being reached by an HTTP redirect, and a plain link to it works too.
+- **Login.** `LoginForm` reads `next` from `useSearchParams`, passes it through `safeReturnPath`, and calls `router.replace` on success (Req 1.59). `/login` never redirects on the presence of a cookie, so there is no loop (Req 1.61).
+- **Client calls.** `lib/api.ts` is unchanged: a 401 with a cookie present clears the session and does `window.location.assign("/login")`, and it still skips the login call itself.
+- **Public pages.** `/shared/[token]` forwards the cookie as a Bearer Token only to learn `has_board_access`. The shared routes use optional JWT verification that catches every JWT error and treats the caller as a Guest (Req 18.24); the page neither redirects nor clears the cookie (Req 1.60).
+- **Logout CSRF.** `/session-expired` is a GET that deletes the cookie, so a third-party page can sign a user out by linking to it. The effect is a forced re-login and nothing more; it is accepted, and the cookie is not HttpOnly today anyway (script on the origin can clear it). A POST-only variant would need a form and JavaScript on the redirect path and is not worth it here.
+- **Tests.** Vitest for `isUsableToken`, `safeReturnPath`, and `proxy` (Property 48, Req 15.23). Playwright SO-11 (a malformed cookie, layer 1) and SO-12 (a forged well-formed Token, layer 2) in the auth suite (Req 1.55, 1.56).
+- **Scope of "any request".** The rule covers every Protected_Route request and every client call from a signed-in page. It deliberately excludes `/login`, `/register`, and `/shared/{token}`, where redirecting a stale cookie to `/login` would break a Guest's Share_Link.
+
+## Round 3 within V10: Avatar Routes and Payloads, Local Reset, Change-Password Limiter (Decisions U to W)
+
+Implements Decisions U to W, Requirements 1.63, 1.64, 3.25, 3.30, 3.32, 7.21, 7.22, 15.25 to 15.27, 17.11, 18.11, 18.25, 19.34 to 19.40, and 20.19 to 20.23, and the reworded criteria 1.6, 19.11, 19.12, 19.16, 19.26, 20.10, and 20.12. V10 is unimplemented, so this is an amendment of the V10 design, not a new version. Property 50 is new; Properties 44, 45, 46, and 49 are revised.
+
+### Avatar routes (Decision U)
+
+- `POST /users/me/avatar`, `DELETE /users/me/avatar`, and `GET /users/{user_id}/avatar/file` live in `blueprints/users/` (`routes.py`, `service.py`, `repository.py`, `schema.py`). `user_service.set_avatar(user_id, stream, store, now)`, `clear_avatar`, and `open_avatar(user_id, exp, sig, now)` replace the `auth_service` functions of round 2 with the same bodies. The route decorators are `@jwt_required` for the first two and none for the file route (a signature instead of a Token); the admin routes keep `require_role("admin")` one by one. `common/signing.py` builds `/api/users/{user_id}/avatar/file?exp=&sig=` from the route name `avatar`; the signed string is unchanged (`f"{user_id}.{exp}.avatar"`).
+- The 401 and 403 sweep (Req 15.5) lists the two mutating avatar routes as "any signed-in user": no Token gives 401, and no role gives 403 for any role. The file route is excluded like the Attachment file route.
+- Nothing is redirected from the old paths: V10 is unimplemented, so no client uses them.
+
+### Avatars in viewer-facing payloads (Decision U)
+
+```python
+# common/identities.py (no Flask, no model import beyond the row type)
+@dataclass(frozen=True)
+class Identity:
+    full_name: str
+    avatar_path: str | None          # never email
+
+def avatar_urls(identities: dict[UUID, Identity], now) -> dict[UUID, str | None]:
+    # one signature per distinct user per response; no database access
+    return {uid: (signing.avatar_url(uid, now) if i.avatar_path else None) for uid, i in identities.items()}
+```
+
+- `user_repository.identities(ids)` runs one `select(User.id, User.full_name, User.avatar_path).where(User.id.in_(ids))`. It selects columns, not the entity, so `email` is never loaded for these payloads (Property 49 holds by construction). It replaces `comments_repository.author_names` and the assignee lookup of the shared Card list.
+- **Comments.** `comment_service.list_for_card` collects author ids of the top-level Comments and the Replies, calls `identities` once, and the schema adds `author_name` and `author_avatar_url` from the two maps passed in `context`. The count of queries stays the same as before (one for names).
+- **Members and candidates.** `list_members(board_id)` selects `User.id, full_name, username, avatar_path` (and `email` only when `include=email`) through `BoardMember`; `search_candidates` selects the same plus `email`. `MemberSchema`, `MemberWithEmailSchema`, and `CandidateSchema` each gain `avatar_url`, computed by `avatar_urls`.
+- **Cards.** `card_service.list_for_board` and `get_card` collect `assignee_id` values, call `identities` once, and the Card schema adds `assignee_name` and `assignee_avatar_url` (both null without an assignee). This adds one query to the Card list, a constant, so Property 39 compares 5 and 50 Cards as before with a new constant. The create, update, move, and assign responses build the same fields for their single assignee.
+- **Signing cost.** One HMAC-SHA256 per distinct user per response: 20 assignees on a 200-Card board cost 20 signatures, which is microseconds. The URL changes on every response, so the browser refetches avatars (Open Question 17).
+- **Guests.** `SharedCardSchema` keeps `assignee_name` and gains nothing; the Frontend shows initials. A share-scoped avatar URL would add a scope tied to the Share_Token, a schema field, and a file-route branch, so it was not chosen (Req 19.37).
+- **Frontend.** `lib/initials.ts` exports `initialsOf(name)`; `BaseAvatar` takes `{ src, name, size }`, renders `<img alt={name}>` inside a `BaseTooltip` with the name, falls back to initials on `null`, and after one `api.auth.me()` refresh on a load error (Req 19.39). The board-member map keeps `avatar_url`. The board Card tile and the Card modal chip read `assignee_name` and `assignee_avatar_url` first and the member map second, so a removed member still shows a name. `CommentThread` reads `author_avatar_url`. The Sidebar rows, `MemberSearch`, `MemberPicker`, and the Home tiles read `avatar_url` from the members and candidates responses. No component puts an Email in a tooltip or `alt` text (Req 19.40).
+
+### Local reset and seed (Decision V)
+
+See "Migration `b7d2e4f6a801`". The Email is NOT NULL, so `UserSchema.email` is always a string, the `User` type in `lib/types.ts` loses `| null`, the `EmailPrompt` component and its layout hook are not built, `PATCH /auth/me` takes `full_name` only, and Req 1.53 and 19.13 and 19.14 are withdrawn.
+
+### Change-password limiter (Decision W)
+
+- Scope `change_password`; key `HMAC(JWT_SECRET, "ratelimit:chpw:" + str(user_id))`, so it is keyed by the authenticated user and not by address (a stolen Token used from many addresses is still counted once). `RATE_LIMIT_CHANGE_PASSWORD_MAX` defaults to 5 in the shared window.
+- `auth_service.change_password(user, current, new, now)`: (1) `rate_limiter.check_change_password(user.id)` raises `RateLimited` before any hashing; (2) a wrong `current` calls `record_change_password_failure(user.id)`, which writes its row in its own short transaction (advisory lock, insert, purge, commit) and then raises `ValidationError(details={"current_password": [...]})`; (3) a `new` under 8 characters raises 400 and counts nothing; (4) success stores the hash, writes the Activity_Log row, and calls `reset_change_password(user.id)`.
+- A 429 here leaves the session alone: `lib/api.ts` redirects to `/login` only on 401. The Profile password form reads `ApiError.retryAfter`, shows the countdown, and disables the button with `useCountdown`.
+
+### Candidate search minimum (Decision W)
+
+`candidate_service.search(board, actor, text)` checks `can_manage_members` first (403), then `len(text.strip()) >= 2` (400 `details.search`), then queries. `MemberSearch` debounces input, shows "Type at least 2 characters." below that length, and sends nothing. No per-user request limit is added.
+
+### Shared view (Decision W)
+
+`SharedCardSchema` has `assignee_id` (opaque, as in the Card list) and `assignee_name`; no Username, Email, or avatar. The shared list accepts `search` and the three filters; the shared filter row shows search and Category chips (the Guest has no member list, so no assignee filter control).
+
+### Accepted risks recorded in round 3
+
+- Avatar files keep their EXIF data and no image library re-encodes them; a polyglot file that begins with valid image bytes is accepted (served with `nosniff` and a fixed type). Accepted for V10.
+- Werkzeug buffers the multipart body, so the reverse proxy caps the request near 3 MB; the app-level 2 MB check limits only what is stored. Accepted for V10 and recorded in the PR (task 33.28).
+- `POST /api/auth/register` still reveals taken Usernames and Emails through its 409, so the availability limiter alone does not stop enumeration (Decision W, Open Question 14 resolved as an accepted gap).
+- Fresh avatar URLs per response cause refetches (Open Question 17).
+- The migration deletes local data; the `APP_ENV` guard is the only protection, and a developer whose `.env` leaves `APP_ENV` empty must set it before `alembic upgrade`.
+
+## V10 Revision Notes
+
+- Round 3 within V10 (Decisions U to W): see the section "Round 3 within V10" and `CHANGELOG.md`. It retires the Email_Prompt, the legacy backfill, and Open Question 11.
+- Round 2 within V10 (Decisions Q to T): see the section "Round 2 within V10" and `CHANGELOG.md`.
+- Requirements: Decisions K to P; Glossary (Guest, Board, Share_Token, Share_Link, Shared_View, Username, Email, Identifier, App_Header, User_Menu, Profile_Page, Email_Prompt, Rate_Limiter, Rate_Limit_Window, Client_IP, User_Menu_Trigger, Throwaway_Identifier; Sign_Out_Control, Test_Account, Protected_Route, Board_Access, Sidebar updated; `login_identifier` retired); criteria 1.1 to 1.5, 1.11, 1.17, 1.18 reworded or withdrawn; 1.19 to 1.37 updated; 1.39 to 1.54 added; 3.23, 3.25, 4.26, 6.6, 7.16, 8.5, 11.4, 11.5, 11.7, 12.6, 12.7, 13.3, 13.10, 13.11, 14.3, 14.10, 14.26, 15.11, 15.15, 17.1 reworded; 11.13, 14.27, 15.16 to 15.19 added; Requirements 18, 19, 20 added; Open Questions 1, 3, 5, 6 resolved and 8 to 13 added.
+- Design: this section, the Auth End-to-End Tests section, access function and matrix, auth, users, boards, shared, and attachment sections, the data model (User, Board, RateLimitAttempt), Properties 1, 2, 4, 5, 17, 21, 28, 34, 36 revised and 40 to 46 added, the error table.
+- Breaking API changes: see `CHANGELOG.md` V10.
+- Code: nothing implemented yet; tasks group 33 carries the work.
+
+## V10 Migration Notes
+
+- Round 2 adds migration part 4 (avatar columns) to the same revision `b7d2e4f6a801`, which is unimplemented, so no new revision exists.
+- Round 3 replaces the backfill with a local-development reset (section "Migration `b7d2e4f6a801`"): after `alembic upgrade head` run `flask seed-users` or `flask seed-data` again; local boards, cards, and users are gone, and uploaded files under `UPLOAD_DIR` can be deleted by hand.
+- Order: migration, then Backend (user model, auth, boards share, shared blueprint, limiter), then Frontend, then the e2e update. The Backend and the Frontend must deploy together: the login request field and the `user` shape change.
+- The existing seed (`backend/app/seed.py`) and `SEED_PASSWORD` create users by `login_identifier`; the seed gets `username`, `email`, and `full_name` values for every user (round 3, Decision V).
+- Existing backend tests that register with `login_identifier` or log in with `login_identifier` change to `username`, `email`, and `identifier`.
+

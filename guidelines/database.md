@@ -6,7 +6,9 @@ Coding standards for SQLAlchemy models and migrations.
 
 **Rule:** Every table has `id (UUID, primary key)`, `created_at`, `updated_at`;
 `Board` and `Card` additionally have `deleted_at` and `archived_at` (all
-nullable).
+nullable). `ActivityLog` and `RateLimitAttempt` are append-only and carry
+`created_at` only. `User.username` and `User.email` are unique on their
+lower-cased value; `Board.share_token` is a nullable unique string.
 
 **Rationale:** Uniform audit columns across every table, and exactly the
 shape the service layer's soft-delete/archive logic expects everywhere.
@@ -144,3 +146,11 @@ class Subtask(db.Model):
     is_done = db.Column(db.Boolean, default=False, nullable=False)
     order = db.Column(db.Float, nullable=False)
 ```
+---
+**Rule:** A column that points to a stored file holds only the generated file
+name (`User.avatar_path`), never a URL or a client file name; the URL a client
+sees is computed per response.
+**Rationale:** A stored URL expires or leaks; a bare name cannot be turned
+into a path outside the upload folder.
+**Example:** `avatar_path = db.Column(db.String(64), nullable=True)` holds
+`3f9c...e1.png`, and the API returns a signed `avatar_url` or `null`.

@@ -35,6 +35,9 @@ inclusion: always
   **Example:** use `expect(locator).toBeVisible()` instead of a fixed sleep.
 
 - **Rule:** Both apps ship a `.env.example`; no real `.env` file is ever committed.
+  The backend's lists the rate-limit settings (`RATE_LIMIT_WINDOW_SECONDS`,
+  `RATE_LIMIT_LOGIN_PAIR_MAX`, `RATE_LIMIT_LOGIN_IP_MAX`,
+  `RATE_LIMIT_AVAILABILITY_MAX`) and `TRUSTED_PROXY_COUNT`.
   **Rationale:** A leaked database URL or JWT secret in a public repo is a real
   incident, not a hypothetical.
   **Example:** `.env.example` lists `DATABASE_URL=`, `JWT_SECRET=`,
@@ -71,7 +74,9 @@ inclusion: always
 
 - **Rule:** The frontend adds `@radix-ui/react-popover` and `react-day-picker`
   (as shadcn/ui `Popover` and `Calendar`) for the card modal's chips and date
-  range, and `@fontsource-variable/inter` for the self-hosted Inter font.
+  range, `@radix-ui/react-dropdown-menu` (as shadcn/ui `DropdownMenu`, behind
+  `BaseMenu`) for the header user menu, and `@fontsource-variable/inter` for
+  the self-hosted Inter font.
   **Rationale:** Radix gives accessible popovers; react-day-picker is the
   calendar shadcn/ui uses and supports range selection; a bundled font avoids a
   third-party request.
