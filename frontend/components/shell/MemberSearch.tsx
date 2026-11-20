@@ -8,6 +8,7 @@ import { api, type Candidate } from "@/lib/api";
 import { ApiError } from "@/lib/http";
 
 const DEBOUNCE_MS = 250;
+const MIN_CHARS = 2;
 
 interface MemberSearchProps {
   boardId: string;
@@ -20,8 +21,15 @@ export function MemberSearch({ boardId, onAdded }: MemberSearchProps) {
   const [results, setResults] = useState<Candidate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const short = query.trim().length < MIN_CHARS;
+
   useEffect(() => {
+    if (short) {
+      setResults(null);
+      return;
+    }
     let live = true;
+    setError(null);
     const t = setTimeout(() => {
       api.boards
         .candidates(boardId, query.trim())
@@ -32,7 +40,7 @@ export function MemberSearch({ boardId, onAdded }: MemberSearchProps) {
       live = false;
       clearTimeout(t);
     };
-  }, [boardId, query]);
+  }, [boardId, query, short]);
 
   async function add(user: Candidate) {
     setError(null);
@@ -53,12 +61,18 @@ export function MemberSearch({ boardId, onAdded }: MemberSearchProps) {
           <li key={u.id}>
             <BaseButton variant="ghost" className="h-auto min-h-control w-full justify-start gap-2 px-2 font-normal text-ink" onClick={() => void add(u)}>
               <BaseAvatar name={u.full_name} size="md" />
-              <span className="truncate text-sm">{u.full_name}</span>
+              <span className="min-w-0 text-left">
+                <span className="block truncate text-sm">{u.full_name}</span>
+                <span className="block truncate text-xs text-ink-muted">
+                  @{u.username} · {u.email}
+                </span>
+              </span>
             </BaseButton>
           </li>
         ))}
-        {results && results.length === 0 && <li className="px-2 text-meta text-ink-muted">No people to add.</li>}
-        {!results && <li className="px-2 text-meta text-ink-muted">Loading…</li>}
+        {short && <li className="px-2 text-meta text-ink-muted">Type at least {MIN_CHARS} characters.</li>}
+        {!short && results && results.length === 0 && <li className="px-2 text-meta text-ink-muted">No people to add.</li>}
+        {!short && !results && <li className="px-2 text-meta text-ink-muted">Loading…</li>}
       </ul>
     </div>
   );

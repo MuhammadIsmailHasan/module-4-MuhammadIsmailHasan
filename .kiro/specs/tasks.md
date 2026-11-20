@@ -670,25 +670,25 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 33.13 Update the generated OpenAPI document and `backend/API.md`
     - Document the new and changed endpoints, the 429 response, the `identifier` field, and the user shape; run `flask export-openapi`; keep the "every route is documented" test (Property 37) green.
     - _Requirements: 17.1, 17.2, 17.3_
-  - [ ] 33.14 Update the Frontend API client and helpers
+  - [x] 33.14 Update the Frontend API client and helpers
     - `lib/api.ts`: `ApiError.retryAfter`, no redirect on a 401 from `POST /auth/login`, `api.auth` (`login` with `identifier`, `register`, `availability`, `me`, `updateMe`, `changePassword`, `logout` that always clears the cookie and navigates), `api.shared`; `lib/validation.ts` (`classifyIdentifier`, `isUsername`, `isEmail`); `hooks/useCountdown.ts`; update the `User` type.
     - _Requirements: 1.50, 1.51, 19.4, 20.15_
-  - [ ]* 33.15 Write the helper tests
+  - [x]* 33.15 Write the helper tests
     - fast-check parity of `classifyIdentifier` with the Backend cases (Property 42); `useCountdown` ticks to zero with fake timers.
     - **Validates: Requirements 1.51, 20.15**
-  - [ ] 33.16 Rebuild the login and register forms
+  - [x] 33.16 Rebuild the login and register forms
     - Login: one "Username or email" field, email-or-username validation by `@`, Generic_Login_Error, countdown and disabled submit on 429. Register: full name, Username, Email, password; availability on blur (silent when blocked); field errors from `error.details`; no 429 handling for register (Decision Q), and a 429 on the availability check silently stops the on-blur checks.
     - _Requirements: 1.50, 1.51, 20.15, 20.16, 1.9, 1.10_
-  - [ ] 33.17 Build `BaseMenu`, the App_Header, and the User_Menu
+  - [x] 33.17 Build `BaseMenu`, the App_Header, and the User_Menu
     - Add `@radix-ui/react-dropdown-menu`, `components/ui/dropdown-menu.tsx`, and `components/shared/BaseMenu.tsx`; `AppHeader` and `UserMenu` in `(app)/layout.tsx`; move the Board header's first row into the App_Header slot; remove the profile entry and Log out item from the Sidebar; keep the Inbox bell and the Sidebar toggle.
     - _Requirements: 19.1 to 19.7, 14.10, 3.23_
-  - [ ] 33.18 Build the Profile_Page and the Email_Prompt
+  - [x] 33.18 Build the Profile_Page and the Email_Prompt
     - `(app)/profile/page.tsx` with the full name field, the avatar section (`AvatarUploader`, built in 33.31), the read-only fields, and the change-password form; `EmailPrompt` mounted by the layout while `user.email` is null.
     - _Requirements: 19.8 to 19.17, 1.53_
-  - [ ] 33.19 Add the route guard
+  - [x] 33.19 Add the route guard
     - `frontend/proxy.ts` with the matcher for `/boards`, `/profile`, `/admin`; leave `/login`, `/register`, `/shared` open; a unit test per path. Round 2 extends this file in 33.33 (unusable cookie, cookie removal, `x-return-path`).
     - _Requirements: 14.27_
-  - [ ] 33.20 Build the Share button and the Shared_View
+  - [x] 33.20 Build the Share button and the Shared_View
     - `ShareButton` popover (enable, link and Copy, Regenerate and Disable behind `BaseConfirm`); `app/shared/[token]/page.tsx` with `SharedBoard` and `SharedCardModal` (read-only, banner, Sign in link, invalid-link page); redirect when `has_board_access`; `no-referrer` and `noindex` headers in `next.config.ts`; remove any Guest-facing board browsing from `/boards`.
     - _Requirements: 18.19 to 18.23, 3.23_
   - [ ]* 33.21 Write the component tests
@@ -722,22 +722,22 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - **Property 47: Avatar image type and size**
   - API tests of Req 15.20 (happy: PNG, JPEG, WebP, renamed extension, replace, delete, idempotent delete; negative: no Token, text renamed `.png`, SVG, GIF, empty, 2,097,153 bytes, missing part, traversal name, bad or expired or cross-user signature, no avatar 404, `avatar_url` in PATCH, no `avatar_url` in shared payloads); a test that two parallel uploads leave one file.
   - **Validates: Requirements 19.19, 19.20, 19.21, 19.22, 19.25, 19.26, 19.27, 19.33, 15.20**
-- [ ] 33.31 Build the avatar section of the Profile_Page
+- [x] 33.31 Build the avatar section of the Profile_Page
   - `AvatarUploader` (choose, preview with a revoked object URL, Upload, Cancel, Remove behind `BaseConfirm`, client-side type and size messages, `details.file` and network messages), `api.auth.uploadAvatar` (existing `form` option) and `removeAvatar`, `BaseAvatar` initials fallback with one refresh through `api.auth.me()`, header and stored-user update without reload.
   - _Requirements: 19.28, 19.29, 19.30, 19.31_
 - [ ]* 33.32 Write the avatar component tests
   - The tests of Req 15.21 (preview, Upload, Remove with confirmation, wrong type, too large, server `details.file`, initials fallback after one refresh). Add the manual smoke check (upload, preview, replace, remove) to the release checklist; the auth e2e suite has no avatar test (Req 15.22).
   - **Validates: Requirements 15.21, 15.22, 19.28, 19.29, 19.30**
-- [ ] 33.33 Implement the invalid-Token redirect (Decision T)
+- [x] 33.33 Implement the invalid-Token redirect (Decision T)
   - `lib/session-token.ts` (`isUsableToken`), `lib/return-path.ts` (`safeReturnPath`), `frontend/proxy.ts` (redirect with `next`, cookie removal, `x-return-path` request header), `serverGet` redirecting to `/session-expired`, `app/session-expired/route.ts` (delete the cookie, redirect only to `/login`), `LoginForm` reading `next`. Backend: the shared routes use optional JWT verification that treats any JWT error as a Guest (never 401).
   - _Requirements: 1.57, 1.58, 1.59, 1.60, 1.61, 14.28, 18.24_
-- [ ]* 33.34 Write the invalid-Token tests
+- [x]* 33.34 Write the invalid-Token tests
   - **Property 48: Safe return path and usable Token** (fast-check); vitest for `proxy.ts` (no cookie, malformed, expired, valid, public paths, cookie removed on redirect); pytest that a malformed or expired Bearer Token on each shared route returns the Guest response.
   - **Validates: Requirements 1.57, 1.59, 1.60, 15.23, 18.24**
 - [x] 33.35 Return the Email to staff in candidates and in the members list (Decision S)
   - `CandidateSchema` gains `email`; `GET /boards/{id}/members` accepts `include=email` (403 without Board_Staff_Access, 401 without a Token) and the default path never reads `User.email`; confirm no Comment, activity, Notification, shared, or default member schema declares `email`; update the OpenAPI document.
   - _Requirements: 3.25, 3.30, 3.31_
-- [ ] 33.36 Show the Email in `MemberSearch` and `MemberPicker`
+- [x] 33.36 Show the Email in `MemberSearch` and `MemberPicker`
   - `MemberSearch` rows show full name with the Username and Email beneath; `MemberPicker` loads `?include=email`, shows full name and Email, and searches all three fields; the Sidebar member rows and every other component keep showing no Email; the picker stays hidden from a Member.
   - _Requirements: 3.31, 3.32, 4.33_
 - [ ]* 33.37 Write the Email exposure tests

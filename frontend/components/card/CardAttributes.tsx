@@ -91,7 +91,10 @@ export function CardAttributes({ value, onChange, categories, members, columnNam
       render: (
         <span className="flex items-center gap-2">
           <BaseAvatar name={m.full_name} />
-          <span className="truncate">{m.full_name}</span>
+          <span className="min-w-0">
+            <span className="block truncate">{m.full_name}</span>
+            {m.email && <span className="block truncate text-xs text-ink-muted">{m.email}</span>}
+          </span>
         </span>
       ),
     })),

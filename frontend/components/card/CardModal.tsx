@@ -87,8 +87,11 @@ export function CardModal({ cardId, board, columns, categories, onClose, onChang
   }, [load]);
 
   useEffect(() => {
-    api.boards.members(board.id).then(setMembers).catch(() => setMembers([]));
-  }, [board.id]);
+    // Board staff get each member's Email for the assignee picker; anyone else (or a 403) gets the plain list.
+    const plain = () => api.boards.members(board.id).then(setMembers).catch(() => setMembers([]));
+    if (staff) api.boards.members(board.id, true).then(setMembers).catch(plain);
+    else void plain();
+  }, [board.id, staff]);
 
   const loadComments = useCallback(
     async (next: CommentSort) => {
