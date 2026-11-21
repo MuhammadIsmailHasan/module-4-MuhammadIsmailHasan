@@ -12,7 +12,7 @@ vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: str
 vi.mock("@/lib/api", () => ({ api: { boards: { members: vi.fn().mockResolvedValue([]) }, auth: { logout: vi.fn() } } }));
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const shell = { session: null, user: null, boardId: null, inbox: null, refreshInbox: vi.fn(), toggleSidePanel: vi.fn() };
+const shell = { session: null, user: null, boardId: null, inbox: null, refreshInbox: vi.fn(), toggleSidePanel: vi.fn(), closeSidePanel: vi.fn(), adjustUnread: vi.fn() };
 
 function renderSidebar() {
   return render(

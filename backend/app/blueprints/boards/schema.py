@@ -24,6 +24,7 @@ class UpdateBoardSchema(BaseSchema):
 
 class BoardMemberSchema(MemberSchema):
     is_owner = fields.Boolean()
+    role = fields.String(metadata={"description": "member or supervisor"})
 
 
 class BoardMemberWithEmailSchema(BoardMemberSchema):

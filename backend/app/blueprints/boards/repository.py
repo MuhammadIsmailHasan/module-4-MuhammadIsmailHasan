@@ -124,7 +124,7 @@ def list_members(board, with_owner=True):
     rows = (
         User.query.join(BoardMember, BoardMember.user_id == User.id)
         .filter(BoardMember.board_id == board.id)
-        .order_by(User.full_name)
+        .order_by(db.case((User.role == "supervisor", 0), else_=1), User.full_name)
         .all()
     )
     out = []

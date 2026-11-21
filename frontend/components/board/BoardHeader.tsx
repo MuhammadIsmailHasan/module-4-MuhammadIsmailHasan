@@ -2,6 +2,7 @@
 
 import { Search } from "lucide-react";
 import { useState } from "react";
+import { BaseAvatar } from "@/components/shared/BaseAvatar";
 import { BaseButton } from "@/components/shared/BaseButton";
 import { BaseInput } from "@/components/shared/BaseField";
 import { BaseModal } from "@/components/shared/BaseModal";
@@ -20,7 +21,7 @@ interface BoardHeaderProps {
 }
 
 /** The Board's second row: progress, the category filter, and search. The name, Share, bell and User menu live in the App_Header. */
-export function BoardHeader({ board, cards, categories, categoryId, search, onSearch, onCategory }: BoardHeaderProps) {
+export function BoardHeader({ board, cards, members, categories, categoryId, search, onSearch, onCategory }: BoardHeaderProps) {
   const [searching, setSearching] = useState(false);
   const doneId = board.columns?.find((c) => c.name === "Done")?.id;
   const done = doneId ? cards.filter((c) => c.column_id === doneId).length : 0;
@@ -33,11 +34,19 @@ export function BoardHeader({ board, cards, categories, categoryId, search, onSe
     </div>
   );
 
+  const owner = members.find((m) => m.is_owner);
   const section = "flex items-center rounded-sm border border-line px-3 py-2";
 
   return (
     <header className="relative z-header flex shrink-0 flex-col gap-3 border-b border-line bg-surface-raised px-4 py-3 lg:px-8">
       <div className="flex flex-wrap items-stretch gap-3 lg:flex-nowrap">
+        {owner && (
+          <section aria-label="Board owner" className={`${section} shrink-0 gap-2`}>
+            <BaseAvatar name={owner.full_name} src={owner.avatar_url} />
+            <span className="text-xs whitespace-nowrap text-ink-muted">Owner</span>
+            <span className="text-sm font-medium">{owner.full_name}</span>
+          </section>
+        )}
         <section aria-label="Progress" className={`${section} shrink-0 gap-3`}>
           <span className="text-xs whitespace-nowrap text-ink-muted">
             {done} of {cards.length} done · {percent}%

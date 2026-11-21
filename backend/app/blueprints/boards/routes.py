@@ -100,7 +100,7 @@ def delete_board(board_id):
 def members(args, board_id):
     with_email = args.get("include") == "email"
     users = service.list_members(current_actor(), board_id, with_email)
-    return ok([{**(serialize_candidate(u) if with_email else serialize_member(u)), "is_owner": owner} for u, owner in users])
+    return ok([{**(serialize_candidate(u) if with_email else serialize_member(u)), "is_owner": owner, "role": u.role} for u, owner in users])
 
 
 @bp.route("/boards/<board_id>/candidates", methods=["GET"])

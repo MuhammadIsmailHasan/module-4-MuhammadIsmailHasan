@@ -213,6 +213,7 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
                   <div className="flex items-center gap-2 text-meta font-medium break-words">
                     {m.full_name}
                     {m.is_owner && <span className="rounded-sm bg-brand-tint px-2 text-2xs font-semibold text-brand">Owner</span>}
+                    {m.role && <span className="rounded-sm bg-surface px-2 text-2xs font-semibold text-ink-muted capitalize">{m.role}</span>}
                   </div>
                   <div className="truncate text-xs text-ink-muted">{m.username}</div>
                 </div>

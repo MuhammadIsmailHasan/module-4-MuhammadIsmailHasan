@@ -20,6 +20,7 @@ export interface Member {
   email?: string;
   /** The Board_Owner row of GET /boards/{id}/members (V12). */
   is_owner?: boolean;
+  role?: "member" | "supervisor";
 }
 
 export interface AuthResult {
