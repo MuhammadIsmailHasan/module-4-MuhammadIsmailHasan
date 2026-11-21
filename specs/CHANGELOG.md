@@ -122,3 +122,16 @@ Versions match `.kiro/specs/CHANGELOG.md`. Each folder holds requirement domains
 - Finding: both SVG logos wrap a PNG (640 by 640 and 720 by 220 pixels, no alpha), so they are not true vector art (Open Question 19). Only `favicon.ico` is supplied (Open Question 20).
 - V10 round 3 is applied separately; `v10/` is unchanged by V11. Full list in `.kiro/specs/CHANGELOG.md`, V11.
 
+
+## V12 - 2026-11-21
+### Changes
+- `v12/` holds the changed domains: `00-OVERVIEW` (Decisions Y to AF, the earlier decisions they amend or supersede, Glossary changes, Open Questions 3 and 22 to 28), `01-AUTH` (`/invite/{token}` route guard and Safe_Return_Path, E2E criteria 65 to 72), `02-ROLES` (access summary), `03-BOARDS` (Requirement 22, private-only access model), `04-CARDS` (Requirement 25 Auto_Save, Requirement 27 Subtask matrix and derived progress, labelled criteria of Requirements 4 and 16), `07-COMMENTS` (Requirement 26, comment deletion and Attachment removal confirmation), `08-ACTIVITY-LOG` (new actions), `09-NOTIFICATIONS` (Requirement 28), `11-VISIBILITY` (Requirement 11 superseded in part), `13-API-CONVENTIONS` (breaking changes and new endpoints), `15-TESTING` (criteria 29 to 35, Properties 51 to 58), `18-SHARE-LINKS` (Requirement 23, Public_Link), `19-APP-HEADER-PROFILE` (Requirement 29), and the new domain `22-INVITES-JOIN-REQUESTS` (Requirement 24).
+- Breaking: `visibility` removed from the API and data model; the Public_Link is Manager and Admin only; direct member add and candidates are Manager and Admin only; assignee must be owner or Board_Member; Save changes removed; Notification table and types change; local data reset.
+### Reason
+- The owner approved private-only Boards with a public link and an invite flow, per-field auto-save, comment deletion, derived progress, clickable Inbox rows, and a two-column Profile page.
+### Impact
+- `v1/` to `v11/` are unchanged. V11 branding (`v11/21-BRANDING`) is untouched. Nothing is implemented; task group 35 carries the work. Contradictions found and open questions: `.kiro/specs/CHANGELOG.md`, V12, "Consistency check (V12)".
+### V12 round 2 (same version; V12 is unimplemented, so there is no V13)
+- `v12/00-OVERVIEW` (Open Questions 22 to 24 resolved by the owner, 25 to 27 resolved by default, 28 unchanged; labels on Decisions M and S; Decisions Y and AA reworded), `v12/03-BOARDS` (ACC-13 reworded; ACC-19 and ACC-20 added; Requirement 3 criteria 24 and 31 labelled), `v12/04-CARDS` (criterion 33: owner listed first), `v12/13-API-CONVENTIONS` (join-requests rows carry `email`; members endpoint lists the owner once), `v12/15-TESTING` (V12-T2 reworded; V12-T8, V12-T9, V12-M1, V12-D1 added as criteria 36 to 39), `v12/22-INVITES-JOIN-REQUESTS` (INV-13 and INV-19 reworded; INV-27 and INV-28 added).
+- Impact: the pending join-request list carries each requester's Email for the owner, a Manager, and an Admin only (the Email now has three staff-only places); the Sidebar Team members list starts with the owner, tagged "Owner", with no remove action; no data-writing Playwright test for the invite flow is scheduled (manual checklist, automated test deferred).
+- `v1/` to `v11/` are unchanged (V11 branding untouched). Details and the consistency check: `.kiro/specs/CHANGELOG.md`, "Round 2 within V12".

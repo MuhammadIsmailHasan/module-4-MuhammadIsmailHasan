@@ -186,7 +186,10 @@ def list_for_card(card_id, sort="latest"):
 
 **Rule:** Category mutations (`create`/`update`/`delete`) require
 supervisor/manager/admin; listing a board's categories requires only board
-access, the same visibility check used for its columns and cards.
+access, the same access check (owner, board member, Manager, Admin; V12: no
+public boards) used for its columns and cards. A `BoardMember` row is never
+created for a Manager or an Admin, `progress` is computed (never stored or
+posted), and a comment may be deleted only by its author.
 
 **Rationale:** Categories feed the filter row everyone sees, but only the
 roles that manage a board's structure should be able to change what those
@@ -219,3 +222,14 @@ if kind is None or not 0 < len(data) <= MAX_AVATAR_BYTES:
     raise ValidationError("Invalid image", details={"file": ["Use a PNG, JPEG, or WebP image up to 2 MB."]})
 name = f"{uuid4().hex}.{kind}"               # never the original file name
 ```
+
+---
+**Rule:** A user's `email` leaves the Backend in only three Board-scoped responses
+(V12 round 2): the candidate search, `GET /boards/{id}/members?include=email`, and
+`GET /boards/{id}/join-requests`, each after a role check for staff. The join
+request's create and decision responses, notifications, and activity metadata
+carry no email, and the pending list reads it through a join, never from a copy.
+**Rationale:** A short, named list of places is the only way to review email
+exposure.
+**Example:** `JoinRequestUserSchema` has `email`; `JoinRequestSchema` returned by
+`POST /invite/{token}/requests` has no `user` field at all.

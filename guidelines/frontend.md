@@ -5,7 +5,7 @@ Coding standards for the Next.js app.
 ---
 
 **Rule:** Build UI only from `components/shared/Base*` (`BaseButton`,
-`BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar`, `BaseTooltip`, `BaseCombobox`, `BaseMenu`); never a raw `<button>`, ad-hoc badge `<span>`, or a
+`BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar`, `BaseTooltip`, `BaseCombobox`, `BaseMenu`, `BaseConfirm`); never a raw `<button>`, ad-hoc badge `<span>`, or a
 one-off modal. The `Base*` components wrap the shadcn/ui primitives in
 `components/ui/`; only they import `components/ui/`.
 
@@ -199,10 +199,11 @@ redirect(searchParams.get("next") ?? "/boards");
 redirect(safeReturnPath(searchParams.get("next")));
 ```
 ---
-**Rule:** A user's email is rendered only by `MemberSearch` and `MemberPicker`;
-no other component reads an `email` field of another user.
-**Rationale:** The email is shown to staff in those two places and nowhere
-else; one narrow place is easy to review.
+**Rule:** A user's email is rendered only by `MemberSearch`, `MemberPicker`, and
+the pending list of `InviteModal`; no other component reads an `email` field of
+another user.
+**Rationale:** The email is shown to staff in those three places and nowhere
+else; one narrow set of places is easy to review.
 **Example:** a sidebar member row renders `member.full_name` and `member.username`.
 An avatar is drawn only through `BaseAvatar` with the full name as `alt` and tooltip, never the email.
 ---
@@ -219,3 +220,13 @@ SVG files wrap a PNG, so the display size must not exceed the `viewBox`.
 // Good
 <BrandLogo variant="mark" decorative />
 ```
+
+---
+**Rule (V12):** The Card modal has no Save changes button and no draft state.
+Every field saves through `useFieldSave` with a per-field Saving, Saved, or error
+state; destructive actions use `BaseConfirm` (popover form by default, modal form
+for removing an attachment and deleting a comment); no component renders a
+visibility icon or computes card progress; every Inbox row is a link; the
+Profile page uses the one-column and two-column grid with token classes only.
+**Rationale:** A reviewer checks the V12 behaviour against one named rule.
+**Example:** a `<button>Save changes</button>` in `CardModal` is a violation.

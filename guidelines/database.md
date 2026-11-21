@@ -8,7 +8,11 @@ Coding standards for SQLAlchemy models and migrations.
 `Board` and `Card` additionally have `deleted_at` and `archived_at` (all
 nullable). `ActivityLog` and `RateLimitAttempt` are append-only and carry
 `created_at` only. `User.username` and `User.email` are unique on their
-lower-cased value; `Board.share_token` is a nullable unique string.
+lower-cased value; `Board.share_token` (the public link) and `Board.invite_token` (V12) are
+nullable unique strings; `Board` has no `visibility` column (V12);
+`BoardJoinRequest` has a partial unique index on `(board_id, user_id)` where
+`status = 'pending'` and holds no copy of the requester's email (the pending list joins `User`); `Notification` deduplicates with three partial unique
+indexes because `card_id` is nullable.
 
 **Rationale:** Uniform audit columns across every table, and exactly the
 shape the service layer's soft-delete/archive logic expects everywhere.
@@ -42,8 +46,8 @@ board_id = db.Column(UUID, db.ForeignKey("boards.id", ondelete="CASCADE"))  # on
 
 ---
 
-**Rule:** Enum-like columns (`priority`, `role`, `visibility`,
-`notification.type`) are DB-level enums or explicitly constrained strings —
+**Rule:** Enum-like columns (`priority`, `role`, `join_request.status`,
+`notification.type`; `visibility` was removed in V12) are DB-level enums or explicitly constrained strings —
 never free text.
 
 **Rationale:** Guarantees only valid values ever reach filter and analytics
