@@ -111,6 +111,7 @@
   --spacing-progress-lg: var(--size-progress-lg);
   --spacing-alert-dot: var(--size-alert-dot);
   --spacing-lift: var(--lift);
+  --spacing-select: var(--size-select);
   --spacing-logo-sm: var(--size-logo-sm);
   --spacing-logo-md: var(--size-logo-md);
   --spacing-logo-lg: var(--size-logo-lg);

@@ -371,7 +371,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 19.1 Build inbox and activity panel contents
     - Inbox view lists `GET /api/notifications` with unread count and mark-read / read-all actions; Activity view lists the board feed from `GET /api/boards/{id}/activity`; neither polls or computes notifications client-side.
     - _Requirements: 8.6, 9.4, 9.5, 9.6, 9.8, 9.9_
-  - [ ] 19.2 Build the admin users screen
+  - [x] 19.2 Build the admin users screen
     - `app/(app)/admin/users/page.tsx` for Admin user management. (V8 round 4: the Categories screen moved to task 30.8; the board members screen is replaced by the Sidebar Team members section, task 30.3.)
     - _Requirements: 1.7, 3.11, 3.14, 6.11_
   - [ ] 19.3 Checkpoint - Ensure all tests pass, ask the user if questions arise
