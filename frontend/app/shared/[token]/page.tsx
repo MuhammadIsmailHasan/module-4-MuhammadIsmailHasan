@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SharedBoard } from "@/components/shared-view/SharedBoard";
@@ -5,7 +6,15 @@ import { ApiError, request } from "@/lib/http";
 import { serverToken } from "@/lib/server";
 import type { Category, SharedBoard as SharedBoardT, SharedCard } from "@/lib/types";
 
-export const metadata = { title: "Shared board · RevoTask", robots: { index: false, follow: false } };
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const { token } = await params;
+  try {
+    const board = await request<SharedBoardT>("GET", `/shared/${token}`);
+    return { title: `Shared · ${board.name}`, robots: { index: false, follow: false } };
+  } catch {
+    return { title: "Shared board", robots: { index: false, follow: false } };
+  }
+}
 
 function InvalidLink() {
   return (

@@ -98,14 +98,15 @@ export function CardAttributes({ value, onChange, categories, members, assigneeF
     ...members.map((m) => ({
       value: m.id,
       label: m.full_name,
-      keywords: m.email ? [m.username, m.email] : [m.username],
+      keywords: [m.username, ...(m.role ? [m.role] : []), ...(m.email ? [m.email] : [])],
       render: (
         <span className="flex items-center gap-2">
           <BaseAvatar name={m.full_name} src={m.avatar_url} />
-          <span className="min-w-0">
+          <span className="min-w-0 flex-1">
             <span className="block truncate">{m.full_name}</span>
             {m.email && <span className="block truncate text-xs text-ink-muted">{m.email}</span>}
           </span>
+          {m.role && <span className="shrink-0 rounded-sm bg-surface px-2 text-2xs font-semibold text-ink-muted capitalize">{m.role}</span>}
         </span>
       ),
     })),

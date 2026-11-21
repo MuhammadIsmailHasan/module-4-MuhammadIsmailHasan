@@ -4,7 +4,7 @@ import { ApiError } from "@/lib/http";
 import { serverGet } from "@/lib/server";
 import type { InviteLookup } from "@/lib/types";
 
-export const metadata = { title: "Invitation · RevoTask", robots: { index: false, follow: false } };
+export const metadata = { title: "Invitation", robots: { index: false, follow: false } };
 
 function NotValid() {
   return (

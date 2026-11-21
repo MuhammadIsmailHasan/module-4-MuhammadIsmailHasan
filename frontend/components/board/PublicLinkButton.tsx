@@ -44,7 +44,7 @@ export function PublicLinkButton({ boardId }: { boardId: string }) {
         if (open) void run(() => api.boards.share(boardId));
       }}
       trigger={
-        <BaseButton variant="secondary" size="sm">
+        <BaseButton variant="secondary">
           <Share2 aria-hidden="true" />
           Public link
         </BaseButton>
@@ -68,7 +68,7 @@ export function PublicLinkButton({ boardId }: { boardId: string }) {
           <>
             <div className="flex items-center gap-2">
               <BaseInput readOnly aria-label="Public link" value={link} onFocus={(e) => e.currentTarget.select()} />
-              <BaseButton variant="secondary" size="sm" aria-label="Copy link" onClick={() => void copy()}>
+              <BaseButton variant="secondary" aria-label="Copy link" onClick={() => void copy()}>
                 {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
                 {copied ? "Copied" : "Copy"}
               </BaseButton>
@@ -79,7 +79,7 @@ export function PublicLinkButton({ boardId }: { boardId: string }) {
                 confirmLabel="Regenerate"
                 onConfirm={() => run(() => api.boards.regenerateShare(boardId))}
                 trigger={
-                  <BaseButton variant="secondary" size="sm">
+                  <BaseButton variant="secondary">
                     Regenerate
                   </BaseButton>
                 }
@@ -89,7 +89,7 @@ export function PublicLinkButton({ boardId }: { boardId: string }) {
                 confirmLabel="Disable"
                 onConfirm={() => run(() => api.boards.disableShare(boardId))}
                 trigger={
-                  <BaseButton variant="secondary" size="sm">
+                  <BaseButton variant="secondary">
                     Disable
                   </BaseButton>
                 }

@@ -1,9 +1,19 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { BoardUnavailable } from "@/components/board/BoardUnavailable";
 import { BoardView } from "@/components/board/BoardView";
 import { ApiError } from "@/lib/http";
 import { serverGet } from "@/lib/server";
 import type { Board, Card, Category } from "@/lib/types";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    return { title: (await serverGet<Board>(`/boards/${id}`)).name };
+  } catch {
+    return { title: "Board" };
+  }
+}
 
 export default async function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

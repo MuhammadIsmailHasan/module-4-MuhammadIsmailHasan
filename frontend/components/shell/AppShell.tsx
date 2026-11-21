@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "@/lib/api";
 import { getSession, getStoredUser, storeUser, type Session } from "@/lib/session";
+import { panelTitle } from "@/lib/titles";
 import type { Board, Inbox, User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AppHeader } from "./AppHeader";
@@ -55,6 +56,16 @@ export function AppShell({ boards, children }: { boards: Board[]; children: Reac
       live = false;
     };
   }, [session]);
+
+  // An open Inbox or Activity panel names the tab; closing it restores the page title (Requirement 32, criterion 4).
+  useEffect(() => {
+    if (!panel) return;
+    const previous = document.title;
+    document.title = panelTitle(panel, inbox?.unread_count ?? 0);
+    return () => {
+      document.title = previous;
+    };
+  }, [panel, inbox?.unread_count]);
 
   const toggleSidePanel = useCallback((view: PanelView) => setPanel((cur) => (cur === view ? null : view)), []);
   const closeSidePanel = useCallback(() => setPanel(null), []);

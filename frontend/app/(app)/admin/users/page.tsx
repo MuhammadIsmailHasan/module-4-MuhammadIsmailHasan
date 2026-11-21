@@ -3,7 +3,7 @@ import { UsersScreen, type AdminUser } from "@/components/admin/UsersScreen";
 import { serverGet, serverToken } from "@/lib/server";
 import { decodeToken } from "@/lib/session";
 
-export const metadata = { title: "Users · RevoTask" };
+export const metadata = { title: "Users" };
 
 /** Admin only: anyone else goes back to the boards (the Backend answers 403 to them anyway). */
 export default async function UsersPage() {

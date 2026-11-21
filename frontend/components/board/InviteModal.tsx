@@ -86,6 +86,7 @@ export function InviteModal({ boardId, open, onClose, canDecide, onChanged }: In
       <div className="flex flex-col gap-6">
         {error && <BaseAlert>{error}</BaseAlert>}
         <section aria-label="Invite settings" className="flex flex-col gap-3">
+          <h3 className="text-sm font-semibold">Invite link</h3>
           <p className="text-sm text-ink-muted">
             Anyone with the link can ask to join. Nobody gets in until a manager or an admin approves the request.
           </p>
@@ -100,7 +101,7 @@ export function InviteModal({ boardId, open, onClose, canDecide, onChanged }: In
             <>
               <div className="flex items-center gap-2">
                 <BaseInput readOnly aria-label="Invite link" value={link} onFocus={(e) => e.currentTarget.select()} onClick={() => void copy()} />
-                <BaseButton variant="secondary" size="sm" aria-label="Copy link" onClick={() => void copy()}>
+                <BaseButton variant="secondary" aria-label="Copy link" onClick={() => void copy()}>
                   {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
                   {copied ? "Copied" : "Copy"}
                 </BaseButton>
@@ -110,13 +111,13 @@ export function InviteModal({ boardId, open, onClose, canDecide, onChanged }: In
                   message="Make a new link? The old link stops working."
                   confirmLabel="Regenerate"
                   onConfirm={() => run(() => api.boards.regenerateInvite(boardId))}
-                  trigger={<BaseButton variant="secondary" size="sm">Regenerate</BaseButton>}
+                  trigger={<BaseButton variant="secondary">Regenerate</BaseButton>}
                 />
                 <BaseConfirm
                   message="Turn off invites? The link stops working."
                   confirmLabel="Disable"
                   onConfirm={() => run(() => api.boards.disableInvite(boardId))}
-                  trigger={<BaseButton variant="secondary" size="sm">Disable</BaseButton>}
+                  trigger={<BaseButton variant="secondary">Disable</BaseButton>}
                 />
               </div>
             </>

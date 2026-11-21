@@ -20,6 +20,8 @@ async function analyticsFor(boards: Board[]): Promise<Analytics[] | null> {
   return null;
 }
 
+export const metadata = { title: "Home" };
+
 /** Home: every board the viewer may see as a tile, and an analytics strip for Supervisors and Managers. */
 export default async function BoardsHome() {
   const boards = await serverGet<Board[]>("/boards");
