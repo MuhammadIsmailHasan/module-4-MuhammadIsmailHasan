@@ -111,6 +111,9 @@
   --spacing-progress-lg: var(--size-progress-lg);
   --spacing-alert-dot: var(--size-alert-dot);
   --spacing-lift: var(--lift);
+  --spacing-logo-sm: var(--size-logo-sm);
+  --spacing-logo-md: var(--size-logo-md);
+  --spacing-logo-lg: var(--size-logo-lg);
 
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
@@ -131,6 +134,8 @@
   --container-modal-wide: var(--modal-w-wide);
   --container-panel: var(--panel-w);
   --container-column: var(--column-w);
+  --container-logo-mark: var(--logo-w-mark);
+  --container-logo-full: var(--logo-w-full);
 
   --font-sans: var(--font-stack);
   --text-2xs: var(--text-2xs);

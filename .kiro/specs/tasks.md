@@ -782,21 +782,21 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - Checkpoint: ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass with 33.41 to 33.47 in place; re-run `alembic upgrade head` and the seed on the local database; run the e2e suite including SO-11 and SO-12 against the target URL; do the manual avatar smoke check (upload, comment, member list, assignee). Ask the user if questions arise.
   - _Requirements: 1.63, 1.64, 19.34, 20.19_
 - [ ] 34. RevoTask logo and favicon (Decision X, V11)
-  - [ ] 34.1 Move the Brand_Assets into place
+  - [x] 34.1 Move the Brand_Assets into place
     - Read `frontend/AGENTS.md` and `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/01-metadata/app-icons.md` first.
     - The three files are untracked, so use a plain move, not `git mv`: `mv frontend/images/favicon.ico frontend/app/favicon.ico`; `mkdir -p frontend/public/brand`; `mv frontend/images/logo-revo.svg frontend/images/logo-text-revo.svg frontend/public/brand/`; `rmdir frontend/images`; then `git add` the three new paths. No copy stays behind.
     - Confirm `grep` finds no reference to `frontend/images`. Do not add an `icons` field to `metadata` and no manual `<link>`.
     - _Requirements: 21.1, 21.2, 21.3, 21.14_
-  - [ ] 34.2 Write `components/shared/BrandLogo.tsx`
+  - [x] 34.2 Write `components/shared/BrandLogo.tsx`
     - Variants `mark` (`/brand/logo-revo.svg`, 480 by 480) and `full` (`/brand/logo-text-revo.svg`, 540 by 165); `next/image` with `unoptimized` and `loading="eager"`; alt `RevoTask`, `alt=""` with `decorative`; `size` maps to token height classes; add `--logo-lg` to `styles/tokens.css` and its `@theme` entry if the brand panel needs it; a `max-w` token class keeps the display at or under the `viewBox` width. No `priority`, no hex, no arbitrary value, no `"use client"`.
     - _Requirements: 21.3, 21.4, 21.5, 21.6, 21.7, 21.12, 21.15_
-  - [ ] 34.3 Use `BrandLogo` in the Sidebar, the sign-in pages, and the App_Header
+  - [x] 34.3 Use `BrandLogo` in the Sidebar, the sign-in pages, and the App_Header
     - First open both SVG files in the browser at the planned sizes and note the background colour of each raster; pick the tile token for the brand panel (Open Question 21). Check that `full` at 40 px high fits the expanded Sidebar button.
     - `Sidebar.tsx`: expanded toggle shows `full` (decorative, inside the labelled button, the text span removed); collapsed shows `mark` with the tooltip `RevoTask`; the drawer top below 960px shows `full` with alt `RevoTask`; remove the `LayoutGrid` tile.
     - `AuthSplitLayout.tsx`: brand panel `full` on a `bg-surface-raised` tile; form card header below 960px `full`; remove both "R" tiles and the text.
     - `AppHeader.tsx`: below 960px on non-board pages the `/boards` link holds `mark` (decorative) and the text RevoTask. Root and page titles stay "RevoTask" and "... · RevoTask".
     - _Requirements: 21.8, 21.9, 21.10, 21.11, 21.12, 14.16, 14.19_
-  - [ ]* 34.4 Write the branding component tests
+  - [x]* 34.4 Write the branding component tests
     - `frontend/tests/branding.test.tsx` as in the design "Testing strategy": variants, alt text and `decorative`, Sidebar expanded and collapsed, the source scan (`/brand/` and `<img` only in `BrandLogo.tsx`, no hex), the file checks (`frontend/images/` absent or empty, `public/brand/` with both files, `app/favicon.ico` with the ICO header). Update any existing test that looks for the Sidebar text "RevoTask".
     - _Requirements: 21.4, 21.12, 21.14, 21.17_
   - [ ]* 34.5 Write the Playwright branding spec

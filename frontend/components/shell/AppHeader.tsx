@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ShareButton } from "@/components/board/ShareButton";
 import { BaseButton } from "@/components/shared/BaseButton";
 import { BaseVisibility } from "@/components/shared/BaseVisibility";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import type { Board } from "@/lib/types";
 import { useShell } from "./ShellContext";
 import { UserMenu } from "./UserMenu";
@@ -34,7 +35,8 @@ export function AppHeader({ board, drawerOpen, onToggleDrawer }: AppHeaderProps)
         </div>
       ) : (
         <div className="min-w-0 flex-1">
-          <Link href="/boards" className="text-page-title font-semibold text-ink no-underline">
+          <Link href="/boards" className="inline-flex items-center gap-2 text-page-title font-semibold text-ink no-underline">
+            <BrandLogo variant="mark" size="sm" decorative className="lg:hidden" />
             RevoTask
           </Link>
         </div>

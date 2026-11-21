@@ -1,10 +1,11 @@
 "use client";
 
-import { Activity, Bell, Home, LayoutGrid, LogIn, Plus, Tags, UserCog, X, type LucideIcon } from "lucide-react";
+import { Activity, Bell, Home, LogIn, Plus, Tags, UserCog, X, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { BaseAvatar } from "@/components/shared/BaseAvatar";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import { BaseButton } from "@/components/shared/BaseButton";
 import { BaseConfirm } from "@/components/shared/BaseConfirm";
 import { BaseModal } from "@/components/shared/BaseModal";
@@ -135,18 +136,15 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
           <BaseTooltip label={collapsed ? "RevoTask" : "Collapse sidebar"} side="right">
             <BaseButton
               variant="ghost"
-              className="hidden size-control shrink-0 bg-brand px-0 text-on-brand hover:bg-brand-strong hover:text-on-brand lg:inline-flex"
+              className="hidden h-auto min-h-control shrink-0 px-0 lg:inline-flex"
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-expanded={!collapsed}
               onClick={toggleCollapsed}
             >
-              <LayoutGrid aria-hidden="true" />
+              {collapsed ? <BrandLogo variant="mark" size="sm" decorative /> : <BrandLogo variant="full" size="md" decorative />}
             </BaseButton>
           </BaseTooltip>
-          <div className="flex size-control shrink-0 items-center justify-center rounded-sm bg-brand text-on-brand lg:hidden" aria-hidden="true">
-            <LayoutGrid className="size-icon" />
-          </div>
-          <span className={cn("text-heading font-semibold", collapsed && "lg:hidden")}>RevoTask</span>
+          <BrandLogo variant="full" size="md" className="lg:hidden" />
         </div>
         {session ? (
           <>

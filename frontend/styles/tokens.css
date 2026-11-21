@@ -103,6 +103,12 @@
   --size-date-label: 88px;
   --size-checkbox: 18px;
   --size-dropzone: 96px;
+  --size-logo-sm: 32px;
+  --size-logo-md: 40px;
+  --size-logo-lg: 64px;
+  /* The logo files' viewBox widths: shown no wider, so the embedded raster is never enlarged. */
+  --logo-w-mark: 480px;
+  --logo-w-full: 540px;
 
   --border-width-dashed: 1px;
   --border-width-focus: 2px;
