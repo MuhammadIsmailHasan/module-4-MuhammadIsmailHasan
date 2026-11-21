@@ -1,13 +1,12 @@
 import { AlertTriangle, LayoutList, Users } from "lucide-react";
 import Link from "next/link";
 import { BaseAvatar } from "@/components/shared/BaseAvatar";
-import { BaseVisibility } from "@/components/shared/BaseVisibility";
 import type { Board, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const AVATARS = 3;
 
-/** A board on Home: name and visibility, description, progress, counts, and a few members. */
+/** A board on Home: name, description, progress, counts, and a few members. */
 export function BoardTile({ board, members }: { board: Board; members: Member[] }) {
   const cards = board.card_count ?? 0;
   const done = board.done_count ?? 0;
@@ -24,7 +23,6 @@ export function BoardTile({ board, members }: { board: Board; members: Member[] 
     >
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start gap-2">
-          <BaseVisibility visibility={board.visibility} className="mt-1 text-ink-muted" />
           <h2 className="min-w-0 text-base font-semibold break-words">{board.name}</h2>
         </div>
         {board.description && <p className="line-clamp-2 text-meta text-ink-muted">{board.description}</p>}

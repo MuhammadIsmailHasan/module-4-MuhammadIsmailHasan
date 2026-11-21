@@ -5,6 +5,7 @@ import { GripVertical, Trash2 } from "lucide-react";
 import { BaseButton } from "@/components/shared/BaseButton";
 import { BaseConfirm } from "@/components/shared/BaseConfirm";
 import { BaseAlert, BaseInput } from "@/components/shared/BaseField";
+import { ProgressMeter } from "@/components/shared/ProgressMeter";
 import { api } from "@/lib/api";
 import { computeDropOrder, dropIndex } from "@/lib/ordering";
 import type { Subtask } from "@/lib/types";
@@ -60,7 +61,11 @@ export function SubtaskChecklist({ cardId, subtasks, canEdit, onChange }: Subtas
 
   return (
     <div className="flex flex-col gap-2">
-      {sorted.length === 0 && <p className="text-ink-muted">No subtasks.</p>}
+      {sorted.length === 0 ? (
+        <p className="text-ink-muted">No subtasks yet</p>
+      ) : (
+        <ProgressMeter done={sorted.filter((s) => s.is_done).length} total={sorted.length} />
+      )}
       <ul className="m-0 flex list-none flex-col gap-2 p-0" onDragOver={(e) => dragId && e.preventDefault()} onDrop={drop}>
         {sorted.map((s) => (
           <li

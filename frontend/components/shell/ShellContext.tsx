@@ -14,6 +14,9 @@ export interface ShellState {
   refreshInbox: () => Promise<void>;
   /** The one function the sidebar items and the header bell both call. */
   toggleSidePanel: (view: PanelView) => void;
+  closeSidePanel: () => void;
+  /** Lower or raise the unread count at once, before the server answers. */
+  adjustUnread: (delta: number) => void;
 }
 
 export const ShellContext = createContext<ShellState | null>(null);

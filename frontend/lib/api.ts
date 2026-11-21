@@ -12,6 +12,9 @@ import type {
   Column,
   Comment,
   Inbox,
+  InviteLookup,
+  InviteState,
+  JoinRequest,
   Notification,
   Priority,
   Member,
@@ -111,8 +114,8 @@ export const api = {
   boards: {
     list: () => get<Board[]>("/boards"),
     get: (id: string) => get<Board>(`/boards/${id}`),
-    create: (body: { name: string; visibility?: "public" | "private"; description?: string }) => post<Board>("/boards", body),
-    update: (id: string, body: { name?: string; visibility?: string; owner_id?: string | null }) =>
+    create: (body: { name: string; description?: string }) => post<Board>("/boards", body),
+    update: (id: string, body: { name?: string; description?: string; owner_id?: string | null }) =>
       patch<Board>(`/boards/${id}`, body),
     members: (id: string, withEmail = false) => get<Member[]>(`/boards/${id}/members`, { include: withEmail ? "email" : undefined }),
     addMember: (id: string, userId: string) => post<Member>(`/boards/${id}/members`, { user_id: userId }),
@@ -124,6 +127,16 @@ export const api = {
     enableShare: (id: string) => post<ShareState>(`/boards/${id}/share`),
     regenerateShare: (id: string) => post<ShareState>(`/boards/${id}/share/regenerate`),
     disableShare: (id: string) => del<ShareState>(`/boards/${id}/share`),
+    invite: (id: string) => get<InviteState>(`/boards/${id}/invite`),
+    enableInvite: (id: string) => post<InviteState>(`/boards/${id}/invite`),
+    regenerateInvite: (id: string) => post<InviteState>(`/boards/${id}/invite/regenerate`),
+    disableInvite: (id: string) => del<InviteState>(`/boards/${id}/invite`),
+    joinRequests: (id: string) => get<JoinRequest[]>(`/boards/${id}/join-requests`),
+  },
+  invites: {
+    lookup: (token: string) => get<InviteLookup>(`/invite/${token}`),
+    request: (token: string) => post<{ id: string; board_id: string; status: string }>(`/invite/${token}/requests`),
+    decide: (id: string, status: "approved" | "rejected") => patch<unknown>(`/join-requests/${id}`, { status }),
   },
   cards: {
     listForBoard: (boardId: string, f: CardFilters = {}) =>
@@ -171,6 +184,7 @@ export const api = {
     create: (cardId: string, content: string) => post<Comment>(`/cards/${cardId}/comments`, { content }),
     reply: (commentId: string, content: string) => post<Comment>(`/comments/${commentId}/replies`, { content }),
     togglePriority: (id: string) => patch<Comment>(`/comments/${id}/priority`),
+    remove: (id: string) => del<{ deleted: number }>(`/comments/${id}`),
   },
   notifications: {
     inbox: (page: PageQuery = {}) => get<Inbox>("/notifications", pageQuery(page)),

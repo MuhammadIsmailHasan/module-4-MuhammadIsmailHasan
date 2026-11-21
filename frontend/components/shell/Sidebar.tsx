@@ -11,7 +11,6 @@ import { BaseConfirm } from "@/components/shared/BaseConfirm";
 import { BaseModal } from "@/components/shared/BaseModal";
 import { BasePopover } from "@/components/shared/BasePopover";
 import { BaseTooltip } from "@/components/shared/BaseTooltip";
-import { BaseVisibility } from "@/components/shared/BaseVisibility";
 import { useDesktop } from "@/hooks/useDesktop";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { api } from "@/lib/api";
@@ -95,7 +94,9 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
   const role = session?.role;
   const current = boards.find((b) => b.id === boardId) ?? null;
   const canCategories = role === "supervisor" || role === "manager" || role === "admin";
-  const canManageMembers = role === "manager" || role === "admin" || (!!session && current?.owner_id === session.userId);
+  const isStaff = role === "manager" || role === "admin";
+  const canAddMembers = isStaff;
+  const canRemoveMembers = isStaff || (!!session && current?.owner_id === session.userId);
   const canCreateBoard = role === "manager" || role === "admin";
 
   useEffect(() => {
@@ -176,7 +177,6 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
                 b.id === boardId && "bg-brand font-medium text-on-brand hover:bg-brand-strong",
               )}
             >
-              <BaseVisibility visibility={b.visibility} className="mt-1" />
               <span className="min-w-0">{b.name}</span>
             </Link>
           ))}
@@ -186,7 +186,7 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
           <section aria-label="Team members" className="flex flex-col gap-1">
             <SectionHead
               action={
-                canManageMembers &&
+                canAddMembers &&
                 (desktop ? (
                   <BasePopover wide label="Add a member" open={adding} onOpenChange={setAdding} trigger={addButton}>
                     {search}
@@ -210,10 +210,13 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
               <div key={m.id} className="flex min-h-control items-center gap-3 rounded-sm px-3 py-2">
                 <BaseAvatar name={m.full_name} src={m.avatar_url} size="md" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-meta font-medium break-words">{m.full_name}</div>
+                  <div className="flex items-center gap-2 text-meta font-medium break-words">
+                    {m.full_name}
+                    {m.is_owner && <span className="rounded-sm bg-brand-tint px-2 text-2xs font-semibold text-brand">Owner</span>}
+                  </div>
                   <div className="truncate text-xs text-ink-muted">{m.username}</div>
                 </div>
-                {canManageMembers && (
+                {canRemoveMembers && !m.is_owner && (
                   <BaseConfirm
                     message={`Remove ${m.full_name} from this board?`}
                     confirmLabel="Remove"

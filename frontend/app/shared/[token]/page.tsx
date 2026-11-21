@@ -37,5 +37,5 @@ export default async function SharedPage({ params }: { params: Promise<{ token: 
     if (err instanceof ApiError && err.httpStatus === 404) return <InvalidLink />;
     throw err;
   }
-  return <SharedBoard token={token} board={board} cards={cards} categories={categories} />;
+  return <SharedBoard token={token} board={board} cards={cards} categories={categories} signedIn={!!bearer} />;
 }

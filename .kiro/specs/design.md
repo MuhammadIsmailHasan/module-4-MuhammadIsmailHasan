@@ -2,14 +2,14 @@
 
 ## Overview
 
-This document is the technical design for the Kanban Task Management application (Version V11). It implements the V10 `requirements.md` using the stack and conventions fixed in the workspace steering (updated to V10 in this revision): a Flask + SQLAlchemy + flask-smorest REST API (marshmallow schemas, generated OpenAPI) organized as one blueprint per domain, and a mobile-first Next.js (App Router, TypeScript) frontend. Requirement references use the criterion numbers of the current `requirements.md`. "Decision 1" to "Decision P" refer to the Decisions Log in `requirements.md`; Decisions K to P are new in V10 and are summarised in the section "V10 Design: Share Links, Identity, Header, Rate Limiting, Route Guard".
+This document is the technical design for the Kanban Task Management application (Version V12). It implements the V10 `requirements.md` using the stack and conventions fixed in the workspace steering (updated to V10 in this revision): a Flask + SQLAlchemy + flask-smorest REST API (marshmallow schemas, generated OpenAPI) organized as one blueprint per domain, and a mobile-first Next.js (App Router, TypeScript) frontend. Requirement references use the criterion numbers of the current `requirements.md`. "Decision 1" to "Decision P" refer to the Decisions Log in `requirements.md`; Decisions K to P are new in V10 and are summarised in the section "V10 Design: Share Links, Identity, Header, Rate Limiting, Route Guard". V12 (Decisions Y to AF) is described in the section "V12 Design" at the end of this document and overrides any older section it contradicts.
 
 Key design decisions:
 
 | Decision | Choice | Rationale |
 |---|---|---|
 | Backend layering | `routes.py → service.py → repository.py → model`, plus `schema.py` holding the marshmallow schemas. Routes are `flask_smorest.Blueprint` views; services and repositories never import marshmallow or Flask | Services are unit-testable against a fake repository (Req 15.4, 13.7, 13.14). |
-| Board access | `board_service.can_access(user, board)` (Board_Access) gates every board-scoped read and comment; `board_service.can_write_staff(user, board)` (Board_Staff_Access) gates Supervisor, Manager, and Admin writes (Decision A) | "Private" must gate unrelated signed-in users and cannot drift per endpoint (Req 11.6, 11.11, 12.7); an unrelated Supervisor must not write on a public Board (Req 3.4, 4.1, 6.1). |
+| Board access | `board_service.can_access(user, board)` (Board_Access) gates every board-scoped read and comment; `board_service.can_write_staff(user, board)` (Board_Staff_Access) gates Supervisor, Manager, and Admin writes (Decision A) | "Private" must gate unrelated signed-in users and cannot drift per endpoint (Req 11.6, 11.11, 12.7); an unrelated Supervisor must not write on a public Board (Req 3.4, 4.1, 6.1). **V12: `can_access` no longer has a public branch; see "V12 Design: Access model" (Decision Y).** |
 | Authorization | `require_role(...)` decorator for the role gate, plus service-level policy functions that combine role, `can_access`, `can_write_staff`, and assignment | Role comes only from the Token (Req 2.7). Ownership and assignment rules need data, so they live in services. |
 | Role model | Numeric rank for guest < member < supervisor < manager; admin is a separate capability set | Additive hierarchy without duplicated rules (Req 2.2, 2.3). Admin is deliberately not a Manager superset (Decision B). |
 | Status codes | No Token returns 401; valid Token with insufficient role or access returns 403, everywhere. A Guest requesting any Board outside the shared routes gets 401 (V10); a rate-limited request gets 429 with `Retry-After` | Req 2.8, 2.9, 11.5, 12.7, 13.10, 20.5. |
@@ -167,6 +167,9 @@ sequenceDiagram
 
 ### Board access: `board_service.can_access(user, board)`
 
+> **Superseded in V12 (Decision Y).** The `visibility` branch below no longer exists: every Board is private. See "V12 Design: Access model". The code is kept for history.
+
+
 ```python
 def can_access(user: Actor | None, board: Board) -> bool:
     if board.deleted_at is not None:
@@ -197,6 +200,9 @@ def can_write_staff(user: Actor | None, board: Board) -> bool:
 Staff write paths call `require_access` first (401, 403, or 404), then `can_write_staff`, raising `Forbidden` when it is false. Member writes use `can_access` plus the assignee rule; comments use `can_access` plus the role rule. Board ownership alone, `is_owner(user, board)`, gates analytics for Supervisors and board member management together with Manager and Admin.
 
 ### Role policy matrix (service layer)
+
+> **Superseded in V12 (Decision Y).** Replaced by the V12 access matrix in the section "V12 Design" (no public Boards, the Public_Link and Invite_Link columns, Board_Owner and Manager and Admin rows). Rows "Set visibility", "List boards", and "Enable, disable, regenerate, read a Share_Link" changed.
+
 
 "Access" means `can_access` (Board_Access) is true. "Staff" means `can_write_staff` (Board_Staff_Access) is true. Every row also requires a valid Token; the Guest column lists the only Token-free access (the shared routes), and every other Guest request returns 401.
 
@@ -335,7 +341,7 @@ Frontend handling: `AttachmentList` renders `<a href={file_url} target="_blank" 
 | Component | Type | Notes |
 |---|---|---|
 | `AppShell` (`(app)/layout.tsx`) | Server | Renders Sidebar, header, Main, side-panel host. |
-| `Sidebar` | Client | One column. V10: no profile entry and no Log out item (Decision L). Expanded: nav items with icons and labels, then the Boards list and team members; collapsed: the icon rail only with tooltips; the choice is kept in `localStorage`. Off-canvas drawer below 960px with scrim, toggle in the persistent header. Boards list (from `GET /boards`) is the board switcher; each row shows a lock (private) or open lock (public) icon and wraps a long name. Home is the first entry. Categories entry only for supervisor, manager, admin. |
+| `Sidebar` | Client | One column. V10: no profile entry and no Log out item (Decision L). Expanded: nav items with icons and labels, then the Boards list and team members; collapsed: the icon rail only with tooltips; the choice is kept in `localStorage`. Off-canvas drawer below 960px with scrim, toggle in the persistent header. Boards list (from `GET /boards`) is the board switcher; each row shows a lock (private) or open lock (public) icon and wraps a long name. Home is the first entry. Categories entry only for supervisor, manager, admin. V12 round 2 (Open Question 23): the Team members list starts with the Board_Owner (`is_owner` row, tagged "Owner", no remove button for any viewer); the other rows keep the remove button for the owner, Manager, and Admin. |
 | `BoardsHome` (`(app)/boards/page.tsx`) | Server | Lists every board the viewer may see with its visibility icon; the default destination after sign-in. |
 | `AppHeader` | Client | V10. Persistent top bar of `(app)/layout.tsx`: Sidebar toggle below 960px, a page-context slot (on a Board: `BaseVisibility`, the name, and `ShareButton`), the Inbox bell, and `UserMenu`. The Board's second row (progress, chips, search) stays in `Board`. |
 | `UserMenu` | Client | V10. `BaseMenu` with the trigger `aria-label="User menu"` (avatar or user icon); items Profile (link to `/profile`) then Log out (calls `api.auth.logout()`, which always clears the cookie and navigates to `/login`). |
@@ -345,7 +351,7 @@ Frontend handling: `AttachmentList` renders `<a href={file_url} target="_blank" 
 | `ShareButton` | Client | V10. Shown only to the Board_Owner, Manager, Admin; `BasePopover` with enable toggle, link field with Copy, Regenerate and Disable behind `BaseConfirm`. |
 | `SharedBoard`, `SharedCardModal` | Server page, Client interaction | V10. `/shared/[token]`: read-only board and card modal; no drag, edit, comments, activity, Sidebar, or User_Menu; a "Shared view, read only" banner and a Sign in link. The page calls `GET /shared/{token}` with the cookie Token when present and redirects to `/boards/{id}` when `has_board_access` is true. |
 | `SidePanel` | Client | One `toggleSidePanel("inbox" \| "activity")` shared by sidebar items and the header bell. Renders only when the API returned the data. |
-| `Board` | Client | Viewport-locked: the header stays fixed, columns scroll sideways, each column scrolls inside itself with its add-card action pinned at the bottom. HTML5 drag-and-drop (draggable cards, `dragover` and `drop` on each column body) with placeholder and FLIP; calls `PATCH /cards/{id}/move` once on drop, reconciles with the response, reverts on failure. |
+| `Board` | Client | Viewport-locked: the header stays fixed, columns scroll sideways, each column scrolls inside itself with its add-card action pinned at the bottom. HTML5 drag-and-drop (draggable cards, `dragover` and `drop` on each column body) with placeholder and FLIP; calls `PATCH /cards/{id}/move` once on drop, reconciles with the response, reverts on failure. **V12: `visibility` removed; `invite_token` (nullable, unique) added (Decisions Y and AA).** |
 | `FilterRow` | Client | Chips from `GET /boards/{id}/categories`; search input. |
 | `CardModal` | Client | Large two-pane modal. Header: "card title | board name" (live from the draft title) and the column badge. Footer, right-aligned: Archive, Delete, Save changes. Left: Details, Attachments (bordered tiles), and Subtasks cards. Right: a Comments card (composer, thread) and an Activity card. No column select. |
 | `CardChips` | Client | Category, Priority, dates, and assignee chips; each opens a `BasePopover` that edits the modal's draft form. |
@@ -394,8 +400,8 @@ erDiagram
 | Entity | Columns |
 |---|---|
 | `User` | `id`, `full_name`, `username` (String(30), not null, stored lower-case, unique through `uq_users_username_lower` on `lower(username)`), `email` (String(255), stored lower-case, unique through `uq_users_email_lower` on `lower(email)`; **nullable in the database only** so that migrated accounts without an address can exist, and required by every register and admin-create schema), `password_hash` (argon2), `role` enum(`member`,`supervisor`,`manager`,`admin`), `avatar_path` (String(64), nullable; the generated file name `<hex32>.<png|jpg|webp>`, never a URL; the `user` payload computes `avatar_url` from it, Decision R), timestamps. `login_identifier` and `uq_users_login_identifier_lower` are removed by the V10 migration. Guest is the absence of a user. |
-| `Board` | `id`, `name`, `description` (nullable, at most 500), `visibility` enum(`public`,`private`, default `private`), `owner_id` (nullable FK User, must reference a supervisor when set), `share_token` (nullable String(64), unique index `uq_boards_share_token` where not null; V10, Decision K), `deleted_at`, `archived_at`, timestamps. |
-| `BoardMember` | `id`, `board_id` (FK Board), `user_id` (FK User), timestamps. Unique `(board_id, user_id)`. |
+| `Board` | `id`, `name`, `description` (nullable, at most 500), `visibility` enum(`public`,`private`, default `private`), `owner_id` (nullable FK User, must reference a supervisor when set), `share_token` (nullable String(64), unique index `uq_boards_share_token` where not null; V10, Decision K), `deleted_at`, `archived_at`, timestamps. **V12: `visibility` removed; `invite_token` (nullable, unique) added (Decisions Y and AA).** |
+| `BoardMember` | `id`, `board_id` (FK Board), `user_id` (FK User), timestamps. Unique `(board_id, user_id)`. **V12: never a Manager or an Admin (Decision Y).** |
 | `Column` | `id`, `board_id` (FK), `name`, `order` (Float), timestamps. |
 | `Card` | `id`, `column_id`, `category_id` (nullable FK, `ON DELETE SET NULL`), `assignee_id` (nullable FK), `title`, `description`, `priority` enum(`high`,`medium`,`low`), `start_date` (nullable Date), `end_date` (nullable Date), `order` (Float), `deleted_at`, `archived_at`, timestamps. Check constraint `end_date >= start_date` when both set. Stretch: `progress`, `views_count`. A Card's Board is reached through its Column. |
 | `Category` | `id`, `board_id` (FK), `name`, `color` (nullable), timestamps. Unique index on `(board_id, lower(name))`. |
@@ -403,7 +409,7 @@ erDiagram
 | `Attachment` | `id`, `card_id`, `name`, `url` (nullable), `file_path` (nullable), `mime_type` (nullable), timestamps. Check constraint: `url IS NOT NULL OR file_path IS NOT NULL`. Allowed upload MIME types: PDF, Word (`.doc`, `.docx`), RAR. No `deleted_at`. |
 | `Comment` | `id`, `card_id`, `author_id`, `parent_id` (nullable self FK), `content`, `is_priority` (default false), `reply_count` (default 0), timestamps. No `deleted_at`. |
 | `ActivityLog` | `id`, `actor_id`, `action`, `target_type`, `target_id`, `metadata` (JSON), `created_at`. The repository exposes no update or delete function. |
-| `Notification` | `id`, `user_id`, `type` enum(`assigned`,`deadline`), `card_id`, `is_read` (default false), `notify_date` (Date), timestamps. Unique `(user_id, card_id, type, notify_date)`. |
+| `Notification` | `id`, `user_id`, `type` enum(`assigned`,`deadline`), `card_id`, `is_read` (default false), `notify_date` (Date), timestamps. Unique `(user_id, card_id, type, notify_date)`. **V12: three new types, nullable `card_id`, new `board_id`, `actor_id`, `join_request_id`, and three partial unique indexes replace the unique constraint (Decision AE).** |
 | `RateLimitAttempt` | `id`, `scope` enum(`login_pair`,`login_ip`,`availability`), `key_hash` (String(64): hex HMAC-SHA256, keyed with `JWT_SECRET` and a `ratelimit:` prefix, of `identifier|ip` for `login_pair` and of the IP for the other scope), `created_at` (timestamptz, server clock via the injectable `clock.now()`). Index `(scope, key_hash, created_at)`. No `updated_at` (rows are only inserted and deleted; a documented exception like `ActivityLog`). V10, Decision O. |
 
 ### Relationships (Decision F, Req 13.16)
@@ -773,8 +779,8 @@ Reflection notes: the many per-endpoint 401/403 criteria collapse into the permi
 
 ### Property 49: Email exposure
 
-*For any* Board, viewer role and relationship, and any search text, the candidate response contains `email` exactly when the call is allowed (Board_Owner, Manager, Admin) and the trimmed search has at least 2 characters (a shorter search returns 400 with `details.search` and queries nothing); `GET /boards/{id}/members` contains `email` exactly when `include=email` is sent by a viewer with Board_Staff_Access (403 otherwise); and *for any* generated Board with Comments, Activity_Log rows, Notifications, and a Share_Token, no Comment, activity, notification, shared, or default member response body contains the Email of a user other than the viewer.
-**Validates: Requirements 3.25, 3.30, 3.31, 15.24**
+*For any* Board, viewer role and relationship, and any search text, the candidate response contains `email` exactly when the call is allowed (Board_Owner, Manager, Admin) and the trimmed search has at least 2 characters (a shorter search returns 400 with `details.search` and queries nothing); `GET /boards/{id}/members` contains `email` exactly when `include=email` is sent by a viewer with Board_Staff_Access (403 otherwise); and *for any* generated Board with Comments, Activity_Log rows, Notifications, and a Share_Token, no Comment, activity, notification, shared, or default member response body contains the Email of a user other than the viewer. Round 2 within V12: `GET /boards/{id}/join-requests` contains `email` for the Board_Owner, a Manager, and an Admin (and answers 403 to any other signed-in user and 401 without a Token), and *for any* generated join request no create response, decision response, Notification, or Activity_Log `metadata` contains an Email.
+**Validates: Requirements 3.25, 3.30, 3.31, 15.24, 24.13, 24.27, 24.28**
 ### Property 50: Avatar exposure and query count
 *For any* generated Card with Comments and Replies by up to 50 distinct authors, Board members, candidates, and an assignee, each `author_avatar_url`, `avatar_url`, and `assignee_avatar_url` is null exactly when that user has no `avatar_path`, and otherwise is a signed URL that verifies with the scope `avatar` for exactly that user id and fails for another user id, for an Attachment id, and after 15 minutes; none of these fields, and no Email, appears in a shared, Activity_Log, or Notification response; the number of SQL statements of the Comment list and of the Card list is the same for 5 and for 50 distinct users; and *for any* full name, `initialsOf(name)` returns the upper-cased first letters of the first two whitespace-separated words, one letter for one word, and `?` for a blank name, and never contains an `@`.
 **Validates: Requirements 7.21, 19.34, 19.35, 19.36, 19.37, 19.39, 15.25**
@@ -1101,6 +1107,9 @@ Changes from V7 to V8 (Decision I; the backend, API, data model, and property nu
 
 ## Auth End-to-End Tests (V9, updated in V10)
 
+> **Extended in V12.** Requirement 1 criteria 65 to 72 add the V12 tests (`/invite` guard and return, shared link not valid page, no visibility icon, no Save changes button, Member sees no Invite or Public link button, Profile two-column layout). The rest of this section stands, with the Test_Account now also a Board_Member of a seeded Board.
+
+
 Test specifications only; the product changes of V10 are in the next section. Covers Req 1.19 to 1.42, 1.55, 1.56, and Req 15.10 to 15.19.
 
 - **Layout:** `frontend/tests/e2e/auth/signin.spec.ts`, `signout.spec.ts`, `pages/AuthPage.ts` (the Auth_Page_Object), and `env.ts` (reads and checks the three environment variables). `frontend/playwright.config.ts` sets `testDir: "tests/e2e"`, `use.baseURL` from `E2E_BASE_URL`, and no `webServer`, because the tests target the deployed URL. Vitest only includes `tests/**/*.test.{ts,tsx}`, so `*.spec.ts` files are not picked up by `vitest run`.
@@ -1129,6 +1138,9 @@ Test specifications only; the product changes of V10 are in the next section. Co
 Implements Decisions K to P and Requirements 1.39 to 1.54, 18, 19, 20, and the criteria reworded in 3, 4, 6, 7, 8, 11, 12, 13, 14, 15, and 17. Endpoint, table, and component details are in the sections above; this section records the algorithms and the decisions that cut across them.
 
 ### Share links (Decision K)
+
+> **Amended in V12 (Decision Z).** The Share_Link is the Public_Link and only a Manager or an Admin manages it; read-only for every visitor. See "V12 Design: Public_Link changes".
+
 
 ```mermaid
 sequenceDiagram
@@ -1275,7 +1287,7 @@ sequenceDiagram
 - `user_repository.search_candidates` is unchanged; `CandidateSchema` gains `email`. Access is unchanged (`require_role` owner, Manager, Admin through `board_service.can_manage_members`).
 - `GET /boards/{id}/members` accepts `include=email`. `MembersQuerySchema` declares `include` as an optional `OneOf(["email"])`. The service calls `can_write_staff(user, board)` when `include == "email"` and raises `Forbidden` otherwise, then `MemberSchema` (without email) or `MemberWithEmailSchema` is chosen. The default path never reads `User.email`, which makes Property 49 true by construction for member lists.
 - **Audience differs between the two places.** Candidate search: Board_Owner, Manager, Admin. Assignee popover: Board_Staff_Access, which also includes a Supervisor who is only a BoardMember. A Supervisor BoardMember therefore sees the Email of the Board's members but cannot search all users.
-- The Sidebar's Team members rows keep calling the default members endpoint and render name and Username only. `MemberPicker` and `MemberSearch` are the only components that render `email`; a lint rule is not added, and the component tests of Req 15.24 and the design's frontend tests cover it.
+- The Sidebar's Team members rows keep calling the default members endpoint and render name and Username only (V12 round 2: the first row is the owner with an "Owner" tag and no remove button, selected by `is_owner`). `MemberPicker`, `MemberSearch`, and the pending list of `InviteModal` (V12 round 2, Decisions M and S) are the only components that render `email`; a lint rule is not added, and the component tests of Req 15.24 and the design's frontend tests cover it.
 - Emails reach logs only if request or response bodies are logged; the Backend logs neither.
 
 ### Invalid Token on any request (Decision T)
@@ -1478,3 +1490,383 @@ Example-based. The behaviour does not vary over a generated input space (static 
 - Requirements: Decision X, Glossary (Brand_Assets, Logo_Mark, Logo_Full, BrandLogo, Embedded_Raster, Favicon_File), Open Questions 19 to 21, Requirement 21, Requirement 14 criteria 16 and 19 reworded, Requirement 15 criterion 28 added.
 - Code: nothing implemented; task group 34 carries the work.
 - V10 round 3 (Decisions U to W) is applied separately and is not touched by V11.
+
+## V12 Design: Private Boards, Public Link, Invites, Auto-Save, Deletes, Derived Progress, Inbox Links (Decisions Y to AF)
+
+V12 is a revision of V11. It changes the Board access model, adds an invite flow, changes how the Card modal saves, and adds three small features (comment delete, Member Subtask toggles, clickable Inbox). Where an older section of this document disagrees with this section, this section wins; the older heading carries a "Superseded in V12" note and its text stays for history. Nothing in V12 is implemented yet; task group 35 carries the work. V11 branding (Decision X, group 34) is untouched.
+
+### Access model (Decision Y)
+
+```python
+def can_access(user: Actor | None, board: Board) -> bool:
+    if board.deleted_at is not None:
+        return False                      # callers translate to 404
+    if user is None:
+        return False                      # a Guest: caller raises 401
+    if user.role in ("manager", "admin"):
+        return True
+    return board.owner_id == user.id or board_repository.is_member(board.id, user.id)
+```
+
+The `visibility` branch is gone. `require_access` keeps its translation (404 soft-deleted, 401 Guest, 403 signed-in without access). `can_write_staff` is unchanged: Manager, Admin, or a Supervisor who is owner or Board_Member. `board_repository.list_for_user(user)` returns every non-deleted Board for a Manager and an Admin, and otherwise `owner_id = :uid OR EXISTS (BoardMember with user_id = :uid)` in one query with the `card_count`, `done_count`, `overdue_count`, and `member_count` aggregates as before (Requirement 3, criterion 26).
+
+Manager and Admin are never Board_Members. `board_service.add_member(actor, board_id, user_id)` is the only writer of BoardMember rows besides `join_request_service.approve`; both call `_ensure_assignable_account(user)`, which raises `ValidationError({"user_id": [...]})` for a `manager` or `admin` role. `user_service.change_role` deletes the user's BoardMember rows and pending requests when the new role is `manager` or `admin` (Requirement 22, criterion 6).
+
+Assignment: `card_service.assign_card` checks `user_id == board.owner_id or board_repository.is_member(board_id, user_id)` and raises `ValidationError({"assignee_id": [...]})` otherwise. `board_service.remove_member` and the owner reassignment path call `card_repository.clear_assignee(board_id, user_id)`, which returns the cleared Card ids so the service writes one `card.unassigned` row per Card (no Notification).
+
+`GET /boards/{id}/members` returns the owner first (`is_owner: true`) and then the BoardMembers, by one query (`UNION` of the owner row and the member rows, avatar paths selected in the same batched lookup). Round 2 within V12 (Open Question 23): a user is listed once even when the owner is also a BoardMember (`UNION` removes the duplicate and the owner row wins); `DELETE /boards/{id}/members/{owner_id}` returns 404 when the owner is not a BoardMember (the Frontend never sends it, ACC-19, ACC-20); `candidates` already excludes the owner (ACC-09).
+
+### Access matrix (V12)
+
+"Rel" is the viewer's relationship to the Board. Columns: **Anon** (no Token, with or without a Public_Link), **Out** (signed in, role Member or Supervisor, no relationship), **Mem** (Member, Board_Member), **MemA** (Member, Board_Member, Card assigned to them), **SupB** (Supervisor, Board_Member), **Own** (Supervisor, Board_Owner), **Mgr**, **Adm**, **PubL** (any visitor holding a current Public_Link and without Board_Access), **Inv** (signed-in Member or Supervisor holding an Invite_Link, no Board_Access). A dash means not allowed; the denial is 401 for Anon and 403 for every signed-in column, except where a 404 is named.
+
+| Action | Anon | Out | Mem | MemA | SupB | Own | Mgr | Adm | PubL | Inv |
+|---|---|---|---|---|---|---|---|---|---|---|
+| List Boards (Home) | 401 | own none | member Boards | same | member Boards | owned Boards | all | all | - | - |
+| Open Board, Columns, Cards, Categories (normal view) | - | 403 | yes | yes | yes | yes | yes | yes | - | - |
+| Read-only Shared_View through the Public_Link | yes | yes | redirect to normal | redirect | redirect | redirect | redirect | redirect | yes | yes |
+| Comments and Activity | 401 | 403 | read | read | read | read | read | read | never | never |
+| Create Comment or Reply | 401 | 403 | yes | yes | yes | yes | yes | no (Decision B) | never | never |
+| Delete own Comment or Reply | 401 | 403 | author | author | author | author | author | no (cannot author) | never | never |
+| Flag Comment priority | 401 | 403 | - | - | - | - | yes | - | never | never |
+| Create, delete, archive Card; Column; Category | 401 | 403 | - | - | yes | yes | yes | yes | never | never |
+| Edit Card fields, move Card | 401 | 403 | - | yes | yes | yes | yes | yes | never | never |
+| Assign Card (assignee must be owner or Board_Member) | 401 | 403 | - | - | yes | yes | yes | yes | never | never |
+| Toggle, add, rename, reorder, delete Subtask | 401 | 403 | - | yes | yes | yes | yes | yes | never | never |
+| Add, remove Attachment | 401 | 403 | - | yes | yes | yes | yes | yes | never | never |
+| Create, regenerate, disable, read the Public_Link | 401 | 403 | - | - | - | - (403) | yes | yes | - | - |
+| Create, regenerate, disable, read the Invite_Link | 401 | 403 | - | - | - | yes | yes | yes | - | - |
+| See pending Join_Requests, with each requester's Email | 401 | 403 | - | - | - | yes | yes | yes | - | - |
+| Approve or reject a Join_Request | 401 | 403 | - | - | - | - (403) | yes | yes | - | - |
+| Send a Join_Request through the Invite_Link | 401 | yes (Member or Supervisor) | 409 | 409 | 409 | 409 | 400 | 400 | - | yes |
+| Add a Board_Member directly (Member or Supervisor accounts only) | 401 | 403 | - | - | - | - (403) | yes | yes | - | - |
+| Remove a Board_Member | 401 | 403 | - | - | - | yes | yes | yes | - | - |
+| Search candidates | 401 | 403 | - | - | - | - (403) | yes | yes | - | - |
+| Create Board, set or clear owner, archive, soft-delete Board | 401 | 403 | - | - | - | - | yes | yes | - | - |
+| Board analytics | 401 | 403 | - | - | - | owned Board | any | - | - | - |
+
+Notes:
+- "never" means the route does not exist for that viewer (the shared routes have no such route) or answers 401 or 403 as the first column says; the Shared_View renders no control.
+- A Manager or an Admin opening an Invite_Link is told they already have access (state `staff`), and `POST /api/invite/{token}/requests` answers 400.
+- Admin keeps Decision B: no Comment, no priority flag, no analytics. A Comment deleted by its author needs authorship, which Admin cannot have.
+- A Supervisor who is only the Board_Owner and not a Board_Member has Board_Staff_Access (owner or Board_Member), as before.
+
+### Data model changes (V12)
+
+| Entity | Change |
+|---|---|
+| `Board` | Remove `visibility`. Add `invite_token` (nullable String(64), unique index `uq_boards_invite_token`). `share_token` keeps its name and meaning (the Public_Link, Decision Z). |
+| `BoardJoinRequest` (new) | `id` (UUID), `board_id` (FK Board), `user_id` (FK User), `status` enum(`pending`,`approved`,`rejected`) default `pending`, `decided_by` (nullable FK User), `created_at`, `updated_at`. Partial unique index `uq_join_requests_pending ON (board_id, user_id) WHERE status = 'pending'`. Index on `(board_id, status, created_at)`. No `deleted_at`; rows are never deleted except by the role-change cleanup (Requirement 22, criterion 6) and the local reset. |
+| `Notification` | `type` enum adds `board_join_requested`, `board_added`, `board_join_rejected`. `card_id` becomes nullable. New nullable `board_id` (FK Board; set on every new row), `actor_id` (FK User), `join_request_id` (FK BoardJoinRequest). The composite unique constraint is replaced by three partial unique indexes (below). CHECK `notifications_scope`: `(type IN ('assigned','deadline') AND card_id IS NOT NULL) OR (type IN ('board_join_requested','board_added','board_join_rejected') AND card_id IS NULL AND board_id IS NOT NULL)`. |
+| `Card` | `progress` is not stored. The schema computes it (Requirement 27). `views_count` stays a stretch column. |
+| `ActivityLog` | New actions (no column change): `board.invite_enabled`, `board.invite_regenerated`, `board.invite_disabled`, `board.join_requested`, `board.join_rejected`, `card.subtask_added`, `card.subtask_updated`, `card.subtask_removed`, `card.attachment_added`, `card.attachment_removed`, `comment.deleted`. `board.visibility_changed` is never written. `board.member_added` gains an optional `metadata.via` of `join_request`. |
+
+```mermaid
+erDiagram
+  BOARD ||--o{ BOARD_JOIN_REQUEST : receives
+  USER ||--o{ BOARD_JOIN_REQUEST : sends
+  USER |o--o{ BOARD_JOIN_REQUEST : decides
+  BOARD |o--o{ NOTIFICATION : about
+  BOARD_JOIN_REQUEST |o--o{ NOTIFICATION : causes
+```
+
+#### Notification deduplication (Decision AE)
+
+A unique constraint treats NULL values as distinct, so the V2 constraint `(user_id, card_id, type, notify_date)` would stop deduplicating the moment `card_id` can be null, and a single constraint cannot also let two different join requests notify the same owner on the same day. Options considered:
+
+1. One unique index with `COALESCE(card_id, zero-uuid)` and `COALESCE(board_id, zero-uuid)`: one index, but SQLAlchemy and Alembic need raw expression SQL, and it still cannot tell two join requests apart without a third coalesced column.
+2. `UNIQUE NULLS NOT DISTINCT` (PostgreSQL 15 and later): short, but ties the project to a version, and the join-request case still needs a different key.
+3. **Chosen: three partial unique indexes**, expressible with `postgresql_where` and each stating one rule:
+
+```sql
+CREATE UNIQUE INDEX uq_notifications_card  ON notifications (user_id, card_id, type, notify_date) WHERE card_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_notifications_join  ON notifications (user_id, type, join_request_id)      WHERE join_request_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_notifications_board ON notifications (user_id, type, board_id, notify_date) WHERE card_id IS NULL AND join_request_id IS NULL;
+```
+
+Card notifications keep the exact V2 rule (the deadline job can rerun and insert nothing). Each join request notifies a given user once per type. Board notifications that have no request (`board_added` after an owner change) deduplicate per user, type, Board, and day. The service inserts with `ON CONFLICT DO NOTHING`, so a rerun or a retry never raises.
+
+### Endpoints added or changed (V12)
+
+All under `/api`, all in the shared Envelope. "Status codes" lists every one a test must cover.
+
+| Method and path | Roles | Body or query | Success | Status codes and `error.code` |
+|---|---|---|---|---|
+| `GET /boards/{id}/invite` | owner, Manager, Admin | none | 200 `{ enabled, token, path }` | 401, 403, 404 |
+| `POST /boards/{id}/invite` | owner, Manager, Admin | none | 200 `{ enabled: true, token, path: "/invite/<token>" }` (existing token if on) | 401, 403, 404 |
+| `POST /boards/{id}/invite/regenerate` | owner, Manager, Admin | none | 200 same shape, new token | 401, 403, 404 |
+| `DELETE /boards/{id}/invite` | owner, Manager, Admin | none | 200 `{ enabled: false, token: null, path: null }` (also when already off) | 401, 403, 404 |
+| `GET /invite/{token}` | any signed-in | none | 200 `{ board: {id, name, description}, state, request }` | 401, 404 `NOT_FOUND` |
+| `POST /invite/{token}/requests` | Member, Supervisor | none | 201 `{ id, board_id, status: "pending", created_at }` | 401, 404, 400 `VALIDATION_ERROR` (`details.role`, Manager or Admin), 409 `CONFLICT` (`details.board`, member, owner, or pending) |
+| `GET /boards/{id}/join-requests?status=` | owner, Manager, Admin | `status` = `pending` (default), `approved`, `rejected`, `all` | 200 list of `{ id, status, created_at, user: {id, full_name, username, email, avatar_url} }`, oldest first (round 2 within V12: `email` is returned here, to these three roles only, Decisions M and S) | 401, 403, 404, 400 (bad `status`) |
+| `PATCH /join-requests/{id}` | Manager, Admin | `{ "status": "approved" or "rejected" }` | 200 the request | 401, 403 (owner and all others), 404, 409 `CONFLICT` (not pending), 400 `VALIDATION_ERROR` |
+| `DELETE /comments/{id}` | the author | none | 200 `{ deleted: n }` | 401, 403 (not author, or author lost Board_Access), 404 |
+| `POST /boards/{id}/share`, `.../regenerate`, `DELETE`, `GET` | Manager, Admin | none | as V10 | 401, 403 (owner, Supervisor, Member), 404 |
+| `POST /boards/{id}/members` | Manager, Admin | `{ user_id }` | 201 as V10 | 401, 403, 404, 400 (`details.user_id`: Manager or Admin account), 409 (already member) |
+| `GET /boards/{id}/candidates` | Manager, Admin | `search` at least 2 | 200 as V10, only Member and Supervisor accounts | 401, 403, 400 |
+| `GET /boards/{id}/members` | any with Board_Access | `include=email` needs staff | 200, owner first (once) with `is_owner` | 401, 403, 404 |
+| `GET /notifications` | the caller | `limit`, `before` | 200, rows gain `type`, `board_id`, `board_name`, `card_id`, `card_title`, `actor_name`, `is_read` | 401 |
+| `PATCH /boards/{id}` | as V10 | no `visibility` | 200 | a posted `visibility` is rejected as an unknown field with 400 `VALIDATION_ERROR` |
+| `PATCH /cards/{id}` | as V10 | no `progress` | 200 | a posted `progress` is 400 `details.progress`; an unchanged value writes no row |
+
+Services: `invite_service` (`get`, `enable`, `regenerate`, `disable`, `preview`) and `join_request_service` (`create`, `list_for_board`, `decide`). The V12 routes live in a new blueprint folder `app/blueprints/invites/` with the four-file layout (`routes.py`, `service.py`, `repository.py`, `schema.py`), registered on the same `Api`; `structure.md` lists the new domain.
+
+```python
+def create_request(actor, token):
+    board = board_repository.get_by_invite_token(token)         # 404 for every miss
+    if board is None or board.deleted_at is not None:
+        raise NotFound()
+    if actor.role in ("manager", "admin"):
+        raise ValidationError({"role": ["Managers and admins already have access to every board."]})
+    if board.owner_id == actor.id or board_repository.is_member(board.id, actor.id):
+        raise Conflict({"board": ["You are already a member of this board."]})
+    try:
+        req = join_request_repository.insert_pending(board.id, actor.id)   # partial unique index
+    except IntegrityError:
+        raise Conflict({"board": ["Your request is already pending."]})
+    activity_repository.add(actor.id, "board.join_requested", "board", board.id, {"board_name": board.name})
+    for uid in notify_repository.board_approver_ids(board):             # owner + all managers + admins
+        notification_repository.add_board(uid, "board_join_requested", board.id, actor.id, req.id)
+    return req
+
+def decide(actor, request_id, status):
+    req = join_request_repository.get_for_update(request_id)    # SELECT ... FOR UPDATE
+    if req is None: raise NotFound()
+    if req.status != "pending": raise Conflict({"status": ["Already decided."]})
+    if status == "approved":
+        user = user_repository.get(req.user_id)
+        _ensure_assignable_account(user)                        # 400 if role changed
+        board_repository.add_member_if_missing(req.board_id, req.user_id)
+        activity_repository.add(actor.id, "board.member_added", "board", req.board_id,
+                                {"user_name": user.full_name, "via": "join_request"})
+        notification_repository.add_board(req.user_id, "board_added", req.board_id, actor.id, req.id)
+    else:
+        activity_repository.add(actor.id, "board.join_rejected", "board", req.board_id, {"user_name": ...})
+        notification_repository.add_board(req.user_id, "board_join_rejected", req.board_id, actor.id, req.id)
+    req.status, req.decided_by = status, actor.id
+```
+
+The role check for `decide` sits in `routes.py` as `@require_role("manager", "admin")`, so the owner receives 403 before the service runs. `GET /boards/{id}/join-requests` calls `require_access` and then allows the owner, Manager, or Admin. Round 2 within V12: `join_request_repository.list_for_board(board_id, status)` selects `BoardJoinRequest` columns plus `User.id, full_name, username, email, avatar_path` through one join (constant query count, avatar URLs signed by the batched `avatar_urls`); `JoinRequestUserSchema` has `email`, while the create response, the decision response, `Notification` rows, and Activity_Log `metadata` never carry it (INV-28). The Email is read through the join and is not copied into `board_join_requests`.
+
+The Frontend's `invite` routes use `Cache-Control: private, no-store`. The `invite_token` is excluded from `serialize_board`, from every Activity_Log `metadata`, and from logs, exactly like `share_token`.
+
+### Public_Link changes (Decision Z)
+
+`board_service.get_share`, `enable_share`, `regenerate_share`, and `disable_share` are re-guarded with `@require_role("manager", "admin")`; the owner check is removed. The `shared` blueprint is unchanged except that `shared_service.get_board` returns `has_board_access` by calling `can_access` (it never returns 403). Static route test: every rule under `/api/shared` allows `GET` only; any other method answers 405. The write-endpoint tests of PUB-10 and PUB-11 call the six real write endpoints as a Guest (401) and as a signed-in user without access (403).
+
+Frontend: `/shared/[token]` is unchanged. The banner's right-hand link is "Sign in" for a Guest and "Go to Home" for a signed-in visitor. The Board page for a Manager or an Admin shows a "Public link" button (renamed from "Share"); the popover content is unchanged.
+
+### Card modal Auto_Save (Decision AB)
+
+The V8 draft state (`useCardDraft`, the `dirty` flag, the staged attachments) is removed. One hook owns each field:
+
+```ts
+type FieldState = { status: "idle" | "saving" | "saved" | "error"; error?: string };
+
+function useFieldSave<T>(opts: {
+  saved: T;                                   // last value the server confirmed
+  send: (value: T) => Promise<Card>;          // one PATCH with only this field
+  apply: (card: Card) => void;                // merges only the sent keys (SAVE-09)
+  isEqual?: (a: T, b: T) => boolean;
+}): { state: FieldState; commit(value: T): Promise<void>; retry(): Promise<void>; inFlight: Promise<void> | null };
+```
+
+- `commit(value)` returns at once when `isEqual(value, saved)` (SAVE-02, no request, no row). Otherwise it sets `saving`, awaits `send`, then `apply`, sets `saved`, and clears it after 2 seconds with a timer that is cancelled on the next commit. On failure it sets `error`, keeps `value` in the field, and `retry()` repeats the last value.
+- Title: `onBlur` and Enter call `commit(trimmed)`; an empty value never reaches `send` (SAVE-03). Description: `onBlur` and Ctrl or Cmd+Enter.
+- Chip popovers (`BasePopover`) call `commit` from `onOpenChange(false)` for dates and from the choice handler for category, priority, and assignee (SAVE-04, SAVE-05).
+- Subtask, Attachment, and Comment widgets call their own endpoints at once; each has its own `FieldState` (`subtask:<id>`, `attachments`, `comments`) shown beside it.
+- `CardModal` keeps a `Set` of in-flight promises. `requestClose()` first blurs the active element (which commits a pending text field), then `await Promise.allSettled(set)`, then checks whether any field is in `error`; if so it opens the `BaseConfirm` dialog of SAVE-14, otherwise closes (SAVE-13). While waiting the header shows "Saving…".
+- `aria-live="polite"` region per field renders `Saving`, `Saved`, or the error text (SAVE-08).
+- The Backend needs no change for the PATCH body, but `card_service.update_card` computes `changes` against the stored row and returns early with no Activity_Log row when it is empty (SAVE-11). Subtask and Attachment services add their `card.*` rows in the same transaction (SAVE-12).
+- Last write wins (SAVE-10): there is no `If-Match`. Alternative considered: an `updated_at` precondition that returns 409 on a stale write; rejected for V12 because it adds a conflict dialog to every field and the owner chose last write wins.
+
+`describeActivity(entry)` gains sentences: "{actor} added subtask "{title}" to "{card}"", "{actor} ticked subtask…", "{actor} removed attachment "{name}"…", and "{actor} deleted a comment on "{card}"" (reply: "deleted a reply"). The `card.updated` sentence is unchanged and reads naturally with one field per row.
+
+### BaseConfirm variants (Decision AC)
+
+| Action | Form | Reason |
+|---|---|---|
+| Delete Card | popover | one row, reversible by an admin only through the database, but a small panel keeps the modal's flow (unchanged) |
+| Delete Subtask | popover | unchanged |
+| Remove Board member | popover | unchanged |
+| Regenerate or Disable the Public_Link or the Invite_Link | popover | unchanged; text says the old link stops working |
+| Remove profile picture | popover | unchanged |
+| Remove Attachment | **modal** | irreversible file removal; the whole screen is held until answered |
+| Delete Comment or Reply | **modal** | may delete other people's replies; the text says how many |
+| Close the Card modal with a failed field | **modal** | a decision about lost text |
+| Approve, Reject a Join_Request | none | reversible by a new request; one click |
+
+`BaseConfirm` takes `variant="popover" | "modal"` (default `popover`), wrapping the shadcn `Popover` or `Dialog`. Feature code never imports either directly.
+
+### Comment deletion (Decision AC)
+
+```python
+def delete_comment(actor, comment_id):
+    c = comment_repository.get_for_update(comment_id)           # 404 if None
+    card = card_repository.get(c.card_id)
+    board_service.require_access(actor, card.board)             # 403 if access was lost
+    if c.author_id != actor.id:
+        raise Forbidden()                                       # Manager and Admin included
+    if c.parent_id is not None:                                 # a reply
+        comment_repository.decrement_reply_count(c.parent_id)   # reply_count = GREATEST(reply_count - 1, 0)
+        comment_repository.delete(c); n = 1; replies = 0
+    else:
+        replies = comment_repository.delete_replies(c.id)
+        comment_repository.delete(c); n = 1 + replies
+    activity_repository.add(actor.id, "comment.deleted", "card", card.id,
+        {"card_title": card.title, "comment_id": str(c.id), "is_reply": c.parent_id is not None, "deleted_replies": replies})
+    return n                                                    # one transaction
+```
+
+Why hard delete fits the existing rules. Requirement 4 criterion 29 says Subtask, Attachment, and Comment rows have no `deleted_at` and are hidden through the parent Card. That rule describes how a deleted Card hides its children; it does not forbid removing a child row. A Comment delete is an explicit author action that physically removes the row (like removing an Attachment already does). The append-only Activity_Log is unaffected: it gains one `comment.deleted` row with no text, and earlier rows that mention the Comment keep their `comment_id` as plain data (there is no foreign key from `ActivityLog` to `Comment`). The Replies of a deleted top-level Comment have `parent_id` to it, so the delete runs replies first (or `ON DELETE CASCADE` on `parent_id`, chosen in task 35.13); the same transaction holds the parent decrement, so `reply_count` always equals the number of Replies (Property 53).
+
+### Subtasks and derived progress (Decision AD)
+
+Exact matrix (Requirement 27, criterion 1): Subtask add, toggle, rename, reorder, and delete are allowed to Manager and Admin always, to a Supervisor with Board_Staff_Access, and to a Member only when `card.assignee_id == actor.id`; all need Board_Access. This equals the existing `can_edit_card` function (Requirement 4, criteria 8 to 14), so V12 adds a named test per role and no new code path, and `card_service.toggle_subtask` is the one function all PATCH `is_done` calls use.
+
+```python
+def derive_progress(done: int, total: int) -> int | None:
+    if total == 0:
+        return None
+    return (20 * done + total) // (2 * total)       # round half up, 0..10
+```
+
+`CardSchema` and `SharedCardSchema` add `progress` (dump only), `subtask_done_count`, and `subtask_total_count`, computed from the Subtasks the repository already loaded with `selectinload` (no extra query; Property 39 holds). The schema rejects a loaded `progress` key (`unknown = RAISE`, with a custom message for `progress`). The meter is a `BaseProgress`-style bar built in the board Card and in the Subtasks card from the `--brand` token; the text is "done of total". With no Subtasks the board Card shows nothing and the modal shows "No subtasks yet".
+
+There is no manual progress control anywhere to remove: the stretch task 22.1 (stored column) is reworded and 22.2 renders only the views counter and the tabs. The report in the changelog lists this as a reconciliation.
+
+### Inbox navigation (Decision AE)
+
+`InboxRow` renders `<Link href=...>` (Next.js `Link`), so Enter and middle click work. `onClick` calls `markRead(id)` (optimistic: unread count minus one, then `PATCH`; a failure restores the count and shows a toast) and `closeSidePanel()`, without `preventDefault`, so navigation is not delayed. `hrefFor(n)` is a pure function: `assigned` and `deadline` give `/boards/${n.board_id}?card=${n.card_id}`, `board_join_requested` gives `/boards/${n.board_id}?invite=1`, `board_added` gives `/boards/${n.board_id}`, `board_join_rejected` gives `/boards`.
+
+The Board page (`app/(app)/boards/[id]/page.tsx`, a Server Component) reads `searchParams.card` and `searchParams.invite`. It fetches the Board; a 403 or 404 renders `BoardUnavailable` ("You no longer have access to this board, or it was removed." with a Home link). It passes `initialCardId` to the client `BoardView`, which fetches `GET /cards/{id}` once the board is loaded: 404, or a Card whose column is on another Board, shows `CardNotice` ("This card is no longer available."); a Card with `archived_at` set shows "This card is archived."; otherwise it opens the modal. Closing the modal calls `router.replace` without the `card` parameter. `invite=1` opens `InviteModal` for the owner, a Manager, or an Admin and is ignored for others.
+
+### Invite modal and page (Decision AA)
+
+`InviteModal` (Client Component) loads `GET /boards/{id}/invite` and `GET /boards/{id}/join-requests` when opened. Off: a Generate button. On: a read-only input with the link and a "Copy" button that uses `navigator.clipboard.writeText` and shows "Copied" for 2 seconds (the whole input is also a click-to-copy target), Regenerate and Disable behind popover `BaseConfirm`, then the pending list. Each row: `BaseAvatar`, full name, `@username`, the requester's Email in muted text (round 2 within V12, INV-19, INV-27; the one place the Email appears on this screen), relative time, and, for Manager and Admin only, Approve (primary) and Reject (secondary). Deciding removes the row optimistically and restores it on error; a 409 shows "Already decided" and refreshes. The owner who is not a Manager or an Admin sees the note instead of buttons. The button shows the pending count as a badge from the same list call (loaded on Board open for the three roles, one request).
+
+`/invite/[token]/page.tsx` sits outside `(app)` but inside the guard: `frontend/proxy.ts` matches `/invite/:path*` and redirects a cookie-less request to `/login?next=/invite/<token>`; the Safe_Return_Path rule accepts the `/invite/` prefix. The page is a Server Component that calls `GET /api/invite/{token}` with the cookie Token, renders the state of Requirement 24 criteria 23 to 25, and its Request button is a small Client Component. Response headers `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex` are set in `next.config` `headers()` for `/invite/:token*`, next to the existing `/shared/:token*` entry.
+
+### Profile layout (Decision AF)
+
+`app/(app)/profile/page.tsx`: the container is `w-full` with the shell's page padding and no `max-w-*`. The grid is `grid grid-cols-1 gap-6 min-[960px]:grid-cols-2` where the left cell is a column of two cards (avatar, account details) with `gap-6` and the right cell holds the change-password card. All cards use the existing `p-4` and the 40 pixel controls. Token-backed classes only. The 960 breakpoint is the one the Sidebar already uses (Requirement 3, criterion 24 and the frontend steering).
+
+### Migration (V12; local development reset, Decisions Y and AA)
+
+One new Alembic revision after `b7d2e4f6a801` (id chosen when written), a local-development reset in the style of Decision V:
+
+1. Abort unless `APP_ENV` is `development` or `testing`, before changing anything.
+2. Delete the rows of `users` and of every table that references it (the V10 list plus `board_join_requests`), so no old BoardMember of a Manager or an Admin, no assignment to a non-member, and no Notification without a `board_id` survives. Nothing is backfilled.
+3. Drop `boards.visibility` (and its enum type), add `boards.invite_token` with the unique index.
+4. Create `board_join_requests` with the enum, the partial unique index, and the lookup index.
+5. Alter `notifications`: make `card_id` nullable, add `board_id`, `actor_id`, `join_request_id`, extend the type enum, drop the old unique constraint, add the three partial unique indexes and the CHECK.
+6. Print one line: local data was reset; run `flask seed-data`.
+7. `downgrade` restores `visibility` (default `private`), drops the new table and columns, and recreates the old constraint; it needs no data.
+
+Seed (`flask seed-data`, Requirement 22, criterion 18): users `manager`, `admin`, `supervisor` (owner of "Alpha Board"), `supervisor2`, `member`, `member2`, and an unrelated `member3`; "Alpha Board" with `member` and `member2` as Board_Members, five Default_Columns, a few Cards (one assigned to `member`, with three Subtasks, one done) and a Category; "Beta Board" owned by `supervisor2`, with no Member; no BoardMember for `manager` or `admin`; the Invite_Link and the Public_Link are off. The Test_Account `member` therefore sees only "Alpha Board" on Home. `flask seed-users` keeps its V10 meaning. Running either twice creates no duplicate.
+
+Order of deployment: the migration, then the Backend (Board access, invites, notifications, comment delete, derived progress), then the Frontend, then the e2e update. The Backend and the Frontend deploy together because `visibility` leaves every Board payload and the Share button changes role.
+
+### Breaking changes (V12)
+
+- API: `visibility` is removed from every Board request and response; `GET /boards` returns fewer Boards for a Member or Supervisor (no public Boards); the Public_Link endpoints answer 403 to the Board_Owner; `POST /boards/{id}/members` and `GET /boards/{id}/candidates` answer 403 to the Board_Owner and reject Manager and Admin accounts; `PATCH /cards/{id}` rejects an `assignee_id` that is not the owner or a Board_Member; a posted `progress` is 400; `GET /notifications` rows gain fields and three types.
+- Data: `boards.visibility` dropped; `notifications.card_id` nullable with new columns and indexes; `board_join_requests` and `boards.invite_token` added; local data reset.
+- Frontend: Save changes removed; visibility icons removed; Share button renamed and role-restricted; new routes `/invite/{token}` and the `?card=` and `?invite=` parameters; Safe_Return_Path gains `/invite/`.
+
+### Properties (V12)
+
+### Property 51: Board access and the missing visibility
+*For any* generated Board, user (role Member, Supervisor, Manager, Admin, or no Token), and relationship (owner, Board_Member, none), `can_access` is true exactly when the Board is not soft-deleted and the user is a Manager, an Admin, the owner, or a Board_Member; `GET /boards` returns exactly the Boards for which it is true (every Board for a Manager and an Admin); every Board-scoped route answers 401 with no Token, 403 for a signed-in user without access, and no Board payload or request schema contains a `visibility` key.
+**Validates: Requirements 22.1, 22.2, 22.3, 22.4**
+
+### Property 52: Manager and Admin are never Board_Members
+*For any* sequence of direct adds, join-request approvals, owner reassignments, and role changes over generated users, no BoardMember row references a user whose current role is `manager` or `admin`, `POST /boards/{id}/members` for such a user is 400, and every Card's `assignee_id` is null, the Board_Owner, or a Board_Member.
+**Validates: Requirements 22.5, 22.6, 22.10, 22.11, 22.12**
+
+### Property 53: Reply count consistency under delete
+*For any* interleaving of creating Comments and Replies and deleting them by their authors, each top-level Comment's `reply_count` equals the number of Reply rows whose `parent_id` is that Comment; deleting a Reply lowers its parent's count by one; deleting a top-level Comment removes it and all its Replies and returns `n = 1 + replies`; a non-author delete (any role) is 403 and changes nothing; and every delete writes exactly one `comment.deleted` row that contains no part of the text.
+**Validates: Requirements 26.4, 26.5, 26.6, 26.7, 26.8**
+
+### Property 54: A Public_Link grants no write
+*For any* Board with a current Share_Token and any visitor (no Token, or a signed-in user without Board_Access), each of the six write endpoints (comment, edit field, attachment, Subtask, archive, delete) answers 401 or 403 and changes no row and writes no Activity_Log row; every mutating method under `/api/shared` answers 405; no shared response contains `comments`, `activity`, `owner_id`, members, either token, an Email, a Username, or an Avatar_URL; and the link works only while the token is current.
+**Validates: Requirements 23.5, 23.6, 23.10, 23.11, 23.12**
+
+### Property 55: Join request lifecycle
+*For any* sequence of requests, approvals, rejections, and repeated requests by generated Members and Supervisors: at most one `pending` row exists per `(board_id, user_id)` (two simultaneous requests leave one row and one 409); only a Manager or an Admin can move a row out of `pending` (owner, Supervisor, and Member get 403 and nothing changes); an approval creates exactly one BoardMember and one `board_added` Notification and keeps the user's role; a rejection creates no BoardMember; a decided row never changes again (409); a rejected user can request again.
+**Validates: Requirements 24.8, 24.10, 24.11, 24.12, 24.14, 24.15, 24.16**
+
+### Property 56: Notification deduplication with a null card
+*For any* repeated insertion of Notifications (card types with the same user, card, type, and date; board types without a request with the same user, Board, type, and date; board types with a request), the table holds one row per distinct key of the three partial unique indexes, a rerun inserts nothing and raises nothing, and two different join requests to the same recipient on the same day both notify.
+**Validates: Requirements 28.1, 28.2, 28.3**
+
+### Property 57: Derived progress
+*For any* generated checklist with `done` of `total` Subtasks, `progress` is null when `total` is 0, otherwise an integer from 0 to 10 equal to `(20 * done + total) // (2 * total)`; it is 0 when `done` is 0, 10 when `done` equals `total`, and non-decreasing in `done`; toggling a Subtask changes it only through the Subtask rows; and a request that posts `progress` is 400.
+**Validates: Requirements 27.4, 27.5**
+
+### Property 58: Auto-save sends only what changed
+*For any* sequence of edits to the fields of a Card modal (a pure model of `useFieldSave` and the merge function), a commit with a value equal to the last saved value sends nothing; every other commit sends one request with exactly that field (the two dates together); a response merges only the keys that request sent, so an in-progress edit of another field is never overwritten; and a failed request leaves the saved value unchanged and the field editable.
+**Validates: Requirements 25.2, 25.3, 25.4, 25.5, 25.9**
+
+### V12 testing strategy
+
+- Property tests (`hypothesis` for 51 to 57 against fake repositories and the real constraints; `fast-check` for 58) as listed above.
+- `pytest` API tests per Requirement 15, criteria 29 to 32, including one test per write endpoint of PUB-10 and PUB-11 and one per role of the Subtask matrix.
+- Frontend component tests (`vitest`, Testing Library) per Requirement 15, criteria 33 to 35 and 37; `pytest` API tests for round 2 per criterion 36.
+- Playwright: Requirement 1, criteria 65 to 72, read-only against the deployed URL, no `waitForTimeout`, web-first assertions. A full invite flow (Member requests, Manager approves) needs two accounts and writes data; it is a manual verification (the checklist below, task 35.31), not part of the E2E_Auth_Suite (criterion 15 forbids data changes). Round 2 within V12 (owner's answer): no data-writing Playwright project is added now; "automated invite-flow end-to-end test" is an explicitly deferred item (Requirement 15 criteria 38 and 39).
+
+### Manual verification checklist (V12 invite flow)
+Round 2 within V12 (owner's answer to the question on a data-writing invite test): the invite and join-request flow is verified by hand, on a local or scratch database after `flask seed-data`, with two browser profiles (one signed in as `member2`, one as the seeded Manager). It writes data and is therefore not part of the E2E_Auth_Suite. Task 35.31 runs it.
+1. As the Manager, open the Board without `member2`, press Invite, press Generate, and copy the link. Check that the old state "off" became "on" and that the Activity feed has one `board.invite_enabled` row.
+2. As `member2`, open the link. Check that the Board name and "Request to join" are shown, press it, and check the message "Request sent. You will get a notification when a manager or an admin decides."
+3. As the Manager, open the Invite modal. Check that the row shows the requester's avatar or initials, full name, Username, and Email (INV-19), and that Approve and Reject are present. As the Board_Owner (a Supervisor who is not a Manager), check the same row with the Email and the note "A manager or an admin decides on requests." and no buttons. As a Member of the Board, check that there is no Invite button.
+4. Press Reject as the Manager. As `member2`, check the Inbox row opens `/boards`, and that the link can be used to request again (no cooldown).
+5. Request again, then press Approve as the Manager. Check that `member2` gets a `board_added` Inbox row that opens the Board, that the Board is on Home, and that the Sidebar Team members list now shows the owner first with the "Owner" tag and no remove button, then `member2` with a remove button for the owner, Manager, and Admin.
+6. Open the member search as the Manager and check that the owner and `member2` are not offered. Open the assignee popover on a Card and check that the owner is listed first and can be chosen.
+7. Regenerate the link and check that the old link shows the "link is not valid" page; Disable it and check the same for the new link; check that a pending request made earlier stays pending (INV-17).
+8. Open the Inbox and the Activity feed as the Manager and check that no row shows an Email.
+Deferred item (explicit): automated invite-flow end-to-end test (data-writing Playwright project with two accounts). It is not scheduled in V12.
+### V12 consistency check: contradictions found and how they are reported
+
+The findings below were not resolved silently. Each states what was kept in V12 and what the owner can reverse.
+
+1. **Brief versus Requirement 4, criteria 12 to 14 (Decision 2).** The brief says Decision 2 is reversed so that a Member can toggle Subtasks on assigned Cards. The spec already allowed the Assigned_Member to add, toggle, reorder, and delete Subtasks. Kept: the existing rules, stated as a matrix and tested (Decision AD). If the implementation does not allow it today, task 35.15 fixes the code; no spec rule changes.
+2. **"Board notifications open `/boards/{id}`" versus a rejected requester.** The requester has no access to the Board, so the link would show an error. Kept: `/boards` for `board_join_rejected` (Open Question 27).
+3. **"Owner adds people only through requests" versus owner removal.** The brief is silent on removal. Kept: the owner may still remove (Open Question 22, resolved by the owner in round 2 within V12).
+4. **Assignee must be owner or Board_Member versus owner not being a Board_Member.** The owner can be assigned but is not in the members list today. Kept: the members endpoint returns the owner first (Open Question 23, resolved by the owner in round 2 within V12: the Sidebar shows the owner tagged "Owner" with no remove action).
+5. **One Activity_Log row per save versus the Dates chip.** Two columns change in one PATCH. Kept: the two dates are one save and one row whose `changes` names both.
+6. **Decision J's "wait for Save changes".** Decision J as written in the table only covers paging; the "attachment changes wait for Save changes" sentence is in the frontend steering and Requirement 4 criterion 43. Both are superseded and labelled; Decision J's own text is only annotated.
+7. **Notification uniqueness with null `card_id`** (see above): the old constraint would have stopped working; replaced by three partial indexes.
+8. **Safe_Return_Path and Protected_Route** list `/boards`, `/profile`, `/admin` only; `/invite/` is added (Decision T amended). A visitor on `/invite/{token}` is therefore redirected, which differs from `/shared/{token}`, which stays public.
+9. **V9 and V10 e2e criteria:** TOK-04 lists public pages (`/login`, `/register`, `/shared/{token}`) that ignore a stale cookie; `/invite/{token}` is not public, so it follows the guard. The e2e assumption "the Test_Account is a Member" now also needs the seeded Board membership; criteria 69 and 70 skip with a named reason when Home lists no Board.
+10. **Requirement 16 criterion 1 versus Decision AD:** the stored `progress` column is removed from the stretch list. No code exists, so nothing to migrate.
+11. **Requirement 11 title and user story** still say "Board Visibility"; the criteria that matter are superseded and the story carries a V12 note. The title is kept so earlier references stay valid.
+12. **`BaseConfirm` as a popover** is stated in the steering and in Requirement 4 criterion 44 for every destructive action; V12 makes two forms. Kept: popover by default, modal for Attachment removal and Comment deletion.
+13. **Req 18 criteria 9 and 15 say "whether the Board is public or private".** Harmless wording after V12; annotated, not rewritten.
+14. **Stale spec statement:** the design's earlier "Role policy matrix" and `can_access` code still show `visibility`; both headings are labelled superseded below.
+
+15. **"No Email in the pending list" (Decision S and Open Question 24) versus the owner's round 2 answer.** The first V12 text kept the Email out of the pending join-request list. The owner reversed that. Reported, not hidden: Decisions M and S, INV-13, INV-19, EML-02, Property 49, and the steering text were amended; the Email now has three staff-only places. Requirement 24's user story and Requirement 22 criterion 8 (the owner cannot call candidates) are unchanged, so the owner reads another user's Email in the pending list and the assignee popover but cannot search by Email.
+16. **Owner row versus "owner is not a Board_Member".** The owner row in Team members has no remove action, and `DELETE /boards/{id}/members/{owner_id}` returns 404 when the owner is not a BoardMember (ACC-20). When the owner is also a BoardMember (an existing member made owner by a Manager), the same user has a BoardMember row that the UI cannot remove from the Sidebar. Kept: removal of that row stays possible only through the API by a Manager or an Admin; the owner may be reassigned first. Reported for the owner to decide.
+17. **Decision A text in Requirement 3 criterion 24** still says each member carries a remove button; amended by criteria ACC-19 and ACC-20 in a label, not rewritten.
+### V12 risks
+
+- Removing `visibility` and resetting the database loses all local data; acceptable by the owner's earlier decision (V) and stated here.
+- The Member-visible Board list shrinks to member Boards; a Member with none sees an empty Home until an invite is approved (ACC-15 covers the message).
+- Join request notifications fan out to every Manager and Admin; with many staff accounts one request writes many rows. Acceptable at this scale; a cap is not added.
+- Comment hard delete removes content that Activity_Log rows referred to by id; the rows carry no text, so nothing dangles visibly.
+- Auto-save raises the request count; a user typing into a long description sends one request per blur, not per keystroke.
+- Last write wins can overwrite a teammate's edit silently. Accepted by the owner; the per-field Activity_Log row is the audit trail.
+- `invite_token` and `share_token` are bearer credentials in a URL; both routes send `no-store`, `no-referrer`, and `noindex`, and neither is logged or stored in activity metadata.
+- No rate limit and no cooldown on Join_Request creation (Open Question 24, accepted by the owner in round 2 within V12).
+- The requester's Email is shown to the owner, every Manager, and every Admin in the pending list (round 2 within V12); the list is `Cache-Control: private, no-store` like the other join-request routes, and the Email is never copied into another table or log.
+
+### V12 Revision Notes
+
+- Requirements: Decisions Y to AF; Requirements 22 to 29; Glossary (Guest, Board, Share_Token, Public_Link, Shared_View, Board_Owner, Board_Member, Board_Access, Board_Staff_Access, Invite_Link, Join_Request, Auto_Save, Derived_Progress, Notification, Inbox, App_Header, Protected_Route, Safe_Return_Path, Test_Account); Open Questions 3 (obsolete), 22 to 28; annotations on Requirements 1, 2, 3, 4, 7, 8, 9, 11, 12, 15, 16, 18, and 19; Requirement 1 criteria 65 to 72; Requirement 15 criteria 29 to 35.
+- Design: this section; superseded labels on "Board access", "Role policy matrix", the Data Models rows for Board and Notification, "Share links (Decision K)", and the Auth End-to-End Tests section.
+- Tasks: group 35 (35.1 to 35.30) with rework tasks for ticked work; wave ids 95 to 104.
+- Code: nothing implemented.
+### Round 2 within V12 Revision Notes
+- Same version (V12 is not implemented, so there is no V13). Documentation only; `frontend/` and `backend/` untouched.
+- Requirements: Open Questions 22 to 24 resolved by the owner, 25 to 27 resolved by default, 28 unchanged; Decisions M, S, Y, and AA amended; ACC-13 reworded, ACC-19 and ACC-20 added; INV-13 and INV-19 reworded (Email), INV-27 and INV-28 added; EML-02, Requirement 3 criterion 24, Requirement 4 criterion 33, and V12-T2 reworded; Requirement 15 criteria 36 to 39 added.
+- Design: Property 49 extended; members endpoint, join-requests endpoint, Invite modal, Sidebar row, access matrix row, testing strategy, consistency items 15 to 17, risks; the "Manual verification checklist (V12 invite flow)" section.
+- Tasks: 35.3, 35.9, 35.10, 35.19, 35.21, 35.28, and 35.30 reworded; 35.31 to 35.33 added.

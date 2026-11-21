@@ -26,7 +26,7 @@ const members: Member[] = [{ id: "u1", full_name: "Member One", username: "membe
 
 vi.mock("@/lib/api", () => ({
   api: {
-    cards: { get: vi.fn(async () => card) },
+    cards: { get: vi.fn(async () => card), update: vi.fn(async () => card) },
     boards: { members: vi.fn(async () => members) },
     comments: { list: vi.fn(async () => card.comments) },
     attachments: { addLink: vi.fn(), upload: vi.fn(), remove: vi.fn(), freshUrl: vi.fn() },
@@ -34,7 +34,7 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
-const board = { id: "b1", name: "Board", visibility: "private", owner_id: null, archived_at: null, columns: [{ id: "col1", name: "Todo", order: 0 }] } as unknown as Board;
+const board = { id: "b1", name: "Board", owner_id: null, archived_at: null, columns: [{ id: "col1", name: "Todo", order: 0 }] } as unknown as Board;
 const shell = {
   session: { token: "t", userId: "u9", role: "manager" as const, exp: 0 },
   user: null,
@@ -42,6 +42,8 @@ const shell = {
   inbox: null,
   refreshInbox: async () => undefined,
   toggleSidePanel: () => undefined,
+  closeSidePanel: () => undefined,
+  adjustUnread: () => undefined,
 };
 
 describe("CardModal", () => {
@@ -51,8 +53,7 @@ describe("CardModal", () => {
         <CardModal cardId="c1" board={board} columns={board.columns ?? []} categories={[]} onClose={() => undefined} onChanged={() => undefined} onDeleted={() => undefined} />
       </ShellContext.Provider>,
     );
-    await userEvent.click(await screen.findByRole("button", { name: "Edit title" }));
-    const title = screen.getByLabelText("Title");
+    const title = await screen.findByLabelText("Title");
     await userEvent.clear(title);
     expect(screen.getByRole("dialog", { name: /Untitled card \| Board/ })).toBeInTheDocument();
     await userEvent.type(title, "New name");
@@ -75,7 +76,9 @@ describe("CardModal", () => {
     expect(screen.getAllByText(/Manager Name/).length).toBeGreaterThan(1);
     expect(screen.queryByText(/Someone/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Move to column")).not.toBeInTheDocument();
-    for (const name of ["Delete", "Archive", "Save changes"]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    for (const name of ["Archive"]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(2); // the card, and the viewer's own comment
+    expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Close" })).toHaveLength(1);
     expect(screen.getByRole("dialog", { name: /Write the spec \| Board/ })).toBeInTheDocument();
   });

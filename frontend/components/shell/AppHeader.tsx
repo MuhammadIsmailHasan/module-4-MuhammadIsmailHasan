@@ -2,9 +2,9 @@
 
 import { Bell, Menu } from "lucide-react";
 import Link from "next/link";
-import { ShareButton } from "@/components/board/ShareButton";
+import { InviteButton } from "@/components/board/InviteButton";
+import { PublicLinkButton } from "@/components/board/PublicLinkButton";
 import { BaseButton } from "@/components/shared/BaseButton";
-import { BaseVisibility } from "@/components/shared/BaseVisibility";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import type { Board } from "@/lib/types";
 import { useShell } from "./ShellContext";
@@ -17,10 +17,12 @@ interface AppHeaderProps {
   onToggleDrawer: () => void;
 }
 
-/** The one header on every protected page: menu (below 960px), brand or Board name, Share, Inbox bell, and the User_Menu. */
+/** The one header on every protected page: menu (below 960px), brand or Board name, Invite, Public link, Inbox bell, and the User_Menu. */
 export function AppHeader({ board, drawerOpen, onToggleDrawer }: AppHeaderProps) {
   const { session, user, inbox, toggleSidePanel } = useShell();
-  const canShare = !!board && !!session && (session.role === "manager" || session.role === "admin" || board.owner_id === session.userId);
+  const isStaff = !!session && (session.role === "manager" || session.role === "admin");
+  const canPublicLink = !!board && isStaff;
+  const canInvite = !!board && !!session && (isStaff || board.owner_id === session.userId);
 
   return (
     <header className="z-header flex min-h-touch shrink-0 items-center gap-3 border-b border-line bg-surface-raised px-2 py-1 lg:px-8">
@@ -29,9 +31,9 @@ export function AppHeader({ board, drawerOpen, onToggleDrawer }: AppHeaderProps)
       </BaseButton>
       {board ? (
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <BaseVisibility visibility={board.visibility} className="size-icon shrink-0 text-ink-muted" />
           <h1 className="min-w-0 text-page-title font-semibold break-words">{board.name}</h1>
-          {canShare && <ShareButton boardId={board.id} />}
+          {canInvite && <InviteButton boardId={board.id} canDecide={isStaff} />}
+          {canPublicLink && <PublicLinkButton boardId={board.id} />}
         </div>
       ) : (
         <div className="min-w-0 flex-1">

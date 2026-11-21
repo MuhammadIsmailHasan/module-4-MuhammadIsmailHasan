@@ -1,4 +1,5 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
+import { BoardUnavailable } from "@/components/board/BoardUnavailable";
 import { BoardView } from "@/components/board/BoardView";
 import { ApiError } from "@/lib/http";
 import { serverGet } from "@/lib/server";
@@ -14,18 +15,8 @@ export default async function BoardPage({ params }: { params: Promise<{ id: stri
     ]);
     return <BoardView key={board.id} board={board} initialCards={cards} initialCategories={categories} />;
   } catch (err) {
-    if (err instanceof ApiError) {
-      if (err.httpStatus === 404) notFound();
-      if (err.httpStatus === 401) redirect("/login");
-      if (err.httpStatus === 403) {
-        return (
-          <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
-            <h2 className="text-xl font-bold">No access</h2>
-            <p className="text-ink-muted">You are not a member of this board.</p>
-          </div>
-        );
-      }
-    }
+    if (err instanceof ApiError && (err.httpStatus === 404 || err.httpStatus === 403)) return <BoardUnavailable />;
+    if (err instanceof ApiError && err.httpStatus === 401) redirect("/login");
     throw err;
   }
 }

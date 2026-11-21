@@ -23,6 +23,8 @@ async function analyticsFor(boards: Board[]): Promise<Analytics[] | null> {
 /** Home: every board the viewer may see as a tile, and an analytics strip for Supervisors and Managers. */
 export default async function BoardsHome() {
   const boards = await serverGet<Board[]>("/boards");
+  const claims = decodeToken((await serverToken()) ?? "");
+  const staff = claims?.role === "manager" || claims?.role === "admin";
   const [members, analytics] = await Promise.all([
     Promise.all(boards.map((b) => serverGet<Member[]>(`/boards/${b.id}/members`).catch(() => [] as Member[]))),
     analyticsFor(boards),
@@ -34,7 +36,9 @@ export default async function BoardsHome() {
       {boards.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-12 text-center">
           <h2 className="text-xl font-bold">No boards yet</h2>
-          <p className="text-ink-muted">Ask a Manager to create a board, or log in to see boards you belong to.</p>
+          <p className="text-ink-muted">
+            {staff ? "Create a board from the sidebar." : "You are not on any board yet. Ask a manager or a board owner for an invite link."}
+          </p>
         </div>
       ) : (
         <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 lg:grid-cols-2 xl:grid-cols-3">

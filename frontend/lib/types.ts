@@ -18,6 +18,8 @@ export interface Member {
   username: string;
   avatar_url: string | null;
   email?: string;
+  /** The Board_Owner row of GET /boards/{id}/members (V12). */
+  is_owner?: boolean;
 }
 
 export interface AuthResult {
@@ -41,7 +43,6 @@ export interface Board {
   done_count?: number;
   overdue_count?: number;
   member_count?: number;
-  visibility: "public" | "private";
   owner_id: string | null;
   archived_at: string | null;
   columns?: Column[];
@@ -106,6 +107,10 @@ export interface Card {
   order: number;
   archived_at: string | null;
   subtasks: Subtask[];
+  /** Derived from the Subtasks (0 to 10), null without Subtasks (V12). */
+  progress?: number | null;
+  subtask_done_count?: number;
+  subtask_total_count?: number;
   attachments: Attachment[];
   /** Absent for Guests: absence of the field is the access control. */
   comments?: Comment[];
@@ -119,10 +124,16 @@ export interface Category {
   color: string | null;
 }
 
+export type NotificationType = "assigned" | "deadline" | "board_join_requested" | "board_added" | "board_join_rejected";
+
 export interface Notification {
   id: string;
-  type: "assigned" | "deadline";
-  card_id: string;
+  type: NotificationType;
+  board_id: string | null;
+  board_name: string | null;
+  card_id: string | null;
+  card_title: string | null;
+  actor_name: string | null;
   is_read: boolean;
   notify_date: string;
   created_at: string | null;
@@ -154,4 +165,24 @@ export interface SharedBoard {
 /** A card as the Shared_View gets it: no comments or activity, assignee by name only. */
 export interface SharedCard extends Omit<Card, "comments" | "activity" | "assignee_avatar_url"> {
   assignee_name: string | null;
+}
+
+export interface InviteState {
+  enabled: boolean;
+  token: string | null;
+  path: string | null;
+}
+
+export interface InviteLookup {
+  board: { id: string; name: string; description: string | null };
+  state: "staff" | "member" | "pending" | "can_request";
+  request: { id: string; status: string } | null;
+}
+
+export interface JoinRequest {
+  id: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  /** The Email appears here and nowhere else (Decision S, V12 round 2). */
+  user: { id: string; full_name: string; username: string; email: string; avatar_url: string | null };
 }

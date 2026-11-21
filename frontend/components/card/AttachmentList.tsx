@@ -2,29 +2,23 @@
 
 import { useState } from "react";
 import { FileArchive, FileText, Link as LinkIcon, Plus, X } from "lucide-react";
-import { BaseBadge } from "@/components/shared/BaseBadge";
 import { BaseButton } from "@/components/shared/BaseButton";
 import { BaseCombobox } from "@/components/shared/BaseCombobox";
 import { BaseAlert, BaseInput } from "@/components/shared/BaseField";
 import { BaseConfirm } from "@/components/shared/BaseConfirm";
 import { BasePopover } from "@/components/shared/BasePopover";
 import { api } from "@/lib/api";
+import { ApiError } from "@/lib/http";
 import { FileDropZone } from "./FileDropZone";
 import { absoluteFileUrl, hrefFor, iconFor, isExpired } from "@/lib/attachments";
 import type { Attachment } from "@/lib/types";
 
-/** An attachment added in the open modal; it is sent when the user saves. */
-export type StagedAttachment = { key: string; kind: "link"; url: string } | { key: string; kind: "file"; file: File };
-
 interface AttachmentListProps {
+  cardId: string;
   attachments: Attachment[];
-  /** Ids the user removed in the open modal; hidden here, deleted on save. */
-  removedIds: string[];
-  staged: StagedAttachment[];
   canEdit: boolean;
-  onStage: (item: StagedAttachment) => void;
-  onUnstage: (key: string) => void;
-  onRemove: (id: string) => void;
+  /** The list after an add or a remove; each change is sent at once (Auto_Save, Requirement 25 criterion 6). */
+  onChange: (attachments: Attachment[]) => void;
 }
 
 const KINDS = [
@@ -39,13 +33,27 @@ function TypeIcon({ kind }: { kind: "document" | "archive" | "link" }) {
   return <Icon className="size-icon shrink-0 text-ink-muted" aria-hidden="true" />;
 }
 
-/** Links open in a new tab; an expired signed file URL is re-issued first. Changes wait in the draft until Save. */
-export function AttachmentList({ attachments, removedIds, staged, canEdit, onStage, onUnstage, onRemove }: AttachmentListProps) {
+/** Links open in a new tab; an expired signed file URL is re-issued first. Adding saves at once; removing asks in a modal first. */
+export function AttachmentList({ cardId, attachments, canEdit, onChange }: AttachmentListProps) {
   const [url, setUrl] = useState("");
   const [kind, setKind] = useState("link");
   const [adding, setAdding] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const shown = attachments.filter((a) => !removedIds.includes(a.id));
+  const [error, setError] = useState<{ message: string; retry?: () => void } | null>(null);
+  const shown = attachments;
+
+  /** Run one call; a failure keeps the list and shows the message with a Retry beside the card. */
+  async function attempt(action: () => Promise<void>, message: string) {
+    setError(null);
+    try {
+      await action();
+    } catch (err) {
+      setError({ message: err instanceof ApiError ? err.message : message, retry: () => void attempt(action, message) });
+    }
+  }
+
+  const addLink = (link: string) => attempt(async () => onChange([...attachments, await api.attachments.addLink(cardId, { url: link })]), "Could not add the link.");
+  const addFile = (file: File) => attempt(async () => onChange([...attachments, await api.attachments.upload(cardId, file)]), "Could not upload the file.");
+  const remove = (id: string) => attempt(async () => { await api.attachments.remove(id); onChange(attachments.filter((x) => x.id !== id)); }, "Could not remove the attachment.");
 
   async function open(e: React.MouseEvent, a: Attachment) {
     if (a.url || !a.file_url) return; // plain link: let the anchor do its job
@@ -58,11 +66,11 @@ export function AttachmentList({ attachments, removedIds, staged, canEdit, onSta
       }
       window.open(href, "_blank", "noopener,noreferrer");
     } catch {
-      setError("Could not open the file.");
+      setError({ message: "Could not open the file." });
     }
   }
 
-  const nothing = shown.length === 0 && staged.length === 0;
+  const nothing = shown.length === 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -78,9 +86,11 @@ export function AttachmentList({ attachments, removedIds, staged, canEdit, onSta
                 </a>
                 {canEdit && (
                   <BaseConfirm
-                    message={`Remove ${a.name}? It is removed when you save.`}
+                    variant="modal"
+                    title="Remove attachment?"
+                    message={a.name}
                     confirmLabel="Remove"
-                    onConfirm={() => onRemove(a.id)}
+                    onConfirm={() => remove(a.id)}
                     trigger={
                       <BaseButton variant="ghost" size="sm" className="size-control-sm shrink-0 px-0" aria-label={`Remove ${a.name}`}>
                         <X aria-hidden="true" />
@@ -88,20 +98,6 @@ export function AttachmentList({ attachments, removedIds, staged, canEdit, onSta
                     }
                   />
                 )}
-              </li>
-            ))}
-            {staged.map((s) => (
-              <li key={s.key} className={tile}>
-                <span className="flex min-w-0 items-center gap-2 font-medium">
-                  <TypeIcon kind={s.kind === "link" ? "link" : "document"} />
-                  <span className="truncate">{s.kind === "link" ? s.url : s.file.name}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <BaseBadge>Pending</BaseBadge>
-                  <BaseButton variant="ghost" size="sm" className="size-control-sm px-0" aria-label={`Discard ${s.kind === "link" ? s.url : s.file.name}`} onClick={() => onUnstage(s.key)}>
-                    <X aria-hidden="true" />
-                  </BaseButton>
-                </span>
               </li>
             ))}
           </ul>
@@ -130,7 +126,7 @@ export function AttachmentList({ attachments, removedIds, staged, canEdit, onSta
                   <BaseButton
                     disabled={!url.trim()}
                     onClick={() => {
-                      onStage({ key: `link-${Date.now()}`, kind: "link", url: url.trim() });
+                      void addLink(url.trim());
                       setUrl("");
                       setAdding(false);
                     }}
@@ -141,7 +137,7 @@ export function AttachmentList({ attachments, removedIds, staged, canEdit, onSta
               ) : (
                 <FileDropZone
                   onFile={(file) => {
-                    onStage({ key: `file-${Date.now()}`, kind: "file", file });
+                    void addFile(file);
                     setAdding(false);
                   }}
                 />
@@ -150,7 +146,16 @@ export function AttachmentList({ attachments, removedIds, staged, canEdit, onSta
           </BasePopover>
         )}
       </div>
-      {error && <BaseAlert>{error}</BaseAlert>}
+      {error && (
+        <div className="flex flex-wrap items-center gap-2">
+          <BaseAlert>{error.message}</BaseAlert>
+          {error.retry && (
+            <BaseButton variant="secondary" size="sm" onClick={error.retry}>
+              Retry
+            </BaseButton>
+          )}
+        </div>
+      )}
     </div>
   );
 }

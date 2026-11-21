@@ -21,4 +21,4 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ["/boards/:path*", "/profile/:path*", "/admin/:path*"] };
+export const config = { matcher: ["/boards/:path*", "/profile/:path*", "/admin/:path*", "/invite/:path*"] };

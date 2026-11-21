@@ -57,9 +57,14 @@ export function AppShell({ boards, children }: { boards: Board[]; children: Reac
   }, [session]);
 
   const toggleSidePanel = useCallback((view: PanelView) => setPanel((cur) => (cur === view ? null : view)), []);
+  const closeSidePanel = useCallback(() => setPanel(null), []);
+  const adjustUnread = useCallback(
+    (delta: number) => setInbox((cur) => (cur ? { ...cur, unread_count: Math.max(0, cur.unread_count + delta) } : cur)),
+    [],
+  );
   const state = useMemo(
-    () => ({ session, user, boardId, inbox, refreshInbox, toggleSidePanel }),
-    [session, user, boardId, inbox, refreshInbox, toggleSidePanel],
+    () => ({ session, user, boardId, inbox, refreshInbox, toggleSidePanel, closeSidePanel, adjustUnread }),
+    [session, user, boardId, inbox, refreshInbox, toggleSidePanel, closeSidePanel, adjustUnread],
   );
   const current = boards.find((b) => b.id === boardId);
 

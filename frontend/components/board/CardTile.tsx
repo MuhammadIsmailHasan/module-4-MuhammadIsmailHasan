@@ -1,5 +1,6 @@
-import { Calendar, Flag, ListChecks, Paperclip } from "lucide-react";
+import { Calendar, Flag, Paperclip } from "lucide-react";
 import { BaseAvatar } from "@/components/shared/BaseAvatar";
+import { ProgressMeter } from "@/components/shared/ProgressMeter";
 import { BaseBadge, type BadgeTone } from "@/components/shared/BaseBadge";
 import { shortDate } from "@/lib/format";
 import { categoryTone } from "@/lib/tones";
@@ -23,7 +24,6 @@ interface CardTileProps {
 export function CardTile({ card, category, assignee, overdue, draggable, onOpen, onDragStart, onDragEnd }: CardTileProps) {
   const total = card.subtasks.length;
   const done = card.subtasks.filter((s) => s.is_done).length;
-  const complete = total > 0 && done === total;
   return (
     <div
       data-flip-id={card.id}
@@ -55,18 +55,12 @@ export function CardTile({ card, category, assignee, overdue, draggable, onOpen,
       </div>
       <div className="text-card-title font-semibold break-words">{card.title}</div>
       {card.description && <p className="line-clamp-2 text-card-meta text-ink-muted">{card.description}</p>}
+      {total > 0 && <ProgressMeter done={done} total={total} />}
       <div className="flex flex-wrap items-center gap-3 text-card-meta text-ink-muted">
         {card.end_date && (
           <span className={cn("inline-flex items-center gap-1", overdue && "rounded-sm bg-label-red px-1 font-semibold text-label-red-fg")}>
             <Calendar className="size-icon-sm" aria-hidden="true" />
             {overdue ? `Overdue · ${shortDate(card.end_date)}` : shortDate(card.end_date)}
-          </span>
-        )}
-        {total > 0 && (
-          <span className={cn("inline-flex items-center gap-1", complete && "rounded-sm bg-label-green px-1 font-semibold text-label-green-fg")}>
-            <ListChecks className="size-icon-sm" aria-hidden="true" />
-            {done}/{total}
-            <span className="sr-only"> subtasks done</span>
           </span>
         )}
         {card.attachments.length > 0 && (

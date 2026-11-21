@@ -9,8 +9,8 @@ import { BasePopover } from "@/components/shared/BasePopover";
 import { api, type ShareState } from "@/lib/api";
 import { ApiError } from "@/lib/http";
 
-/** Share popover for the board owner, a Manager, or an Admin: enable, copy the link, regenerate, disable (Req 18.22). */
-export function ShareButton({ boardId }: { boardId: string }) {
+/** Public link popover for a Manager or an Admin: enable, copy the link, regenerate, disable (Requirement 23). */
+export function PublicLinkButton({ boardId }: { boardId: string }) {
   const [state, setState] = useState<ShareState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -22,7 +22,7 @@ export function ShareButton({ boardId }: { boardId: string }) {
     try {
       setState(await action());
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update the share link.");
+      setError(err instanceof ApiError ? err.message : "Could not update the public link.");
     }
   }
 
@@ -38,7 +38,7 @@ export function ShareButton({ boardId }: { boardId: string }) {
 
   return (
     <BasePopover
-      label="Share this board"
+      label="Public link"
       wide
       onOpenChange={(open) => {
         if (open) void run(() => api.boards.share(boardId));
@@ -46,12 +46,12 @@ export function ShareButton({ boardId }: { boardId: string }) {
       trigger={
         <BaseButton variant="secondary" size="sm">
           <Share2 aria-hidden="true" />
-          Share
+          Public link
         </BaseButton>
       }
     >
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold">Share a read-only view</h2>
+        <h2 className="text-sm font-semibold">Public link: a read-only view</h2>
         <p className="text-xs text-ink-muted">Anyone with the link sees cards, subtasks and attachments. Comments and activity stay private.</p>
         {error && <BaseAlert>{error}</BaseAlert>}
         <label className="flex min-h-control items-center gap-3 text-sm">
@@ -62,12 +62,12 @@ export function ShareButton({ boardId }: { boardId: string }) {
             disabled={!state}
             onChange={(e) => void run(() => (e.target.checked ? api.boards.enableShare(boardId) : api.boards.disableShare(boardId)))}
           />
-          Link sharing {state?.enabled ? "on" : "off"}
+          Public link {state?.enabled ? "on" : "off"}
         </label>
         {state?.enabled && (
           <>
             <div className="flex items-center gap-2">
-              <BaseInput readOnly aria-label="Share link" value={link} onFocus={(e) => e.currentTarget.select()} />
+              <BaseInput readOnly aria-label="Public link" value={link} onFocus={(e) => e.currentTarget.select()} />
               <BaseButton variant="secondary" size="sm" aria-label="Copy link" onClick={() => void copy()}>
                 {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
                 {copied ? "Copied" : "Copy"}
@@ -85,7 +85,7 @@ export function ShareButton({ boardId }: { boardId: string }) {
                 }
               />
               <BaseConfirm
-                message="Turn off sharing? The link stops working."
+                message="Turn off the public link? It stops working."
                 confirmLabel="Disable"
                 onConfirm={() => run(() => api.boards.disableShare(boardId))}
                 trigger={

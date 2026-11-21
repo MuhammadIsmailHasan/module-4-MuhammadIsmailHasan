@@ -5,6 +5,7 @@ import { Flag } from "lucide-react";
 import { BaseAvatar } from "@/components/shared/BaseAvatar";
 import { BaseButton } from "@/components/shared/BaseButton";
 import { BaseAlert } from "@/components/shared/BaseField";
+import { BaseConfirm } from "@/components/shared/BaseConfirm";
 import { formatWhen } from "@/lib/activity";
 import type { Comment } from "@/lib/types";
 import { CommentComposer } from "./CommentComposer";
@@ -21,13 +22,16 @@ interface CommentThreadProps {
   onReply: (commentId: string, content: string) => Promise<void>;
   onTogglePriority: (commentId: string) => Promise<void>;
   onCreateCard?: (comment: Comment) => Promise<void>;
+  /** The viewer's id: only their own Comments get a Delete action (Requirement 26). */
+  viewerId?: string | null;
+  onDelete?: (comment: Comment) => Promise<void>;
 }
 
 /**
  * Priority comments come first (the server orders them), then the rest under a Latest/Popular toggle.
  * Reply shows only on top-level comments; there is no like button; Create card follows `can_create_card`.
  */
-export function CommentThread({ comments, sort, names = {}, canReply, canPrioritize, onSortChange, onReply, onTogglePriority, onCreateCard }: CommentThreadProps) {
+export function CommentThread({ comments, sort, names = {}, canReply, canPrioritize, onSortChange, onReply, onTogglePriority, onCreateCard, viewerId, onDelete }: CommentThreadProps) {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -80,6 +84,21 @@ export function CommentThread({ comments, sort, names = {}, canReply, canPriorit
               <BaseButton size="sm" variant="ghost" className={actionButton} onClick={() => createCard(c)}>
                 Create card
               </BaseButton>
+            )}
+            {onDelete && viewerId && c.author_id === viewerId && (
+              <BaseConfirm
+                variant="modal"
+                title="Delete comment?"
+                message={reply ? "This reply will be deleted." : "This comment will be deleted."}
+                detail={!reply && c.reply_count > 0 ? `This also deletes its ${c.reply_count} ${c.reply_count === 1 ? "reply" : "replies"}.` : undefined}
+                confirmLabel="Delete"
+                onConfirm={() => onDelete(c)}
+                trigger={
+                  <BaseButton size="sm" variant="ghost" className={actionButton}>
+                    Delete
+                  </BaseButton>
+                }
+              />
             )}
             {!reply && replies.length > 0 && (
               <span className="px-2 text-xs text-ink-muted">

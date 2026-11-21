@@ -60,12 +60,16 @@ export function ProfileForm({ initial }: { initial: User }) {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-auth flex-col gap-8 p-4 lg:p-8">
+    <div className="flex w-full flex-col gap-6 p-4 lg:p-8">
       <h1 className="text-page-title font-semibold">Profile</h1>
 
-      <AvatarUploader user={user} onChange={update} />
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+      <div className="flex flex-col gap-6">
+      <section aria-label="Picture" className="rounded-card border border-line bg-surface-raised p-4">
+        <AvatarUploader user={user} onChange={update} />
+      </section>
 
-      <form className="flex flex-col gap-4" onSubmit={saveName} noValidate>
+      <form className="flex flex-col gap-4 rounded-card border border-line bg-surface-raised p-4" onSubmit={saveName} noValidate aria-label="Account details">
         <BaseField label="Full name" htmlFor="full_name" errors={nameErrors}>
           <BaseInput id="full_name" value={fullName} onChange={(e) => setFullName(e.target.value)} aria-invalid={nameErrors ? true : undefined} />
         </BaseField>
@@ -84,8 +88,9 @@ export function ProfileForm({ initial }: { initial: User }) {
           <BaseButton type="submit">Save</BaseButton>
         </div>
       </form>
+      </div>
 
-      <form className="flex flex-col gap-4" onSubmit={changePassword} noValidate aria-label="Change password">
+      <form className="flex flex-col gap-4 rounded-card border border-line bg-surface-raised p-4" onSubmit={changePassword} noValidate aria-label="Change password">
         <h2 className="text-heading font-semibold">Change password</h2>
         {pwError && <BaseAlert>{pwError}</BaseAlert>}
         {left > 0 && <BaseAlert>Too many attempts. Try again in {formatCountdown(left)}.</BaseAlert>}
@@ -102,6 +107,7 @@ export function ProfileForm({ initial }: { initial: User }) {
           </BaseButton>
         </div>
       </form>
+      </div>
     </div>
   );
 }

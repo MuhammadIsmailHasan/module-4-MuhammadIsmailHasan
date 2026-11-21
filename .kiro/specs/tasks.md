@@ -2,8 +2,9 @@
 
 ## Overview
 
-Version V11. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+Version V12. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
 
+V12 adds group 35 (Decisions Y to AF): private-only Boards and the access model, the Public_Link, the Invite_Link and Join_Requests, Card modal Auto_Save, comment deletion, Subtask toggles and derived progress, clickable Inbox rows, and the Profile layout. Ticked tasks stay ticked even where V12 supersedes what they built; each affected one has an explicit rework task in group 35. Group 34 (V11 branding) is untouched.
 V11 adds group 34 (Decision X): the RevoTask logo and favicon. It moves the three files from `frontend/images/` to `frontend/app/favicon.ico` and `frontend/public/brand/`, adds the shared `BrandLogo`, and uses it in the Sidebar, the sign-in pages, and the App_Header. It changes no Backend code.
 V10 round 3 (Decisions U to W, an amendment, no new version) changes the avatar routes to `/api/users/me/avatar`, adds avatars to Comment, member, candidate, and assignee payloads, replaces the legacy backfill with a local-development reset, adds the change-password limiter and the 2-character candidate search minimum. It edits 33.1 to 33.3, 33.7, 33.18, 33.28 to 33.30, 33.27, and adds 33.41 to 33.48 (waves 84 to 89); IDs of existing tasks do not change.
 V10 adds group 33 (Decisions K to P): the V10 migration (username, email, share token, rate-limit table), identity changes, the Rate_Limiter, share links and the shared routes, the Guest change (no public browsing), the profile endpoints, the App_Header with the User_Menu, the Profile_Page (the Email_Prompt was withdrawn in round 3), the route guard `proxy.ts`, the Share button and Shared_View, and the update of the V9 Playwright suite. No existing task is renumbered, and no ticked box changes: ticked tasks describe what was built under V9 (for example `login_identifier`, Guest access to public Boards, the Sidebar Log out item) and group 33 changes that behaviour.
@@ -392,7 +393,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
 
 - [ ] 22. Stretch features (build only after tasks 1 to 21 work end-to-end)
   - [ ] 22.1 Add progress and views_count to the backend
-    - Add a later migration with nullable 0 to 10 integer `Card.progress` and integer `Card.views_count` default 0; expose them in card serialization and edit validation; increment `views_count` on card open.
+    - V12 (Decision AD): `progress` is no longer stored; it is derived from Subtasks in task 35.15. Add only `Card.views_count` (integer, default 0) in a later migration; expose it in card serialization; increment `views_count` on card open.
     - _Requirements: 16.1, 16.3_
   - [ ] 22.2 Add the progress meter, views counter, and decorative tabs
     - Render the per-card progress meter, views counter, and Overview, Notes, Questions tabs in `CardModal` as in the prototype, behind a feature flag, using only token variables.
@@ -808,7 +809,121 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [ ] 34.7 Checkpoint - Run the V11 checks
     - Ensure `tsc --noEmit`, `vitest run`, and `next build` pass; start the app and check `/favicon.ico`, `/brand/logo-revo.svg`, `/brand/logo-text-revo.svg`, `/login` at 360 and 1280 pixels, and the Sidebar in both states; confirm `ls frontend/images` fails. Ask the owner for true vector SVGs and other icon sizes (Open Questions 19 and 20).
     - _Requirements: 21.17_
+- [ ] 35. Private Boards, Public_Link, invites, auto-save, deletes, derived progress, Inbox links, Profile layout (Decisions Y to AF, V12)
+  - [x] 35.1 Write the V12 migration and update the models
+    - Rework of ticked 2.1 to 2.3 (models), 4.x (Board and BoardMember) and 33.1 (V10 migration): the ticked work stays ticked; this task changes what it built.
+    - One new Alembic revision after `b7d2e4f6a801`: local-development reset (aborts unless `APP_ENV` is `development` or `testing`), drop `boards.visibility` and its enum, add `boards.invite_token` with the unique index, create `board_join_requests` (enum, partial unique `uq_join_requests_pending`, lookup index), alter `notifications` (nullable `card_id`, `board_id`, `actor_id`, `join_request_id`, type enum extended, old unique constraint dropped, three partial unique indexes, CHECK `notifications_scope`), print the reset line, working `downgrade`.
+    - Models: remove `Board.visibility`; add `Board.invite_token`, `BoardJoinRequest`, and the `Notification` columns; no relationship other than the five of Decision F, `lazy="raise"`, no `to_dict`.
+    - _Requirements: 22.1, 22.17, 24.1, 24.26, 28.1, 28.2_
+  - [ ]* 35.2 Write the migration and constraint tests
+    - Assert the abort for any other `APP_ENV`, the empty tables and new schema after `upgrade`, a working `downgrade`, the partial unique index on pending requests, the three notification indexes, and the CHECK.
+    - _Requirements: 22.17, 24.11, 28.1, 28.2, 15.29_
+  - [x] 35.3 Implement the private-only access model in the Backend
+    - Rework of ticked 4.1 to 4.13 and 33.9: `can_access` without a public branch, `require_access`, `board_repository.list_for_user` (owner or member, all for Manager and Admin, constant query count), remove `visibility` from schemas, `PATCH /boards`, the create-board body, serializers, and the activity code; a posted `visibility` is 400.
+    - `GET /boards/{id}/members` returns the owner first, once, with `is_owner` (also when the owner is a BoardMember); `DELETE /boards/{id}/members/{owner_id}` returns 404 when the owner is not a BoardMember (round 2 within V12, Open Question 23).
+    - _Requirements: 22.1, 22.2, 22.3, 22.4, 22.13, 22.20, 3.26_
+  - [x]* 35.4 Write the access property test
+    - **Property 51: Board access and the missing visibility**
+    - Generated Boards, users, and relationships; assert `can_access`, the Board list, 401 and 403, and that no payload has `visibility`.
+    - **Validates: Requirements 22.1, 22.2, 22.3, 22.4**
+  - [x] 35.5 Restrict member add, candidates, and assignment
+    - Rework of ticked 4.x (members), 5.x (assign), 13.x (users), 33.35: `POST /boards/{id}/members` and `GET /boards/{id}/candidates` for Manager and Admin only, Member and Supervisor accounts only (400 `details.user_id` otherwise); assignee must be owner or Board_Member (400 `details.assignee_id`); `remove_member` and owner reassignment clear assignments with one `card.unassigned` row each and no Notification; `user_service.change_role` removes memberships and pending requests for a new Manager or Admin; owner reassignment sends `board_added`.
+    - _Requirements: 22.5, 22.6, 22.7, 22.8, 22.9, 22.10, 22.11, 22.12_
+  - [x]* 35.6 Write the membership property test
+    - **Property 52: Manager and Admin are never Board_Members**
+    - Random sequences of adds, approvals, role changes, and owner reassignments; assert the invariant and the assignee rule.
+    - **Validates: Requirements 22.5, 22.6, 22.10, 22.11, 22.12**
+  - [x] 35.7 Move the Public_Link to Manager and Admin
+    - Rework of ticked 33.10 and 33.11: re-guard `get_share`, `enable_share`, `regenerate_share`, `disable_share` with `@require_role("manager", "admin")`; the Board_Owner gets 403; shared routes stay `GET` only with 405 for every other method; `has_board_access` uses the new `can_access`.
+    - _Requirements: 23.1, 23.2, 23.3, 23.5, 23.6, 23.12_
+  - [x]* 35.8 Write the Public_Link tests
+    - **Property 54: A Public_Link grants no write**
+    - One test per write endpoint (comment, edit field, attachment, Subtask, archive, delete) as a Guest (401) and as a signed-in user without access (403); the 405 route listing; the roles of the link endpoints.
+    - **Validates: Requirements 23.5, 23.6, 23.10, 23.11, 23.12**
+  - [x] 35.9 Build the `invites` blueprint (Invite_Link and Join_Requests)
+    - New folder `app/blueprints/invites/` with `routes.py`, `service.py`, `repository.py`, `schema.py`, registered on the `Api`: the invite management endpoints, `GET /invite/{token}`, `POST /invite/{token}/requests`, `GET /boards/{id}/join-requests` (each `user` carries `email`, read through one join and never copied into the table, round 2 within V12), `PATCH /join-requests/{id}`; `SELECT ... FOR UPDATE` in `decide`; the partial-index `IntegrityError` mapped to 409; Activity_Log rows and Notifications as Requirement 24 states; `Cache-Control: private, no-store`; token never logged or stored in metadata.
+    - _Requirements: 24.1, 24.2, 24.3, 24.4, 24.5, 24.6, 24.7, 24.8, 24.9, 24.10, 24.11, 24.12, 24.13, 24.14, 24.15, 24.16, 24.17, 24.18, 24.28_
+  - [x]* 35.10 Write the invite and join-request tests
+    - **Property 55: Join request lifecycle**
+    - Include the simultaneous-request case with two threads, reject then request again, approval by Manager and Admin, 403 for the owner, the Manager and Admin 400, and the absence of Email and tokens in the create and decision responses and in Notification bodies; the pending list is the one response that carries an Email (round 2 within V12, Property 49).
+    - **Validates: Requirements 24.8, 24.10, 24.11, 24.12, 24.14, 24.15, 24.16, 24.28**
+  - [x] 35.11 Rework Notifications: types, deduplication, payload
+    - Rework of ticked 10.1 and 10.2 (the deadline job and inbox): `notification_repository.add_board` and the card insert use `ON CONFLICT DO NOTHING` against the partial indexes; the deadline job keeps its V2 behaviour; `GET /notifications` returns the V12 fields with batched name lookups (constant query count) and no Email.
+    - _Requirements: 28.1, 28.2, 28.3, 28.4, 9.1, 9.2, 9.3_
+  - [x]* 35.12 Write the notification tests
+    - **Property 56: Notification deduplication with a null card**
+    - Include the constant query count at 5 and 50 rows and the CHECK constraint.
+    - **Validates: Requirements 28.1, 28.2, 28.3**
+  - [x] 35.13 Implement comment deletion
+    - Rework of ticked 8.x: `DELETE /comments/{id}` (author only, 404, 403, 401), reply decrement or reply deletion in one transaction, `comment.deleted` row with no text, `{ deleted: n }`. Decide in this task between deleting replies first and `ON DELETE CASCADE` on `parent_id`, and record it in the migration notes.
+    - _Requirements: 26.4, 26.5, 26.6, 26.7, 26.8, 26.9_
+  - [x]* 35.14 Write the comment deletion property test
+    - **Property 53: Reply count consistency under delete**
+    - Random interleavings of create and delete by authors; non-author delete for every role.
+    - **Validates: Requirements 26.4, 26.5, 26.6, 26.7, 26.8**
+  - [x] 35.15 Subtask matrix and derived progress in the Backend
+    - Rework of ticked 5.x (subtasks): confirm `can_edit_card` gives the matrix of Requirement 27 criterion 1 (fix the code if it does not); add `derive_progress`, `progress`, `subtask_done_count`, and `subtask_total_count` to `CardSchema` and `SharedCardSchema` from the loaded Subtasks (no extra query); reject a posted `progress`.
+    - _Requirements: 27.1, 27.2, 27.3, 27.4, 27.5, 27.9_
+  - [x]* 35.16 Write the Subtask and progress tests
+    - **Property 57: Derived progress**
+    - One matrix test per role and relationship; the query count of the Card list is unchanged.
+    - **Validates: Requirements 27.4, 27.5**
+  - [x] 35.17 Make `PATCH /cards` a no-op when nothing changed and log Subtask and Attachment actions
+    - Rework of ticked 5.x and 9.x: no `card.updated` row when `changes` is empty; add the five `card.subtask_*` and `card.attachment_*` actions with metadata in the same transaction; `describeActivity` sentences are in 35.22.
+    - _Requirements: 25.10, 25.11, 25.12, 27.2_
+  - [x] 35.18 Update the seed
+    - Rework of ticked 33.41: `flask seed-data` creates the users, Boards, Board_Members, Card with Subtasks, and no membership for Manager or Admin of Requirement 22 criterion 18; idempotent.
+    - _Requirements: 22.18, 1.64_
+  - [x] 35.19 Remove visibility from the Frontend and restrict the member controls
+    - Rework of ticked 16.x, 17.x, 31.x, 33.14 to 33.20: delete the lock icons, the toggle, and filters (Sidebar, Board header, Home tiles, new-board modal); Home empty-state message; the Sidebar add-member button for Manager and Admin only; the Team members list starts with the owner row tagged "Owner" with no remove button (round 2 within V12); the assignee picker lists `GET /boards/{id}/members` with the owner first.
+    - _Requirements: 22.14, 22.15, 22.16, 22.19, 3.20, 3.22, 3.24, 3.29, 4.33_
+  - [x] 35.20 Public link button, Shared_View, and the route guard
+    - Rework of ticked 33.14 to 33.20: rename the Share button to "Public link" and show it to Manager and Admin only; Shared_View banner link "Sign in" or "Go to Home"; no write control; extend `proxy.ts` to `/invite/:path*`; Safe_Return_Path accepts `/invite/`; headers for `/invite/:token*`.
+    - _Requirements: 23.4, 23.7, 23.8, 23.9, 24.18, 24.22, 15.35_
+  - [x] 35.21 Build the Invite modal and the `/invite/{token}` page
+    - `InviteModal` (generate, click-to-copy, regenerate and disable behind popover `BaseConfirm`, pending list with each requester's avatar or initials, full name, Username, and Email, Approve and Reject for Manager and Admin, the note for the owner, the count badge) and the page with its four states and the not-valid page.
+    - _Requirements: 24.19, 24.20, 24.21, 24.22, 24.23, 24.24, 24.25, 24.27_
+  - [x] 35.22 Replace the draft model with Auto_Save in the Card modal
+    - Rework of ticked 18.x, 27.x, 28.x, and unticked 29.x: remove `useCardDraft`, the Save changes button, the staged attachments, and the unsaved-changes prompt; add `useFieldSave`, the per-field state and `aria-live` regions, the close handling, and the new `describeActivity` sentences.
+    - _Requirements: 25.1, 25.2, 25.3, 25.4, 25.5, 25.6, 25.7, 25.8, 25.9, 25.13, 25.14, 25.15, 25.16, 4.21, 4.30, 4.32, 4.35, 4.43_
+  - [x]* 35.23 Write the Auto_Save tests
+    - **Property 58: Auto-save sends only what changed**
+    - `fast-check` over a pure model of `useFieldSave` and the merge function, plus the component tests of Requirement 15 criterion 33.
+    - **Validates: Requirements 25.2, 25.3, 25.4, 25.5, 25.9**
+  - [x] 35.24 `BaseConfirm` variants, Attachment removal, and Comment deletion in the Frontend
+    - Rework of ticked 26.x and 28.x: add `variant="popover" | "modal"`; Attachment removal and Comment delete use the modal with the texts of Requirement 26; the Delete action only on the viewer's own Comments.
+    - _Requirements: 26.1, 26.2, 26.10, 26.11, 4.44_
+  - [x] 35.25 Member Subtask toggles and the progress meter in the Frontend
+    - Enabled checkboxes for the Assigned_Member, disabled for others and in the Shared_View; the meter on the board Card and in the Subtasks card; "No subtasks yet".
+    - _Requirements: 27.6, 27.7, 27.8_
+  - [x] 35.26 Clickable Inbox, Board page parameters, and notices
+    - `InboxRow` as a link, `hrefFor`, mark read, `?card=` and `?invite=` on the Board page, `CardNotice`, `BoardUnavailable`, the three new sentences.
+    - _Requirements: 28.5, 28.6, 28.7, 28.8, 28.9, 28.10, 28.11_
+  - [x] 35.27 Profile page two-column layout
+    - Full-width container, `grid-cols-1` with `min-[960px]:grid-cols-2`, existing tokens only.
+    - _Requirements: 29.1, 29.2, 29.3, 29.4_
+  - [ ]* 35.28 Write the V12 Playwright tests and the component tests
+    - Add `AUTH-E2E-V12-01` to `-08` to the auth suite (Requirement 1 criteria 65 to 72), the `vitest` tests for `proxy.ts` and the Safe_Return_Path (Requirement 15 criterion 35), and the component tests of Requirement 15 criteria 33 and 34. The suite stays read-only. No data-writing invite-flow Playwright test or project is scheduled: the invite flow is verified by hand (task 35.31) and "automated invite-flow end-to-end test" is an explicitly deferred item (Requirement 15 criteria 38 and 39, round 2 within V12).
+    - _Requirements: 1.65, 1.66, 1.67, 1.68, 1.69, 1.70, 1.71, 1.72, 15.33, 15.34, 15.35, 15.39_
+  - [ ] 35.31 Run the manual verification checklist for the invite flow
+    - Follow "Manual verification checklist (V12 invite flow)" in `design.md` with two browser profiles on a local or scratch database after `flask seed-data`; write down each result. Data-writing, so it is never part of the Playwright suite.
+    - Deferred (explicit): automated invite-flow end-to-end test. Do not add a Playwright project for it in V12.
+    - _Requirements: 15.38, 15.39, 24.8, 24.13, 24.14, 24.15, 24.19, 22.19_
+  - [ ]* 35.32 Write the round 2 Backend tests (owner row and pending-list Email)
+    - `pytest` per Requirement 15 criterion 36: members endpoint (owner first, once, `is_owner`, Email only with `include=email` for staff, 403 for a Member), candidates exclude the owner, `DELETE` of the owner row is 404, `GET /boards/{id}/join-requests` has `email` for owner, Manager, and Admin and 403 or 401 otherwise, and no Email in the create and decision responses, Notification bodies, Activity_Log `metadata`, Comment bodies, or any `/api/shared` payload.
+    - _Requirements: 22.13, 22.20, 24.13, 24.28, 15.36_
+  - [ ]* 35.33 Write the round 2 Frontend component tests (owner row and pending-list Email)
+    - `vitest` per Requirement 15 criterion 37: Team members owner row with the "Owner" tag and no remove button, `MemberSearch` without the owner, the assignee popover with the owner first, the Invite modal row with the Email, and no Email in an Inbox row or a Sidebar member row.
+    - _Requirements: 22.19, 24.19, 24.27, 15.37_
+  - [x] 35.29 Sync steering and guidelines to V12
+    - Done in this revision: `.kiro/steering/product.md`, `data-model.md`, `api-conventions.md`, `backend.md`, `frontend.md`, `tech.md`, `structure.md`, and `guidelines/backend.md`, `database.md`, `frontend.md`. Round 2 within V12 updated `product.md`, `data-model.md`, `api-conventions.md`, `backend.md`, `frontend.md`, `tech.md`, and `guidelines/backend.md`, `database.md`, `frontend.md` again (Email in the pending list, owner row, manual invite checklist).
+    - _Requirements: 22.1, 23.1, 24.1, 25.1_
+  - [ ] 35.30 Checkpoint - Run the V12 checks
+    - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass; run the migration on a scratch database; run `flask seed-data`; check Home as `member` (only Alpha Board), the invite flow by the manual checklist of task 35.31, a card edit with the network throttled, and the Profile page at 360 and 1280 pixels. Ask the user if questions arise.
+    - _Requirements: 15.29, 15.30, 15.31, 15.32, 15.33, 15.34, 15.35_
 ## Notes
+- Round 2 within V12 (no new version) adds 35.31 to 35.33 (placed before 35.29 so that the checkpoint 35.30 stays last) and rewords 35.3, 35.9, 35.10, 35.19, 35.21, 35.28, and 35.30. Explicitly deferred: automated invite-flow end-to-end test; the invite flow is a manual checklist (35.31).
+- Group 35 (V12) is the only group that changes behaviour built by ticked groups 2 to 5, 8 to 10, 13, 16 to 18, 26 to 28, and 33; their checkboxes stay ticked and each 35.x task names what it reworks. 35.1 comes first; 35.3 and 35.11 need 35.1; 35.5, 35.7, 35.9, 35.13, 35.15, and 35.17 need 35.3 (and 35.9 needs 35.11); the Frontend tasks 35.19 to 35.27 need the Backend tasks they call. Task 22.1 (stored `progress`) is superseded by 35.15: build only `views_count` there. The Backend and the Frontend deploy together.
 - Group 34 (V11, Decision X) changes only the Frontend and moves three files; 34.2 needs 34.1, 34.3 needs 34.2, and 34.4 and 34.5 need 34.3. V10 round 3 (Decisions U to W) is applied separately; group 34 touches `Sidebar.tsx`, `AuthSplitLayout.tsx`, and `AppHeader.tsx`, which round 3 tasks may also edit, so merge in whichever order they land.
 - Round 2 within V10 (33.28 to 33.40, Decisions Q to T) amends unimplemented V10 work and is not a new version; 33.5, 33.16, 33.18, and 33.19 were edited in place for it. 33.35 builds on 33.3, 33.28 on 33.1 and 33.11, and 33.33 on 33.11 and 33.19.
 - Group 33 (V10) must deploy the Backend and the Frontend together: the login request field, the `user` shape, and Guest access change on both sides. 33.9 (Guest access) and 33.10 to 33.11 (share links) land before the Frontend tasks 33.14 to 33.20, and the e2e update 33.22 to 33.25 runs last. If group 33 reaches the Frontend before group 32 is executed, write 32.2 to 32.4 directly in their V10 form (33.22 to 33.24) and skip the V9 variants.
@@ -925,7 +1040,14 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     { "id": 91, "tasks": ["34.2"] },
     { "id": 92, "tasks": ["34.3"] },
     { "id": 93, "tasks": ["34.4", "34.5"] },
-    { "id": 94, "tasks": ["34.7"] }
+    { "id": 94, "tasks": ["34.7"] },
+    { "id": 95, "tasks": ["35.1", "35.29"] },
+    { "id": 96, "tasks": ["35.2", "35.3", "35.11"] },
+    { "id": 97, "tasks": ["35.4", "35.5", "35.7", "35.9", "35.12", "35.13", "35.15", "35.17"] },
+    { "id": 98, "tasks": ["35.6", "35.8", "35.10", "35.14", "35.16", "35.18", "35.19"] },
+    { "id": 99, "tasks": ["35.20", "35.21", "35.22", "35.24", "35.25", "35.26", "35.27"] },
+    { "id": 100, "tasks": ["35.23", "35.28", "35.31", "35.32", "35.33"] },
+    { "id": 101, "tasks": ["35.30"] }
   ]
 }
 ```

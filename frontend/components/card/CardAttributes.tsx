@@ -6,10 +6,13 @@ import { BaseAvatar } from "@/components/shared/BaseAvatar";
 import { BaseButton } from "@/components/shared/BaseButton";
 import { BaseCombobox, type ComboOption } from "@/components/shared/BaseCombobox";
 import { BasePopover } from "@/components/shared/BasePopover";
+import type { FieldState } from "@/hooks/useFieldSave";
+import type { FieldKey } from "@/lib/autosave";
 import { shortDate } from "@/lib/format";
 import type { Category, Priority, Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { DateRangePicker } from "./DateRangePicker";
+import { FieldStatus } from "./FieldStatus";
 
 export interface AttributeValues {
   priority: Priority;
@@ -32,6 +35,11 @@ interface CardAttributesProps {
   /** May change the assignee (Supervisor, Manager, Admin). */
   canAssign: boolean;
   overdue: boolean;
+  /** Save state per field, shown beside it (Auto_Save). */
+  status?: Partial<Record<FieldKey, FieldState>>;
+  onRetry?: (field: FieldKey) => void;
+  /** The dates popover closed: save the pair if it changed and is valid. */
+  onDatesClose?: () => void;
 }
 
 const PRIORITY_COLOR: Record<Priority, string> = { high: "text-label-red-fg", medium: "text-label-orange-fg", low: "text-label-green-fg" };
@@ -60,7 +68,8 @@ function StaticRow({ icon, iconClass, lead, label, children, danger }: { icon: L
 }
 
 /** Column, category, priority, dates, and assignee as plain icon rows; each editable row opens a searchable select or a popover on the draft. */
-export function CardAttributes({ value, onChange, categories, members, assigneeFallback, columnName, canEdit, canAssign, overdue }: CardAttributesProps) {
+export function CardAttributes({ value, onChange, categories, members, assigneeFallback, columnName, canEdit, canAssign, overdue, status = {}, onRetry, onDatesClose }: CardAttributesProps) {
+  const state = (field: FieldKey) => <FieldStatus field={field} state={status[field]} onRetry={onRetry ? () => onRetry(field) : undefined} />;
   const [datesOpen, setDatesOpen] = useState(false);
   const category = categories.find((c) => c.id === value.category_id);
   const assignee = members.find((m) => m.id === value.assignee_id);
@@ -114,6 +123,7 @@ export function CardAttributes({ value, onChange, categories, members, assigneeF
         {columnName ?? "No column"}
       </StaticRow>
 
+      <div className="flex min-w-0 flex-col gap-1">
       {canEdit ? (
         <BaseCombobox
           label="Label"
@@ -131,7 +141,10 @@ export function CardAttributes({ value, onChange, categories, members, assigneeF
           <span className="lowercase">{categoryText}</span>
         </StaticRow>
       )}
+      {state("category_id")}
+      </div>
 
+      <div className="flex min-w-0 flex-col gap-1">
       {canEdit ? (
         <BaseCombobox
           label="Priority"
@@ -151,13 +164,19 @@ export function CardAttributes({ value, onChange, categories, members, assigneeF
           {priorityName}
         </StaticRow>
       )}
+      {state("priority")}
+      </div>
 
+      <div className="flex min-w-0 flex-col gap-1">
       {canEdit ? (
         <BasePopover
           wide
           label="Choose dates"
           open={datesOpen}
-          onOpenChange={setDatesOpen}
+          onOpenChange={(next) => {
+            setDatesOpen(next);
+            if (!next) onDatesClose?.();
+          }}
           trigger={
             <BaseButton variant="secondary" className={cn(row, overdue && "border-danger text-danger")} aria-label={`Dates: ${dateLabel}${overdue ? ", overdue" : ""}`}>
               <RowContent icon={Calendar} iconClass={overdue ? "text-danger" : undefined}>
@@ -173,7 +192,10 @@ export function CardAttributes({ value, onChange, categories, members, assigneeF
           {dateLabel}
         </StaticRow>
       )}
+      {state("dates")}
+      </div>
 
+      <div className="flex min-w-0 flex-col gap-1">
       {canAssign ? (
         <BaseCombobox
           label="Assignee"
@@ -194,6 +216,8 @@ export function CardAttributes({ value, onChange, categories, members, assigneeF
           {assigneeText}
         </StaticRow>
       )}
+      {state("assignee_id")}
+      </div>
     </div>
   );
 }

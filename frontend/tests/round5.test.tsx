@@ -8,7 +8,7 @@ import { ChipStrip } from "@/components/board/ChipStrip";
 import { FileDropZone } from "@/components/card/FileDropZone";
 import type { Analytics, Board, Card, Category, Member } from "@/lib/types";
 
-const board = { id: "b1", name: "Website", description: "Redesign the site", visibility: "private", owner_id: null, archived_at: null, card_count: 8, done_count: 2, overdue_count: 1, member_count: 5 } as Board;
+const board = { id: "b1", name: "Website", description: "Redesign the site", owner_id: null, archived_at: null, card_count: 8, done_count: 2, overdue_count: 1, member_count: 5 } as Board;
 const members = ["Ann Lee", "Bob Roy", "Cy Day"].map((n, i) => ({ id: `u${i}`, full_name: n, username: n.replace(" ", "").toLowerCase(), avatar_url: null })) as Member[];
 
 describe("BoardTile", () => {

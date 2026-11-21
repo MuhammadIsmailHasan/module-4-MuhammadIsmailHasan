@@ -83,9 +83,10 @@ inclusion: always
   the server decides the type and answers `400 VALIDATION_ERROR` when it fits
   neither shape. Unknown user and wrong password return the same `401`.
   Profile endpoints: `GET|PATCH /api/auth/me`, `POST /api/auth/change-password`
-  (a wrong current password is `400`, never `401`). Share-link endpoints:
+  (a wrong current password is `400`, never `401`). Public-link endpoints
+  (V12: the V10 share link, same paths):
   `GET|POST|DELETE /api/boards/{id}/share`, `POST /api/boards/{id}/share/regenerate`
-  (owner, manager, admin); the token-free read-only routes are
+  (**manager and admin only**; the owner gets `403`); the token-free read-only routes are
   `GET /api/shared/{token}`, `/cards`, `/categories`, `/cards/{card_id}`,
   `/attachments/{id}/url` — there is no comment, activity, or mutating route
   under `/api/shared`. Additional auth and
@@ -94,10 +95,14 @@ inclusion: always
   `GET|POST /api/boards/{id}/members`, `DELETE /api/boards/{id}/members/{user_id}`,
   `GET /api/attachments/{id}/url`, and `GET /api/boards/{id}/candidates` (matches
   `full_name`, `username` by prefix, `email` by exact match, case-insensitively;
-  owner, manager, admin only; returns `id`, `full_name`, `username`, `email`).
+  **manager and admin only** in V12, member and supervisor accounts only;
+  returns `id`, `full_name`, `username`, `email`). `POST /api/boards/{id}/members`
+  is manager and admin only and answers `400` for a manager or admin account.
   `GET /api/boards/{id}/members` returns `id`, `full_name`, `username`, and adds
   `email` only with `?include=email`, which needs write access to the board
-  (otherwise `403`). Avatar endpoints: `POST` (multipart, field `file`) and
+  (otherwise `403`); the owner is listed first, once, with `is_owner` (V12 round 2),
+  and `DELETE /api/boards/{id}/members/{user_id}` for an owner who is not a
+  `BoardMember` is `404`. Avatar endpoints: `POST` (multipart, field `file`) and
   `DELETE /api/users/me/avatar`, and the signature-checked, token-free
   `GET /api/users/{user_id}/avatar/file`; `avatar_url` in a `user` payload is a
   signed URL or `null`. Signed-in responses also carry it as `author_avatar_url`
@@ -113,6 +118,29 @@ inclusion: always
   **Example:** `POST /api/boards/b_1/members { "user_id": "u_2" }` →
   `{ "data": { "board_id": "b_1", "user_id": "u_2" } }`.
 
+- **Rule:** V12 endpoints. Invite link (owner, manager, admin):
+  `GET|POST|DELETE /api/boards/{id}/invite` and `POST /api/boards/{id}/invite/regenerate`,
+  each answering `{ "enabled", "token", "path" }`. For any signed-in user:
+  `GET /api/invite/{token}` returns `{ board: {id, name, description}, state, request }`
+  with `state` one of `can_request | pending | member | staff`, and
+  `POST /api/invite/{token}/requests` (member or supervisor) creates a pending
+  join request (`201`; `400` for a manager or admin; `409` for a member or an
+  existing pending request; `404` for any bad token). `GET /api/boards/{id}/join-requests?status=`
+  (owner, manager, admin) lists requests, each with `user: { id, full_name,
+  username, email, avatar_url }` (V12 round 2: the one join-request response
+  that carries an email, to those three roles only); `PATCH /api/join-requests/{id}`
+  with `{ "status": "approved" | "rejected" }` is manager and admin only (`403` for
+  the owner, `409` when already decided). `DELETE /api/comments/{id}` is the
+  author only (`403` for anyone else, `404` unknown). Card payloads carry the
+  read-only `progress` (0 to 10 or null), `subtask_done_count`, and
+  `subtask_total_count`; a posted `progress` is `400`. `visibility` no longer
+  exists on any board request or response. Notifications carry `type`,
+  `board_id`, `board_name`, `card_id`, `card_title`, `actor_name`, and `is_read`.
+  `PATCH /api/cards/{id}` that changes nothing returns `200` and writes no
+  activity row; each saved field is its own request.
+  **Rationale:** One place lists the V12 contract; the public-link and invite
+  tokens are separate credentials.
+  **Example:** `PATCH /api/join-requests/jr_1 { "status": "approved" }` as the board owner → `403`.
 - **Rule:** Lists are unpaged, except the Inbox and the two activity feeds, which
   take `limit` (default 20, at most 100) and `before` (the id of the last row the
   client has) and keep their response shape (Decision J).

@@ -16,12 +16,14 @@ interface SharedBoardProps {
   board: SharedBoardT;
   cards: SharedCard[];
   categories: Category[];
+  /** The viewer carries a Token but has no access to this Board: the banner links Home instead of sign-in. */
+  signedIn?: boolean;
 }
 
 const noop = () => undefined;
 
 /** The Shared_View: columns and cards with search and category chips only. No drag, add, edit, assign, comments, activity, or Inbox. */
-export function SharedBoard({ token, board, cards, categories }: SharedBoardProps) {
+export function SharedBoard({ token, board, cards, categories, signedIn = false }: SharedBoardProps) {
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -40,9 +42,15 @@ export function SharedBoard({ token, board, cards, categories }: SharedBoardProp
     <div className="flex h-screen flex-col overflow-hidden">
       <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-2 bg-brand px-4 py-2 text-sm text-on-brand lg:px-8">
         <span>Shared view, read only</span>
-        <Link href="/login" className="font-semibold text-on-brand">
-          Sign in
-        </Link>
+        {signedIn ? (
+          <Link href="/boards" className="font-semibold text-on-brand">
+            Go to Home
+          </Link>
+        ) : (
+          <Link href="/login" className="font-semibold text-on-brand">
+            Sign in
+          </Link>
+        )}
       </div>
       <header className="flex shrink-0 flex-col gap-3 border-b border-line bg-surface-raised px-4 py-3 lg:px-8">
         <div>

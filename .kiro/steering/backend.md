@@ -88,8 +88,8 @@ inclusion: always
   are both handled inside the `cards` blueprint.
 
 - **Rule:** Categories get their own `categories` blueprint. Listing a
-  board's categories only requires board access (same visibility rule as its
-  columns/cards; a guest gets them only through the share-link route
+  board's categories only requires board access (same access rule as its
+  columns/cards; a guest gets them only through the public-link route
   `GET /api/shared/{token}/categories`); creating, updating, or deleting one
   requires supervisor, manager, or admin.
   **Rationale:** Categories are CRUD, per-board, and role-gated like columns
@@ -122,13 +122,38 @@ inclusion: always
 
 - **Rule:** Board access is resolved in one place, `board_service.can_access(user, board)`:
   a guest never has board access (401 on every board route outside
-  `/api/shared`); a signed-in user sees a public board, or a
-  private board only if they are its owner, a `BoardMember`, a Manager, or an
-  Admin. Every board-scoped read and write (columns, cards, categories,
-  comments, activity, search, attachments) calls it.
+  `/api/shared` and `/api/invite`); there are no public boards (V12), so a
+  signed-in user has access only as the board's owner, a `BoardMember`, a
+  Manager, or an Admin. Every board-scoped read and write (columns, cards,
+  categories, comments, activity, search, attachments) calls it. A `BoardMember`
+  row is never created for a Manager or an Admin, and a card's assignee must be
+  the owner or a `BoardMember`.
   **Rationale:** "Private" has to gate unrelated signed-in users, not just
   guests; one function keeps that from drifting per endpoint.
-  **Example:** an unrelated Member requesting a private board gets `403`.
+  **Example:** an unrelated Member requesting a board gets `403`.
+- **Rule:** The invite link and join requests live in their own `invites`
+  blueprint (routes, service, repository, schema). Creating a request writes the
+  activity row and the notifications (owner, every Manager, every Admin) in one
+  transaction; deciding one locks the row (`SELECT ... FOR UPDATE`), is
+  restricted to Manager and Admin in `routes.py`, and approval creates the
+  `BoardMember`, the activity row, and the requester's notification together.
+  A duplicate pending request is the partial unique index's `IntegrityError`
+  mapped to `409`. The `invite_token` never appears in logs or activity metadata.
+  The pending list (`GET /boards/{id}/join-requests`) reads the requester's
+  `email` through one join for the owner, Manager, and Admin only (V12 round 2);
+  the create and decision responses, notifications, and activity metadata carry
+  no email.
+  **Rationale:** The owner can invite but not grant; concurrent requests must
+  leave one pending row.
+  **Example:** `join_request_service.decide(actor, id, "approved")` called by the owner is blocked by `@require_role("manager", "admin")`.
+- **Rule:** Deleting a comment (author only) runs in one transaction: a reply
+  decrements its parent's `reply_count`, a top-level comment deletes its replies,
+  and one `comment.deleted` activity row is written with no comment text. Card
+  `progress` is computed by the schema from the already loaded subtasks
+  (`(20 * done + total) // (2 * total)`, null with no subtasks), never stored.
+  **Rationale:** `reply_count` must always equal the number of replies; the
+  activity log must not keep deleted text.
+  **Example:** `comment_service.delete(actor, id)` returns `n = 1 + replies`.
 
 - **Rule:** Authentication is stateless JWT with a 24-hour expiry and no
   server-side revocation list; passwords are at least 8 characters and
@@ -178,7 +203,9 @@ inclusion: always
   **Example:** `select(Card).where(...).options(selectinload(Card.subtasks), selectinload(Card.attachments))`
   makes 3 queries for 200 cards, not 201.
 
-- **Rule:** The share-link routes live in their own `shared` blueprint under
+- **Rule:** (V12) The public link is managed only by a Manager or an Admin
+  (`@require_role("manager", "admin")` on the four `/boards/{id}/share` routes).
+  The share-link routes live in their own `shared` blueprint under
   `/api/shared/{token}`: `GET` only, no token required, a null, unknown,
   replaced, or soft-deleted-board token always returns the same `404`, and
   the response schemas contain no `comments`, `activity`, `activity_log`,
@@ -186,7 +213,8 @@ inclusion: always
   through a share token carries a scope that is re-checked against the
   board's current token.
   **Rationale:** Disabling or regenerating a link must cut off every
-  outstanding link and file URL immediately, and a guest must never reach the
-  discussion.
+  outstanding link and file URL immediately, and no visitor, signed in or not,
+  must reach the discussion or any write route through it (every mutating
+  method under `/api/shared` is `405`).
   **Example:** `GET /api/shared/{token}/cards/{card_id}` returns `404` when the
   card is on another board.

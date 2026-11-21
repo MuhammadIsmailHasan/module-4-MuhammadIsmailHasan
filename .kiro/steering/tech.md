@@ -33,6 +33,9 @@ inclusion: always
   **Rationale:** A flow that only passes "most of the time" because of a sleep
   isn't actually verified — it's just not failing yet.
   **Example:** use `expect(locator).toBeVisible()` instead of a fixed sleep.
+  The Playwright suite is read-only. The invite and join-request flow needs two
+  accounts and writes data, so it is a manual checklist (design.md) and an
+  explicitly deferred automated test (V12 round 2).
 
 - **Rule:** Both apps ship a `.env.example`; no real `.env` file is ever committed.
   The backend's lists the rate-limit settings (`RATE_LIMIT_WINDOW_SECONDS`,
@@ -83,6 +86,14 @@ inclusion: always
   **Example:** `BasePopover` wraps the shadcn `Popover`; feature code never
   imports `components/ui/popover` directly.
 
+- **Rule:** V12 adds no dependency. `BaseConfirm` gains a `modal` variant over
+  the existing shadcn/ui `Dialog` (the one `BaseModal` already wraps); the card
+  modal's auto-save uses `fetch` through `lib/api.ts` with no extra library.
+  Notification deduplication uses PostgreSQL partial unique indexes
+  (`postgresql_where`), which work on every supported PostgreSQL version.
+  **Rationale:** The V12 features fit the current stack, and the indexes avoid a
+  PostgreSQL 15 requirement.
+  **Example:** `<BaseConfirm variant="modal" title="Remove attachment?" ... />`.
 - **Rule:** The logo and favicon follow the Next.js 16 conventions: the favicon is
   `app/favicon.ico` (no manual `<link>`, no `metadata.icons`), logos are static
   files in `public/brand/` referenced by absolute `/brand/...` paths and rendered

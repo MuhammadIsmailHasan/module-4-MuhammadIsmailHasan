@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CardModal } from "@/components/card/CardModal";
 import { BaseAlert } from "@/components/shared/BaseField";
@@ -28,6 +29,11 @@ export function BoardView({ board, initialCards, initialCategories }: BoardViewP
   const [openId, setOpenId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const first = useRef(true);
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const cardParam = params.get("card");
+  const [notice, setNotice] = useState<string | null>(null);
   const role = session?.role;
   const staff = role === "supervisor" || role === "manager" || role === "admin";
 
@@ -47,6 +53,32 @@ export function BoardView({ board, initialCards, initialCategories }: BoardViewP
       live = false;
     };
   }, [board.id]);
+
+  // A Notification link: open the Card after the Board loads, or say why it cannot be opened (Requirement 28, criteria 7 and 8).
+  useEffect(() => {
+    if (!cardParam) return;
+    let live = true;
+    setNotice(null);
+    api.cards
+      .get(cardParam)
+      .then((c) => {
+        if (!live) return;
+        if (!columns.some((col) => col.id === c.column_id)) return void setNotice("This card is no longer available.");
+        if (c.archived_at) return void setNotice("This card is archived.");
+        setCards((all) => (all.some((x) => x.id === c.id) ? all : [...all, c]));
+        setOpenId(c.id);
+      })
+      .catch(() => live && setNotice("This card is no longer available."));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardParam, board.id]);
+
+  function closeCard() {
+    setOpenId(null);
+    if (params.get("card")) router.replace(pathname);
+  }
 
   const refetch = useCallback(async () => {
     try {
@@ -120,6 +152,11 @@ export function BoardView({ board, initialCards, initialCategories }: BoardViewP
         onSearch={setSearch}
         onCategory={setCategoryId}
       />
+      {notice && (
+        <div className="shrink-0 px-4 pt-4 lg:px-8">
+          <BaseAlert tone="info">{notice}</BaseAlert>
+        </div>
+      )}
       {error && (
         <div className="shrink-0 px-4 pt-4 lg:px-8">
           <BaseAlert>{error}</BaseAlert>
@@ -142,11 +179,11 @@ export function BoardView({ board, initialCards, initialCategories }: BoardViewP
           board={board}
           columns={columns}
           categories={categories}
-          onClose={() => setOpenId(null)}
+          onClose={closeCard}
           onChanged={(card) => setCards((all) => all.map((c) => (c.id === card.id ? { ...c, ...card } : c)))}
           onDeleted={(id) => {
             setCards((all) => all.filter((c) => c.id !== id));
-            setOpenId(null);
+            closeCard();
           }}
           onCreateCardFromComment={staff ? createFromComment : undefined}
         />

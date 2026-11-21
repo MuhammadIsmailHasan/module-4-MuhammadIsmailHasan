@@ -39,12 +39,11 @@ inclusion: always
   **Example:** moving a card logs
   `{ "action": "card.moved", "from_column": "...", "to_column": "..." }`.
 
-- **Rule:** `Board.visibility` is an enum `public | private`, mutable only by
-  supervisor, manager, or admin roles. A signed-in user's board list is the
-  public boards plus the boards they can access; a guest has no board list.
-  **Rationale:** "Supervisor can make public/private" and "private blocks
-  unrelated signed-in users" both key off this column.
-  **Example:** member board listing: `WHERE deleted_at IS NULL AND (visibility = 'public' OR <owner or member or manager/admin>)`.
+- **Rule:** `Board` has no `visibility` column (V12, Decision Y); every board
+  is private. A signed-in user's board list is the boards they own or belong to;
+  a Manager and an Admin see all; a guest has no board list.
+  **Rationale:** Access is decided by ownership and membership only.
+  **Example:** member board listing: `WHERE deleted_at IS NULL AND (owner_id = :uid OR EXISTS (BoardMember))`, with no filter for a Manager or an Admin.
 - **Rule:** `Board.share_token` is a nullable, unique string (43 URL-safe
   characters from `secrets.token_urlsafe(32)`); null means sharing is off. It
   is returned only by the share endpoints and never written to
@@ -52,6 +51,32 @@ inclusion: always
   **Rationale:** The token is the credential for the read-only shared view, so
   it must be unguessable and must not leak into other responses.
   **Example:** `share_token = db.Column(db.String(64), nullable=True)` plus a unique index.
+  The column keeps its name; in V12 it is the **public link** and only a Manager
+  or an Admin manages it.
+- **Rule:** `Board.invite_token` is a second nullable, unique string (43 URL-safe
+  characters); null means invites are off. It is returned only by the invite
+  endpoints and never written to `ActivityLog.metadata` or logs.
+  **Rationale:** The invite token is a bearer credential that only lets a user
+  ask to join; it must not leak.
+  **Example:** `invite_token = db.Column(db.String(64), nullable=True)` plus a unique index.
+- **Rule:** `BoardJoinRequest` is `id, board_id, user_id, status (pending |
+  approved | rejected), decided_by (nullable), created_at, updated_at`, with a
+  partial unique index on `(board_id, user_id) WHERE status = 'pending'`. The
+  requester's email is never copied into this table: the pending list reads
+  `User.email` through one join, and only for the owner, Manager, and Admin.
+  **Rationale:** One open request per person and board, enforced by the database
+  under concurrent requests; history rows stay; one source for the email.
+  **Example:** `db.Index("uq_join_requests_pending", "board_id", "user_id", unique=True, postgresql_where=db.text("status = 'pending'"))`.
+- **Rule:** `Notification` has `type` (`assigned | deadline | board_join_requested |
+  board_added | board_join_rejected`), a nullable `card_id`, a nullable `board_id`
+  (always set on new rows), a nullable `actor_id`, and a nullable
+  `join_request_id`. Deduplication is three partial unique indexes: card rows on
+  `(user_id, card_id, type, notify_date)`, join rows on `(user_id, type,
+  join_request_id)`, and other board rows on `(user_id, type, board_id, notify_date)`.
+  This restates the earlier `notify_date` rule: a unique constraint treats NULLs
+  as distinct, so a nullable `card_id` needs partial indexes.
+  **Rationale:** Reruns must insert nothing, and two join requests must both notify.
+  **Example:** `Index("uq_notifications_card", "user_id", "card_id", "type", "notify_date", unique=True, postgresql_where=text("card_id IS NOT NULL"))`.
 
 - **Rule:** `Attachment` stores either a `url` (link) or a `file_path` +
   `mime_type` (upload), never both empty.
@@ -82,8 +107,10 @@ inclusion: always
   only against the "Reply" button being hidden on replies.
   **Example:** `if parent.parent_id is not None: raise ValidationError(...)`.
 
-- **Rule:** `progress` (0–10 integer) and `views_count` (integer, default 0)
-  are **stretch, non-MVP** columns on `Card` — carried over from the
+- **Rule:** (V12) `progress` (0–10) is **derived** from the card's subtasks and is
+  never a stored column; `views_count` (integer, default 0) is the only stretch
+  column left. Earlier text: `progress` (0–10 integer) and `views_count` (integer, default 0)
+  were **stretch, non-MVP** columns on `Card` — carried over from the
   prototype by request, built only after every column above is in place and
   working. (`category` is no longer stretch — it's the real `Category`
   entity above, requested as a full feature.)
@@ -100,8 +127,9 @@ inclusion: always
   a real column, not an inferred relationship.
   **Example:** `owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey("user.id"), nullable=True)`.
 
-- **Rule:** `Notification` has a `notify_date` (Date) and a unique constraint
-  on `(user_id, card_id, type, notify_date)`.
+- **Rule:** (Restated in V12, see the `Notification` rule above.) `Notification`
+  has a `notify_date` (Date) and, for card rows, a unique index on
+  `(user_id, card_id, type, notify_date)`.
   **Rationale:** The deadline job can run more than once a day (retries,
   restarts); the constraint makes reruns insert nothing new instead of
   notifying an assignee twice.
@@ -138,8 +166,12 @@ inclusion: always
 - **Rule:** `BoardMember` is a join entity `(id, board_id, user_id, created_at,
   updated_at)` with a unique `(board_id, user_id)`; it records users attached
   to a board beyond its `owner_id`. Supervisor access to a board is
-  `owner OR BoardMember`; a Member's access to a private board needs
-  `BoardMember`. Manager and Admin need no membership.
+  `owner OR BoardMember`; a Member's access to a board needs `BoardMember`.
+  Manager and Admin need no membership and never get a `BoardMember` row
+  (V12): adding one is `400`, and a role change to Manager or Admin deletes the
+  user's rows. The owner has no `BoardMember` row by default; the members list
+  unions the owner row (`is_owner`) with the member rows and lists a user once
+  (V12 round 2).
   **Rationale:** "Private" must gate unrelated signed-in users, which needs a
   real relationship to check.
   **Example:** `BoardMember(board_id=board.id, user_id=member.id)`.
@@ -148,7 +180,11 @@ inclusion: always
   `min_order - 1`, last is `max_order + 1`, and Subtask reordering uses the
   same averaging and renumber rule as Card ordering. Child rows (Subtask,
   Attachment, Comment) have no `deleted_at`; they are hidden by joining the
-  parent Card's `deleted_at`.
+  parent Card's `deleted_at`. A Comment is the one child an author may remove
+  (V12): `DELETE /api/comments/{id}` physically deletes the row (and its
+  replies), writes a `comment.deleted` activity row without the text, and keeps
+  `reply_count` equal to the number of replies; the rule above says how a deleted
+  Card hides children, not that a child row can never be removed.
   **Rationale:** Closes the edge cases the averaging rule alone leaves open
   and avoids duplicating soft-delete state.
   **Example:** dropping at the top of a column whose first card is `1.0`
@@ -171,5 +207,5 @@ inclusion: always
   `done_count`, `overdue_count`, and `member_count`; they are never stored.
   **Rationale:** Home tiles need a short summary per board without a query per
   board, and derived counts stored as columns would drift.
-  **Example:** `Board(id, name, description, visibility, owner_id, created_at, updated_at, deleted_at, archived_at)`.
+  **Example:** `Board(id, name, description, owner_id, share_token, invite_token, created_at, updated_at, deleted_at, archived_at)`.
 

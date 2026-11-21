@@ -41,8 +41,8 @@ overriding any looser prose description elsewhere.
   above 960px it's always visible, either expanded (icons with text labels,
   then the Boards list and team members) or collapsed to the icon rail (tooltips on hover
   and focus); a toggle switches the two and the choice is remembered in the
-  browser. Each board row shows a lock (private) or open lock (public) icon and
-  wraps a long name.
+  browser. Each board row wraps a long name (V12: no lock or visibility icon, every
+  board is private).
   **Rationale:** A floating dock duplicated what the sidebar nav already
   offers — one entry point per feature is simpler to build and to use.
   **Example:** clicking "Inbox" in the sidebar and clicking the header bell
@@ -81,15 +81,15 @@ overriding any looser prose description elsewhere.
   description), **Attachments** (bordered tiles with a type icon and a small file
   name), and **Subtasks**; the right pane has two cards: **Comments** (composer,
   thread) and **Activity** below it — never a separate screen or a second modal
-  for comments. The footer holds every action, right-aligned: Archive, Delete
-  (second click confirms), Save changes; there is no Close button (the header
-  icon and Escape close). There is no column select; a card changes column only
+  for comments. The footer holds every action, right-aligned: Archive and Delete
+  (a confirm popover); there is no Save changes button (V12, Decision AB: every
+  change saves by itself) and no Close button (the header icon and Escape close). There is no column select; a card changes column only
   by drag-and-drop.
   **Rationale:** Editing a card and discussing it are the same moment for the
   person doing it; one card per kind of content keeps the modal scannable, and
   one footer means one place to look for actions.
-  **Example:** the footer's `Save changes` commits every pending change in one
-  `PATCH`; the comment composer on the right posts independently.
+  **Example:** (V12) there is no `Save changes`; the title input sends one
+  `PATCH { title }` on blur or Enter; the comment composer posts independently.
 
 - **Rule:** Controls share one scale: inputs, selects, buttons, and chips are 40px
   high (compact buttons 32px); body and control text is 14px, secondary text 13px,
@@ -108,15 +108,16 @@ overriding any looser prose description elsewhere.
 
 - **Rule:** Category, priority, dates, and assignee show in the card modal as
   chips (label pill, flag chip, one date-range chip with a red Overdue state,
-  avatar with an add button); each opens a popover that edits the modal's draft
-  and sends nothing until Save changes. Dates use one range calendar with
+  avatar with an add button); each opens a popover that saves its own field when
+  the value is confirmed or the popover closes (V12, Decision AB: no draft, one
+  `PATCH` with one field, the two dates together). Dates use one range calendar with
   optional Start date and End date fields and the range shown as a block; a
   start later than the end is never accepted (days before the start are disabled
   while the end is picked; moving the start past the end clears the end). The
   assignee popover has a search box, the board's members, a single choice, and
   Remove, and is hidden from a Member.
   **Rationale:** The Trello-style chip and popover model keeps the card face of
-  the modal compact, and the draft model keeps one save and one activity row.
+  the modal compact, and one field per save gives one clear activity row each.
   **Example:** `normalizeRange(start, end, picked)` in `lib/dates.ts` holds the
   date rules so they are tested without a browser.
 
@@ -269,19 +270,54 @@ overriding any looser prose description elsewhere.
   **Example:** the attachment type picker is `<BaseCombobox options={[Link, File]} />`.
 
 - **Rule:** The Sidebar has one Team members section (no separate Members entry);
-  the owner, Managers, and Admins add members from its heading and remove them per
-  row. The Board header is one row with no Add Member button and no settings icon.
+  Managers and Admins add members from its heading (V12: the owner no longer
+  adds directly; the owner uses the Invite button) and the owner, Managers, and
+  Admins remove them per row. The list starts with the owner, tagged "Owner",
+  and the owner row has no remove button (V12 round 2). The Board header is one row with no Add Member button and no settings icon.
   **Rationale:** One place per feature, and more height for the board.
   **Example:** the add button opens `MemberSearch` over `GET /boards/{id}/candidates`;
   each result shows the full name, then the username and email. The sidebar's own
-  member rows show no email.
+  member rows show no email. The Invite modal's pending list shows each
+  requester's avatar or initials, full name, username, and email (V12 round 2,
+  owner, Manager, and Admin only); no Inbox row shows an email.
 
 - **Rule:** The Inbox and the activity lists load one screen of rows and a Load
-  more action (Decision J); attachment changes in the card modal wait for Save
-  changes, and closing with unsaved changes asks first.
-  **Rationale:** Long lists stay fast, and nothing in the modal is changed
-  before the user saves.
+  more action (Decision J). V12 (Decision AB) replaces the old clause that
+  attachment changes wait for Save changes: attachments, subtasks, and comments
+  save at once, and closing the modal waits for a save in flight, or asks only
+  when a field is in a failed state.
+  **Rationale:** Long lists stay fast, and the modal never holds changes the
+  user thinks are saved.
   **Example:** `api.notifications.inbox({ limit, before })`.
+- **Rule:** Card modal auto-save (V12): title and description save on blur or
+  Enter (Ctrl or Cmd+Enter in the description) only when the value changed and
+  the title is not empty; each field shows Saving, Saved, or an inline error with
+  Retry in an `aria-live="polite"` region; a response merges only the keys that
+  request sent; concurrent edits are last write wins. Subtask checkboxes and
+  titles, attachment adds, and comments save at once. Removing an attachment and
+  deleting a comment use the **modal** form of `BaseConfirm`; delete card,
+  delete subtask, remove member, regenerate or disable a link, and remove
+  profile picture use the **popover** form.
+  **Rationale:** Per-field saves match how people edit and give per-field history.
+  **Example:** `useFieldSave({ saved, send, apply }).commit(value)` returns without a request when `value === saved`.
+- **Rule:** Each Inbox row is a link (`next/link`) to `/boards/{id}?card={card_id}`
+  (assigned, deadline), `/boards/{id}?invite=1` (join requested, for owner, Manager,
+  Admin), `/boards/{id}` (added), or `/boards` (join rejected); activating it marks
+  the notification read and closes the panel. An archived, deleted, or
+  inaccessible target shows a short message in place, never a blank page.
+  **Rationale:** A notification should open what it is about.
+  **Example:** `hrefFor(n)` in `lib/notifications.ts` is a pure function with tests.
+- **Rule:** The Subtask checkboxes are enabled for staff and for a Member only on
+  a card assigned to them, disabled elsewhere and in the shared view; the card
+  face and the Subtasks card show the derived progress meter ("done of total",
+  no meter without subtasks). Progress has no input anywhere.
+  **Rationale:** The checklist is the one source of progress.
+  **Example:** `progress` and `subtask_done_count` come from the API; the client never computes them.
+- **Rule:** The `/profile` page is a full-width container: one column below 960px
+  and two equal columns from 960px (avatar and account left, change password
+  right), with 16px card padding, 24px between cards, and 40px controls.
+  **Rationale:** Wide screens should show both tasks at once.
+  **Example:** `grid grid-cols-1 gap-6 min-[960px]:grid-cols-2`.
 
 - **Rule:** Category and Priority look different on every card: the Category is a
   soft-filled pill with a dot, the Priority an outlined badge with a flag; both
@@ -290,8 +326,9 @@ overriding any looser prose description elsewhere.
   **Example:** `<BaseBadge shape="outline" tone="red"><Flag/> high</BaseBadge>`.
 
 - **Rule:** Every signed-in page sits under one persistent `AppHeader`: the
-  sidebar toggle below 960px, the page context (on a board: visibility icon,
-  name, and the Share button for the owner, Manager, and Admin), the Inbox
+  sidebar toggle below 960px, the page context (on a board: the name, the "Public link" button for a Manager
+  and an Admin, and the "Invite" button for the owner, Manager, and Admin; there
+  is no visibility icon in V12), the Inbox
   bell, and a user-icon menu (`BaseMenu`, trigger named "User menu") whose items
   are **Profile** above **Log out**. Log out calls `POST /api/auth/logout` and
   clears the cookie even when the call fails. The `/profile` page edits full
@@ -316,16 +353,18 @@ overriding any looser prose description elsewhere.
   the cookie is removed. A server render that gets a Backend `401` redirects to
   `/session-expired`, which removes the cookie and redirects to `/login`. The
   `next` value is used only when it is a local path under `/boards`, `/profile`,
-  or `/admin`. `/login`, `/register`, and `/shared/{token}` are not guarded and
+  `/admin`, or `/invite/`; `/invite/{token}` is guarded too (V12). `/login`, `/register`, and `/shared/{token}` are not guarded and
   ignore a stale cookie.
   **Rationale:** Guests no longer browse boards; the Backend 401 stays the
   authority, and a stale cookie must not leave a user on an error page.
   **Example:** `GET /boards` with the cookie `bogus` answers a redirect to
   `/login?next=%2Fboards` and clears `kanban_token`.
-- **Rule:** `/shared/{token}` renders a read-only board and card modal with a
-  "Shared view, read only" banner and a Sign in link: no drag-and-drop, add,
-  edit, assign, comments, activity, inbox, sidebar, or user menu. A signed-in
-  user with board access is redirected to the normal board. The page sends
+- **Rule:** `/shared/{token}` (the public link) renders a read-only board and
+  card modal with a "Shared view, read only" banner and a Sign in link ("Go to
+  Home" when signed in): no drag-and-drop, add, edit, assign, comments, activity,
+  inbox, sidebar, user menu, Invite, or Public link button, and no enabled
+  checkbox, for any visitor. A signed-in user with board access is redirected to
+  the normal board. The page sends
   `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`. An invalid link
   shows one "link is not valid" page.
   **Rationale:** A guest gets status only, and the token must not leak.

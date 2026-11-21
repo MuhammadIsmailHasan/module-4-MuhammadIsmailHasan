@@ -13,19 +13,21 @@ Business rules Kiro must respect when generating requirements, design, or code.
   endpoint; a hierarchy is simpler to implement and to test than five independent rule sets.
   **Example:** `if role in ("member", "supervisor", "manager"): allow_move_card()`.
 
-- **Rule:** A guest (no account, no token) cannot list or browse boards, public or
-  private. A guest opens a board only through a **share link** `/shared/{token}`
-  that the board's owner, a manager, or an admin enabled, and sees its columns,
-  cards, card details, categories, and attachment links read-only — never its
-  comments or activity log, under any circumstance. Disabling or regenerating
-  the link invalidates the old one at once; there is no expiry date. A private
-  board may have a share link (an explicit owner action). Every signed-in user
-  can still read public boards.
-  **Rationale:** A link the owner creates is an explicit, revocable act; public
-  browsing exposed every public board to anyone. Shared status is for status
-  only, not internal discussion.
+- **Rule:** There are no public boards (V12, Decision Y): every board is private.
+  A guest (no account, no token) cannot list or browse boards. Anyone, signed in
+  or not, opens a board read-only through the **public link** `/shared/{token}`
+  (the V10 share link, renamed in V12) that only a **Manager or an Admin**
+  creates, regenerates, or disables (the board owner cannot), and sees its
+  columns, cards, card details, categories, and attachment links — never its
+  comments or activity log, under any circumstance, and no write control. A
+  signed-in user who already has access to the board gets the normal view
+  instead. Disabling or regenerating the link invalidates the old one at once;
+  there is no expiry date.
+  **Rationale:** A link a Manager or Admin publishes is an explicit, revocable
+  act; shared status is for status only, not internal discussion.
   **Example:** `GET /api/shared/{token}` omits `comments` and `activity_log`;
-  `GET /api/boards` with no token returns `401`.
+  `GET /api/boards` with no token returns `401`; the owner calling
+  `POST /api/boards/{id}/share` gets `403`.
 
 - **Rule:** Every new board is seeded with five default columns, in this order:
   `Todo, In Progress, Review, Revision, Done`.
@@ -106,15 +108,19 @@ Business rules Kiro must respect when generating requirements, design, or code.
   **Rationale:** A picture the user owns replaces a URL that can break or
   track; the share view stays status-only.
   **Example:** `POST /api/users/me/avatar` with a 3 MB PNG returns `400`.
-- **Rule:** A user's email is shown only to staff, in two places: the board
-  member search (owner, manager, admin) and the assignee popover (a supervisor,
-  manager, or admin with write access to the board). It never appears in
-  comments, activity rows, notifications, the share view, the sidebar, or any
-  list a member can read.
-  **Rationale:** Staff need the email to tell two people with one name apart;
-  nobody else needs another person's address.
+- **Rule:** A user's email is shown only to staff, in three places: the board
+  member search (manager, admin), the assignee popover (a supervisor,
+  manager, or admin with write access to the board), and (V12 round 2, Decisions
+  M and S) the pending join-request list of the Invite modal, for the owner,
+  manager, and admin, together with the requester's full name and avatar or
+  initials. It never appears in comments, activity rows, notifications (rows or
+  text), the public link and share view, the sidebar, or any list a member can read.
+  **Rationale:** Staff need the email to tell two people with one name apart,
+  and an approver needs it to recognise a requester; nobody else needs another
+  person's address.
   **Example:** the member search row shows "Ada Lovelace", then "ada" and
-  "ada@x.io"; the sidebar row shows "Ada Lovelace" and "ada" only.
+  "ada@x.io"; a pending request row shows the same three values; the sidebar
+  row shows "Ada Lovelace" and "ada" only.
 - **Rule:** Google OAuth login is out of scope until the username/email + password MVP
   is complete and verified working end-to-end.
   **Rationale:** Avoids scope creep delaying the gradable MVP; OAuth is additive, not
@@ -122,13 +128,35 @@ Business rules Kiro must respect when generating requirements, design, or code.
   **Example:** Ship and test `POST /api/auth/register` and `POST /api/auth/login`
   first; add the OAuth callback route only after MVP sign-off.
 
-- **Rule:** A private board is visible only to its owner, its `BoardMember`s,
-  Managers, and Admins; a public board is visible to every signed-in user.
-  Owner, Manager, and Admin can add or remove board members and manage the
-  board's share link.
-  **Rationale:** "Private" has to mean private from unrelated signed-in
-  users too; a share link is the only way past it for someone without access.
-  **Example:** a Member who is not on a private board gets `403` when opening it.
+- **Rule:** A board is visible only to its owner (a Supervisor), its
+  `BoardMember`s (role Member or Supervisor), Managers, and Admins; everyone
+  else gets `403` (`401` without a token). Home lists the boards the viewer owns
+  or belongs to; a Manager and an Admin see all. A Manager or an Admin is never
+  a `BoardMember`. Only a Manager or an Admin adds a member directly (Member and
+  Supervisor accounts only); the board owner adds people only through the
+  **invite link**: the owner, a Manager, or an Admin generates it from the
+  board's Invite button, a signed-in Member or Supervisor opens `/invite/{token}`
+  and sends a join request, the owner sees the pending list (with each
+  requester's email), and **only a Manager or an Admin approves or rejects**. A
+  rejected user may ask again with no cooldown. A card's assignee must be the
+  owner or a board member. The Sidebar Team members list shows the owner first,
+  tagged "Owner", with no remove action on that row; the owner can still remove
+  other members.
+  **Rationale:** "Private" has to mean private from unrelated signed-in users;
+  the owner can invite but cannot grant access alone.
+  **Example:** a Member who is not on a board gets `403` opening it; the owner's
+  `PATCH /api/join-requests/{id}` gets `403`.
+- **Rule:** An author can delete their own comment or reply after a confirmation
+  (a reply decrements the parent's `reply_count`; a top-level comment takes its
+  replies with it). A Manager or an Admin cannot delete other people's comments.
+  **Rationale:** An author may retract their own words; moderation is not part
+  of this version.
+  **Example:** `DELETE /api/comments/{id}` by a non-author, Manager included, is `403`.
+- **Rule:** A Member may check and uncheck the subtasks of a card assigned to
+  them, and the card's progress is derived from its subtasks (done of total,
+  mapped to 0 to 10); progress is never typed by hand.
+  **Rationale:** The checklist is the one source of how far a card is.
+  **Example:** 2 of 4 subtasks done gives progress 5; a card with none shows no meter.
 
 - **Rule:** Admin is deliberately not a superset of Manager: Admin cannot post
   or flag comments and gets `403` on analytics. This is a recorded decision,

@@ -9,7 +9,6 @@ const VERBS: Record<string, string> = {
   "board.unarchived": "unarchived the board",
   "board.deleted": "deleted the board",
   "board.owner_changed": "changed the board owner",
-  "board.visibility_changed": "changed the board visibility",
   "board.member_added": "added a member",
   "board.member_removed": "removed a member",
   "column.created": "added a column",
@@ -21,6 +20,20 @@ const VERBS: Record<string, string> = {
   "card.archived": "archived",
   "card.unarchived": "unarchived",
   "card.deleted": "deleted",
+  "board.invite_enabled": "turned on the invite link",
+  "board.invite_regenerated": "replaced the invite link",
+  "board.invite_disabled": "turned off the invite link",
+  "board.share_enabled": "turned on the public link",
+  "board.share_regenerated": "replaced the public link",
+  "board.share_disabled": "turned off the public link",
+  "board.join_requested": "asked to join the board",
+  "board.join_rejected": "declined a request to join the board",
+  "card.subtask_added": "added subtask",
+  "card.subtask_updated": "updated subtask",
+  "card.subtask_removed": "removed subtask",
+  "card.attachment_added": "added attachment",
+  "card.attachment_removed": "removed attachment",
+  "comment.deleted": "deleted a comment on",
   "subtask.added": "added subtask",
   "subtask.updated": "updated subtask",
   "subtask.deleted": "removed subtask",
@@ -41,6 +54,12 @@ const NO_OBJECT: Record<string, string> = {
   "card.archived": "archived a card",
   "card.unarchived": "unarchived a card",
   "card.deleted": "deleted a card",
+  "card.subtask_added": "added a subtask",
+  "card.subtask_updated": "updated a subtask",
+  "card.subtask_removed": "removed a subtask",
+  "card.attachment_added": "added an attachment",
+  "card.attachment_removed": "removed an attachment",
+  "comment.deleted": "deleted a comment",
   "subtask.added": "added a subtask",
   "subtask.updated": "updated a subtask",
   "subtask.deleted": "removed a subtask",
@@ -122,22 +141,28 @@ export function describeActivity(entry: ActivityEntry, { names = {}, columns = {
       break;
     }
     case "subtask.updated":
+    case "card.subtask_updated":
       if (typeof meta.is_done === "boolean") verb = meta.is_done ? "completed subtask" : "reopened subtask";
       object = text(meta.title);
       context = text(meta.card_title);
       break;
     case "subtask.added":
     case "subtask.deleted":
+    case "card.subtask_added":
+    case "card.subtask_removed":
       object = text(meta.title);
       context = text(meta.card_title);
       break;
     case "attachment.added":
     case "attachment.deleted":
+    case "card.attachment_added":
+    case "card.attachment_removed":
       object = text(meta.name);
       context = text(meta.card_title);
       break;
     case "comment.added":
     case "comment.replied":
+    case "comment.deleted":
       object = cardTitle;
       break;
     case "comment.priority_toggled":
@@ -145,7 +170,7 @@ export function describeActivity(entry: ActivityEntry, { names = {}, columns = {
       object = cardTitle;
       break;
     default:
-      object = cardTitle ?? text(meta.name);
+      object = cardTitle ?? text(meta.name) ?? text(meta.board_name);
   }
   if (!object) verb = NO_OBJECT[entry.action] ?? verb.replace(/ on$/, "");
   return { actor, verb, object, context, details };
