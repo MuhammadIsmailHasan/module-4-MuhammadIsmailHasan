@@ -5594,6 +5594,11 @@
             "description": "Display name of the author",
             "nullable": true
           },
+          "author_avatar_url": {
+            "type": "string",
+            "description": "Signed avatar URL (15 minutes) or null",
+            "nullable": true
+          },
           "parent_id": {
             "type": "string",
             "format": "uuid",
@@ -5634,6 +5639,11 @@
           "author_name": {
             "type": "string",
             "description": "Display name of the author",
+            "nullable": true
+          },
+          "author_avatar_url": {
+            "type": "string",
+            "description": "Signed avatar URL (15 minutes) or null",
             "nullable": true
           },
           "parent_id": {
@@ -5683,6 +5693,15 @@
           "assignee_id": {
             "type": "string",
             "format": "uuid",
+            "nullable": true
+          },
+          "assignee_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "assignee_avatar_url": {
+            "type": "string",
+            "description": "Signed avatar URL (15 minutes) or null",
             "nullable": true
           },
           "title": {

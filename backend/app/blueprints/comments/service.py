@@ -3,7 +3,9 @@ from app.blueprints.boards import repository as boards_repo
 from app.blueprints.boards import service as boards
 from app.blueprints.cards import repository as cards_repo
 from app.blueprints.comments import repository as repo
+from app.common import clock
 from app.common.errors import Forbidden, NotFound, ValidationError
+from app.common.identities import avatar_urls
 from app.common.ids import to_uuid
 from app.extensions import db
 
@@ -71,12 +73,14 @@ def toggle_priority(actor, comment_id):
     return c
 
 
-def serialize(c, viewer_role, author_roles, replies=None, names=None):
+def serialize(c, viewer_role, author_roles, replies=None, idents=None, urls=None):
+    ident = (idents or {}).get(c.author_id)
     data = {
         "id": str(c.id),
         "card_id": str(c.card_id),
         "author_id": str(c.author_id),
-        "author_name": (names or {}).get(c.author_id),
+        "author_name": ident.full_name if ident else None,
+        "author_avatar_url": (urls or {}).get(c.author_id),
         "parent_id": str(c.parent_id) if c.parent_id else None,
         "content": c.content,
         "is_priority": c.is_priority,
@@ -93,11 +97,18 @@ def list_comments(card, actor, sort="latest"):
     if sort not in ("latest", "popular"):
         raise ValidationError("sort must be latest or popular")
     comments, roles = repo.list_for_card(card.id, sort)
-    names = repo.author_names(comments)
+    idents = repo.author_identities(comments)
+    urls = avatar_urls(idents, clock.now())
     return [
-        serialize(c, actor.role, roles, [serialize(r, actor.role, roles, names=names) for r in c.replies], names)
+        serialize(c, actor.role, roles, [serialize(r, actor.role, roles, idents=idents, urls=urls) for r in c.replies], idents, urls)
         for c in comments
     ]
+
+
+def serialize_one(c, viewer_role):
+    """A single new or changed comment with its author's name and avatar."""
+    idents = repo.author_identities([c])
+    return serialize(c, viewer_role, {}, idents=idents, urls=avatar_urls(idents, clock.now()))
 
 
 def list_for_request(actor, card_id, sort):

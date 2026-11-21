@@ -13,6 +13,7 @@ from app.blueprints.cards.dto import check_dates, serialize_attachment, serializ
 from app.blueprints.notifications import repository as notif_repo
 from app.common import clock, ordering
 from app.common.errors import Forbidden, NotFound, ValidationError
+from app.common.identities import avatar_urls
 from app.common.ids import to_uuid
 from app.extensions import db
 
@@ -62,7 +63,14 @@ def present(card, actor):
     comments = comments_service.list_comments(card, actor, "latest")
     activity_rows = activity.serialize_many(activity.for_card(card.id, 20))
     detail = repo.get_detail(card.id)
-    return serialize_card(detail, actor, detail.subtasks, detail.attachments, comments, activity_rows)
+    idents, urls = _assignee_context([detail])
+    return serialize_card(detail, actor, detail.subtasks, detail.attachments, comments, activity_rows, idents, urls)
+
+
+def _assignee_context(cards):
+    """Names and signed avatar URLs of every assignee of these cards: one query, one signature per distinct user."""
+    idents = users.identities({c.assignee_id for c in cards if c.assignee_id})
+    return idents, avatar_urls(idents, clock.now())
 
 
 def create_card(actor, column_id, data):
@@ -426,4 +434,5 @@ def parse_card_filters(args):
 def list_board_cards(actor, board_id, args):
     board = boards.load_board(actor, board_id)
     cards = repo.list_for_board(board.id, parse_card_filters(args))
-    return [serialize_card(c, actor, c.subtasks, c.attachments) for c in cards]
+    idents, urls = _assignee_context(cards)
+    return [serialize_card(c, actor, c.subtasks, c.attachments, idents=idents, urls=urls) for c in cards]

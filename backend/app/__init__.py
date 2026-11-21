@@ -47,7 +47,7 @@ def _load_config(overrides):
         "JWT_ACCESS_TOKEN_EXPIRES": timedelta(hours=24),
         "FILE_URL_SECRET": env["FILE_URL_SECRET"],
         "APP_TIMEZONE": tz,
-        "UPLOAD_DIR": env.get("UPLOAD_DIR") or "uploads",
+        "UPLOAD_DIR": os.path.abspath(env.get("UPLOAD_DIR") or "uploads"),  # absolute: send_file resolves relative paths against the app folder
         "ALLOWED_ORIGINS": origins,
         "APP_ENV": (env.get("APP_ENV") or "production").strip().lower(),
         "RATE_LIMIT_WINDOW_SECONDS": _int(env, "RATE_LIMIT_WINDOW_SECONDS", 900),

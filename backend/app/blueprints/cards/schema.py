@@ -77,6 +77,8 @@ class CardSchema(BaseSchema):
     column_id = fields.UUID()
     category_id = fields.UUID(allow_none=True)
     assignee_id = fields.UUID(allow_none=True)
+    assignee_name = fields.String(allow_none=True)
+    assignee_avatar_url = fields.String(allow_none=True, metadata={"description": "Signed avatar URL (15 minutes) or null"})
     title = fields.String()
     description = fields.String(allow_none=True)
     priority = fields.String()

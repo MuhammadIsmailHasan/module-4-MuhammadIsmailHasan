@@ -4,7 +4,7 @@ import { useState } from "react";
 import { BaseTooltip } from "@/components/shared/BaseTooltip";
 import { apiAsset } from "@/lib/http";
 import { cn } from "@/lib/utils";
-import { initials } from "@/lib/format";
+import { initialsOf } from "@/lib/initials";
 
 interface BaseAvatarProps {
   name: string;
@@ -35,7 +35,7 @@ export function BaseAvatar({ name, size = "sm", className, label, src }: BaseAva
           // eslint-disable-next-line @next/next/no-img-element -- a signed, short-lived URL: next/image would cache it
           <img src={src.startsWith("blob:") ? src : apiAsset(src)} alt="" className="size-full object-cover" onError={() => setFailed(src)} />
         ) : (
-          (label ?? initials(name))
+          (label ?? initialsOf(name))
         )}
       </span>
     </BaseTooltip>

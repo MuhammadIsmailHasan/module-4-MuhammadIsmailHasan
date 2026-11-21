@@ -2,9 +2,11 @@
 
 ## Overview
 
-Version V10. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
+Version V11. Derived from `requirements.md` and `design.md` in this folder. Backend first (Flask + SQLAlchemy blueprints), then the Next.js frontend, then end-to-end tests and stretch features.
 
-V10 adds group 33 (Decisions K to P): the V10 migration (username, email, share token, rate-limit table), identity changes, the Rate_Limiter, share links and the shared routes, the Guest change (no public browsing), the profile endpoints, the App_Header with the User_Menu, the Profile_Page and Email_Prompt, the route guard `proxy.ts`, the Share button and Shared_View, and the update of the V9 Playwright suite. No existing task is renumbered, and no ticked box changes: ticked tasks describe what was built under V9 (for example `login_identifier`, Guest access to public Boards, the Sidebar Log out item) and group 33 changes that behaviour.
+V11 adds group 34 (Decision X): the RevoTask logo and favicon. It moves the three files from `frontend/images/` to `frontend/app/favicon.ico` and `frontend/public/brand/`, adds the shared `BrandLogo`, and uses it in the Sidebar, the sign-in pages, and the App_Header. It changes no Backend code.
+V10 round 3 (Decisions U to W, an amendment, no new version) changes the avatar routes to `/api/users/me/avatar`, adds avatars to Comment, member, candidate, and assignee payloads, replaces the legacy backfill with a local-development reset, adds the change-password limiter and the 2-character candidate search minimum. It edits 33.1 to 33.3, 33.7, 33.18, 33.28 to 33.30, 33.27, and adds 33.41 to 33.48 (waves 84 to 89); IDs of existing tasks do not change.
+V10 adds group 33 (Decisions K to P): the V10 migration (username, email, share token, rate-limit table), identity changes, the Rate_Limiter, share links and the shared routes, the Guest change (no public browsing), the profile endpoints, the App_Header with the User_Menu, the Profile_Page (the Email_Prompt was withdrawn in round 3), the route guard `proxy.ts`, the Share button and Shared_View, and the update of the V9 Playwright suite. No existing task is renumbered, and no ticked box changes: ticked tasks describe what was built under V9 (for example `login_identifier`, Guest access to public Boards, the Sidebar Log out item) and group 33 changes that behaviour.
 V6 applies Decision G to the envelope. `status` is a boolean, true exactly when the HTTP status is 2xx; the numeric HTTP status travels on the HTTP line only. A success body is `{ "status": true, "message", "data" }`. An error body is `{ "status": false, "message", "error": { "code", "details"? } }`: the message text appears once at the top level, `error` has no `message` field, and `error.details` (field name to list of messages) appears only for `VALIDATION_ERROR`. Mutating endpoints pass a short descriptive message (for example "Card moved"); reads default to "OK". V6 edits tasks 1.2, 3.2, 8.1, 14.4, 15.3, 23.3, 24.1, 24.2, and 24.3 and the Notes. Existing checkbox states are unchanged; tasks already ticked that quote the old envelope are brought to the V6 shape by group 24.
 
 V5 adds group 25, which adds the five SQLAlchemy relationships with `lazy="raise"` and moves related-row loading into the repositories with `selectinload` (Decision F). Group 25 runs after group 24 (the marshmallow schemas replace the DTO functions) and before the checkpoint 14.6 and the frontend group 15. It needs no database migration. Existing checkbox states are unchanged.
@@ -625,19 +627,20 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - Run `npm run test:e2e` with the three variables set; confirm all non-fixme tests pass and report the two `fixme` tests.
 - [ ] 33. Share links, username and email, header menu, rate limiting, route guard (Decisions K to P, V10)
   - [x] 33.1 Update the models and write the V10 migration
-    - Models: `User` gets `username` (String(30), lower-case) and `email` (String(255), lower-case, nullable in the database) and loses `login_identifier`; `Board` gets nullable `share_token` (String(64)); new `RateLimitAttempt` (`scope` in `login_pair`, `login_ip`, `availability`, with no `register` value; `key_hash`; `created_at`; index `(scope, key_hash, created_at)`). The avatar column change is part 4 of the same revision, written in 33.28.
-    - One Alembic revision `b7d2e4f6a801` in three parts: users (add columns, Python backfill in `created_at, id` order with the two passes and `derive_username` of the design, unique indexes on `lower(username)` and `lower(email)`, `username` NOT NULL, drop the old index and `login_identifier`), boards (`share_token` plus partial unique index), and the table. Print one line per derived or sanitized Username. Write `downgrade()` as in the design.
-    - Run it on a copy of the dev database first and keep a dump.
-    - _Requirements: 1.43, 1.52, 18.1, 20.9, 20.12_
+    - Models: `User` gets `username` (String(30), lower-case) and `email` (String(255), lower-case, NOT NULL) and loses `login_identifier`; `Board` gets nullable `share_token` (String(64)); new `RateLimitAttempt` (`scope` in `login_pair`, `login_ip`, `availability`, with no `register` value; `key_hash`; `created_at`; index `(scope, key_hash, created_at)`). The avatar column change is part 4 of the same revision, written in 33.28.
+    - One Alembic revision `b7d2e4f6a801` in parts (round 3, Decision V): a local-development reset, not a data-preserving migration. It aborts unless `APP_ENV` is `development` or `testing`, deletes the rows of `users` and of every table that references it, adds `username` and `email` as NOT NULL with the unique lower-case indexes, adds `boards.share_token` plus a partial unique index and `rate_limit_attempts`, drops `login_identifier` and its index. No backfill, no `derive_username`, no printout. `downgrade()` as in the design. After it, re-run `flask seed-users` or `flask seed-data` (33.41).
+    - Run it only on the local development database; no dump or copy is needed because the data is disposable.
+    - _Requirements: 1.43, 1.63, 18.1, 20.9, 20.12_
   - [ ]* 33.2 Write the migration and constraint tests
-    - **Property 45: Migration backfill**
-    - Generated legacy rows (email-shaped, username-shaped, other, in any order, with collisions); assert valid and unique Usernames, `email` rules, idempotence, and that downgrade restores a `login_identifier`; integration tests for the two functional unique indexes (case-insensitive, two null Emails allowed) and the unique `share_token`.
-    - **Validates: Requirements 1.43, 1.52, 15.18**
+    - **Property 45: Migration reset**
+    - Generated user and referencing rows; assert `upgrade` with `APP_ENV` `development` or `testing` leaves every listed table empty and the new schema in place, aborts for any other `APP_ENV` and leaves the data untouched, and that `downgrade` restores a `login_identifier` column; integration tests for the two functional unique indexes (case-insensitive, NOT NULL) and the unique `share_token`.
+    - **Validates: Requirements 1.43, 1.63, 15.18**
   - [x] 33.3 Implement the identity changes in the auth and users blueprints
     - `common/validation.py`: `normalize_username`, `normalize_email`, `is_email_shape`, `classify_identifier`, `USERNAME_RE`.
-    - `auth`: register with `username` and `email` (field-level 400, 409 with `details` per field, `IntegrityError` mapped to the same 409), login with `identifier` (classification, one generic 401, dummy hash for unknown users), `GET /auth/availability`, the `{ id, full_name, username, email, avatar_url }` user shape; `users` create and edit accept the two fields; `GET /boards/{id}/candidates` matches `full_name`, `username` prefix, `email` exact (the response carries `email` from round 2, built in 33.35); update `app/seed.py`.
+    - `auth`: register with `username` and `email` (field-level 400, 409 with `details` per field, `IntegrityError` mapped to the same 409), login with `identifier` (classification, one generic 401, dummy hash for unknown users), `GET /auth/availability`, the `{ id, full_name, username, email, avatar_url }` user shape; `users` create and edit accept the two fields (Email required, never null); `GET /boards/{id}/candidates` matches `full_name`, `username` prefix, `email` exact (the response carries `email` from round 2, built in 33.35); update `app/seed.py`.
     - Update the existing backend tests that used `login_identifier`.
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.44, 1.45, 1.46, 1.47, 1.48, 1.49, 1.54, 3.25_
+    - The 2-character candidate search minimum is built in 33.44; the seed in 33.41.
   - [ ]* 33.4 Write the identity property tests
     - **Property 1: Registration and login round trip** (revised), **Property 2: Registration validation and unique username and email** (revised), **Property 42: Login identifier classification**, **Property 43: Username and Email normalisation and uniqueness**
     - **Validates: Requirements 1.1 to 1.5, 1.43 to 1.49**
@@ -649,7 +652,7 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - **Property 44: Rate limit window** (fake clock, small thresholds through `create_app`, PostgreSQL, two app instances on one table); example tests for the 429 body and header, a blocked correct password, success reset, independent pairs, and that register is never answered with 429 (Req 20.18).
     - **Validates: Requirements 20.1 to 20.14, 15.16**
   - [x] 33.7 Implement the profile endpoints
-    - `GET /auth/me`, `PATCH /auth/me` (`unknown=RAISE`, so `avatar_url` returns 400; email only while null, 409 `details.email`), `POST /auth/change-password` (400 `details.current_password`), one Activity_Log row per success with no secret in `metadata`.
+    - `GET /auth/me`, `PATCH /auth/me` (`full_name` only, `unknown=RAISE`, so `avatar_url` and `email` return 400; round 3 withdrew the Email save and its 409), `POST /auth/change-password` (400 `details.current_password`), one Activity_Log row per success with no secret in `metadata`.
     - _Requirements: 19.8 to 19.16_
   - [ ]* 33.8 Write the profile property test
     - **Property 46: Profile update rules**
@@ -682,9 +685,9 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [x] 33.17 Build `BaseMenu`, the App_Header, and the User_Menu
     - Add `@radix-ui/react-dropdown-menu`, `components/ui/dropdown-menu.tsx`, and `components/shared/BaseMenu.tsx`; `AppHeader` and `UserMenu` in `(app)/layout.tsx`; move the Board header's first row into the App_Header slot; remove the profile entry and Log out item from the Sidebar; keep the Inbox bell and the Sidebar toggle.
     - _Requirements: 19.1 to 19.7, 14.10, 3.23_
-  - [x] 33.18 Build the Profile_Page and the Email_Prompt
-    - `(app)/profile/page.tsx` with the full name field, the avatar section (`AvatarUploader`, built in 33.31), the read-only fields, and the change-password form; `EmailPrompt` mounted by the layout while `user.email` is null.
-    - _Requirements: 19.8 to 19.17, 1.53_
+  - [x] 33.18 Build the Profile_Page (the Email_Prompt is withdrawn in round 3)
+    - `(app)/profile/page.tsx` with the full name field, the avatar section (`AvatarUploader`, built in 33.31), the read-only fields, and the change-password form; no `EmailPrompt` (withdrawn in round 3, Decision V: no account has a null Email).
+    - _Requirements: 19.8 to 19.17_
   - [x] 33.19 Add the route guard
     - `frontend/proxy.ts` with the matcher for `/boards`, `/profile`, `/admin`; leave `/login`, `/register`, `/shared` open; a unit test per path. Round 2 extends this file in 33.33 (unusable cookie, cookie removal, `x-return-path`).
     - _Requirements: 14.27_
@@ -710,17 +713,17 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     - Updated in this revision: `product.md`, `data-model.md`, `api-conventions.md`, `backend.md`, `frontend.md`, `structure.md`, `tech.md`, and `guidelines/` where they contradicted V10 (see CHANGELOG V10, "Steering and guidelines").
     - _Requirements: 14.10, 13.3, 11.4_
   - [ ] 33.27 Checkpoint - Run backend and frontend tests, the build, and the suite
-    - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass, run the migration on a copy of the dev database, run `npm run test:e2e` against the deployed URL with the three variables set, and check the risk recorded for SI-11: set `RATE_LIMIT_LOGIN_IP_MAX` above 20 on the test environment or run the suite once per window. Ask the user if questions arise.
+    - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass, run the reset migration on the local development database, run `npm run test:e2e` against the deployed URL with the three variables set (the suite then has no SO-11 and SO-12 yet; they arrive in 33.38 and run in 33.48, the final checkpoint, round 3 ordering fix), and check the risk recorded for SI-11: set `RATE_LIMIT_LOGIN_IP_MAX` above 20 on the test environment or run the suite once per window. Ask the user if questions arise.
 - [ ] 33.28 Extract the file store, add `detect_image_type`, and write migration part 4 (avatar) (Decision R)
-  - `common/file_store.py` (`FileStore(upload_dir)`: `save`, `delete`, `path`, bare-name check) extracted from the inline code in `cards/service.py` (write, `os.remove`, file route path); attachments call it with `subdir=""`, behaviour unchanged. `common/images.py` with `MAX_AVATAR_BYTES` and `detect_image_type`. `common/signing.py` takes `scope` and a route name (shared with 33.11) so the avatar scope reuses the one signing and verification code. `User.avatar_path` (String(64), nullable) replaces `avatar_url`; add part 4 to revision `b7d2e4f6a801` (add column, print and drop the old non-null `avatar_url` values, drop the column; `downgrade()` re-adds `avatar_url` empty). Create `UPLOAD_DIR/avatars/` on first write.
-  - Risks to record in the PR: Werkzeug buffers the multipart body (cap the body at the reverse proxy, about 3 MB); the file keeps EXIF data and no image library re-encodes it.
+  - `common/file_store.py` (`FileStore(upload_dir)`: `save`, `delete`, `path`, bare-name check) extracted from the inline code in `cards/service.py` (write, `os.remove`, file route path); attachments call it with `subdir=""`, behaviour unchanged. `common/images.py` with `MAX_AVATAR_BYTES` and `detect_image_type`. `common/signing.py` takes `scope` and a route name (shared with 33.11) so the avatar scope reuses the one signing and verification code. `User.avatar_path` (String(64), nullable) replaces `avatar_url`; part 4 of revision `b7d2e4f6a801` adds `avatar_path` and drops `avatar_url` (round 3: no values are printed or preserved, there is no data; `downgrade()` re-adds `avatar_url` empty). Create `UPLOAD_DIR/avatars/` on first write.
+  - Accepted risks to record in the PR (Decision W): Werkzeug buffers the multipart body (cap the body at the reverse proxy, about 3 MB); the file keeps EXIF data and no image library re-encodes it. Both are accepted for V10.
   - _Requirements: 19.21, 19.24, 13.14, 1.6_
 - [x] 33.29 Implement the avatar endpoints (Decision R)
-  - `auth_service.set_avatar`, `clear_avatar`, `open_avatar`; routes `POST` and `DELETE /auth/me/avatar` and `GET /auth/avatars/{user_id}/file`; `user_repository.get_for_update`; write-commit-delete order with cleanup on failure; `UserSchema.avatar_url` as a signed-URL method that is null without a file; one `user.profile_updated` row with `{ "fields": ["avatar"] }`; remove `avatar_url` from the `PATCH /auth/me` and admin `POST|PATCH /users` schemas (400); response headers `nosniff`, `inline`, `Cache-Control: private, max-age=300`; update the OpenAPI document and `backend/API.md`.
-  - _Requirements: 19.18, 19.19, 19.20, 19.21, 19.22, 19.23, 19.24, 19.25, 19.26, 19.27, 19.32, 19.33, 13.10_
+  - `user_service.set_avatar`, `clear_avatar`, `open_avatar` in `blueprints/users/` (round 3, Decision U); routes `POST` and `DELETE /users/me/avatar` and `GET /users/{user_id}/avatar/file` (the two mutating routes for any signed-in user, the file route signature-only); nothing at `/auth/me/avatar`; `user_repository.get_for_update`; write-commit-delete order with cleanup on failure; `UserSchema.avatar_url` as a signed-URL method that is null without a file; one `user.profile_updated` row with `{ "fields": ["avatar"] }`; remove `avatar_url` from the `PATCH /auth/me` and admin `POST|PATCH /users` schemas (400); response headers `nosniff`, `inline`, `Cache-Control: private, max-age=300`; update the OpenAPI document and `backend/API.md`.
+  - _Requirements: 19.18, 19.19, 19.20, 19.21, 19.22, 19.23, 19.24, 19.25, 19.26, 19.27, 19.32, 19.33, 13.10, 17.11_
 - [ ]* 33.30 Write the avatar tests
   - **Property 47: Avatar image type and size**
-  - API tests of Req 15.20 (happy: PNG, JPEG, WebP, renamed extension, replace, delete, idempotent delete; negative: no Token, text renamed `.png`, SVG, GIF, empty, 2,097,153 bytes, missing part, traversal name, bad or expired or cross-user signature, no avatar 404, `avatar_url` in PATCH, no `avatar_url` in shared payloads); a test that two parallel uploads leave one file.
+  - API tests of Req 15.20 against `/api/users/me/avatar` (happy: PNG, JPEG, WebP, renamed extension, replace, delete, idempotent delete; negative: no Token, text renamed `.png`, SVG, GIF, empty, 2,097,153 bytes, missing part, traversal name, bad or expired or cross-user signature, no avatar 404, `avatar_url` in PATCH, no `avatar_url` in shared payloads); a test that two parallel uploads leave one file.
   - **Validates: Requirements 19.19, 19.20, 19.21, 19.22, 19.25, 19.26, 19.27, 19.33, 15.20**
 - [x] 33.31 Build the avatar section of the Profile_Page
   - `AvatarUploader` (choose, preview with a revoked object URL, Upload, Cancel, Remove behind `BaseConfirm`, client-side type and size messages, `details.file` and network messages), `api.auth.uploadAvatar` (existing `form` option) and `removeAvatar`, `BaseAvatar` initials fallback with one refresh through `api.auth.me()`, header and stored-user update without reload.
@@ -751,8 +754,62 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - Updated in this revision: `product.md`, `data-model.md`, `api-conventions.md`, `backend.md`, `frontend.md`, `tech.md`, `guidelines/backend.md`, `guidelines/database.md`, and `guidelines/frontend.md` (see CHANGELOG V10, "Round 2 within V10").
   - _Requirements: 20.18, 19.24, 3.31, 1.57_
 - [ ] 33.40 Checkpoint - Run the round 2 checks
-  - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass with 33.28 to 33.38 in place; run migration part 4 on a copy of the dev database; run the suite against the deployed URL, including SO-11 and SO-12; do the manual avatar smoke check. Ask the user if questions arise.
+  - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass with 33.28 to 33.38 in place; run migration part 4 on the local development database; run the suite against the deployed URL, including SO-11 and SO-12; do the manual avatar smoke check. Ask the user if questions arise.
+- [x] 33.41 Seed every user with username, email, and full_name (Decision V)
+  - `backend/app/seed.py`: `flask seed-users` (Member, Supervisor, Manager, Admin) and `flask seed-data` (adds `member2`, `supervisor2`) set `username` `<key>`, `email` `<key>@example.com`, and a two-word `full_name` on every user; `member` stays the Test_Account (`E2E_USER_IDENTIFIER=member`); the commands are idempotent. Update `SEED_PASSWORD` use and the README note: after `alembic upgrade head`, re-run the seed.
+  - _Requirements: 1.64, 15.27_
+- [x] 33.42 Rate limit `POST /auth/change-password` (Decision W)
+  - `rate_limiter.check_change_password`, `record_change_password_failure` (own short transaction), `reset_change_password`; scope `change_password` keyed by user id; setting `RATE_LIMIT_CHANGE_PASSWORD_MAX` (default 5) in config and both `.env.example` files; 429 `RATE_LIMITED` with `Retry-After`; the Profile password form shows the countdown through `ApiError.retryAfter` and `useCountdown`, and a 429 does not redirect.
+  - _Requirements: 20.10, 20.12, 20.19, 20.20, 20.21, 20.22, 20.23, 19.16_
+- [ ]* 33.43 Write the change-password limiter tests
+  - Extend **Property 44: Rate limit window** with the `change_password` scope (fake clock, per user, reset on success, a short new password counts nothing); a component test of the countdown on the Profile form.
+  - **Validates: Requirements 20.19 to 20.23, 15.16**
+- [x] 33.44 Add the candidate search minimum (Decision W)
+  - `candidate_service.search`: `can_manage_members` check first (403), then 400 `details.search` under 2 characters after trimming, then the query; `MemberSearch` debounces, shows "Type at least 2 characters.", and sends nothing below that length; no per-user request limit.
+  - _Requirements: 3.25, 3.32_
+- [x] 33.45 Add avatars and names to Comment, member, candidate, and assignee payloads (Decision U)
+  - `common/identities.py` (`Identity`, `avatar_urls`), `user_repository.identities(ids)` selecting `id, full_name, avatar_path` (never `email`); replace `comments_repository.author_names` and the shared assignee lookup; add `author_avatar_url` (Comments, Replies), `avatar_url` (members with and without `include=email`, candidates), `assignee_name` and `assignee_avatar_url` (Card list, Card detail, create, update, move, assign responses); signed only for signed-in requests; shared schemas get `assignee_name` only (no avatar, no Username, no Email); update the OpenAPI document and `backend/API.md`.
+  - _Requirements: 19.34, 19.35, 19.36, 19.37, 7.21, 7.22, 3.30, 4.33, 18.11, 18.25, 17.11, 14.12_
+- [x]* 33.46 Write the avatar payload tests
+  - **Property 50: Avatar exposure and query count**; **Property 49: Email exposure** (revised); pytest of Req 15.25 (fields present or null, no avatar on any shared route, query count constant in the number of distinct authors and assignees).
+  - **Validates: Requirements 19.34 to 19.37, 15.25, 15.24**
+- [x] 33.47 Show avatars in the Frontend (Decision U)
+  - `lib/initials.ts` (`initialsOf`), `BaseAvatar` `{ src, name, size }` with the full name as tooltip and `alt` and initials on null or after one `api.auth.me()` refresh; use it in `CommentThread` (`author_avatar_url`), Sidebar Team members, `MemberSearch`, `MemberPicker`, board Card tile and Card modal assignee chip (`assignee_avatar_url`, then the member map), and Home tiles; `SharedBoard` and `SharedCardModal` show initials and the assignee full name only; no Email in any tooltip or `alt`; update the `User` type (`email: string`) and the types of the new fields.
+  - Component tests of Req 15.26 (image when set, initials otherwise, one-word and blank names, no Email in tooltip or `alt`).
+  - _Requirements: 19.38, 19.39, 19.40, 18.11, 15.26_
+- [ ] 33.48 Sync steering and guidelines to round 3, then final checkpoint
+  - Steering and guidelines sync: `product.md`, `data-model.md`, `api-conventions.md`, `backend.md`, `frontend.md`, `guidelines/backend.md`, `guidelines/database.md`, `guidelines/frontend.md` (done in this revision; see CHANGELOG V10, "Round 3 within V10").
+  - Checkpoint: ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass with 33.41 to 33.47 in place; re-run `alembic upgrade head` and the seed on the local database; run the e2e suite including SO-11 and SO-12 against the target URL; do the manual avatar smoke check (upload, comment, member list, assignee). Ask the user if questions arise.
+  - _Requirements: 1.63, 1.64, 19.34, 20.19_
+- [ ] 34. RevoTask logo and favicon (Decision X, V11)
+  - [ ] 34.1 Move the Brand_Assets into place
+    - Read `frontend/AGENTS.md` and `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/01-metadata/app-icons.md` first.
+    - The three files are untracked, so use a plain move, not `git mv`: `mv frontend/images/favicon.ico frontend/app/favicon.ico`; `mkdir -p frontend/public/brand`; `mv frontend/images/logo-revo.svg frontend/images/logo-text-revo.svg frontend/public/brand/`; `rmdir frontend/images`; then `git add` the three new paths. No copy stays behind.
+    - Confirm `grep` finds no reference to `frontend/images`. Do not add an `icons` field to `metadata` and no manual `<link>`.
+    - _Requirements: 21.1, 21.2, 21.3, 21.14_
+  - [ ] 34.2 Write `components/shared/BrandLogo.tsx`
+    - Variants `mark` (`/brand/logo-revo.svg`, 480 by 480) and `full` (`/brand/logo-text-revo.svg`, 540 by 165); `next/image` with `unoptimized` and `loading="eager"`; alt `RevoTask`, `alt=""` with `decorative`; `size` maps to token height classes; add `--logo-lg` to `styles/tokens.css` and its `@theme` entry if the brand panel needs it; a `max-w` token class keeps the display at or under the `viewBox` width. No `priority`, no hex, no arbitrary value, no `"use client"`.
+    - _Requirements: 21.3, 21.4, 21.5, 21.6, 21.7, 21.12, 21.15_
+  - [ ] 34.3 Use `BrandLogo` in the Sidebar, the sign-in pages, and the App_Header
+    - First open both SVG files in the browser at the planned sizes and note the background colour of each raster; pick the tile token for the brand panel (Open Question 21). Check that `full` at 40 px high fits the expanded Sidebar button.
+    - `Sidebar.tsx`: expanded toggle shows `full` (decorative, inside the labelled button, the text span removed); collapsed shows `mark` with the tooltip `RevoTask`; the drawer top below 960px shows `full` with alt `RevoTask`; remove the `LayoutGrid` tile.
+    - `AuthSplitLayout.tsx`: brand panel `full` on a `bg-surface-raised` tile; form card header below 960px `full`; remove both "R" tiles and the text.
+    - `AppHeader.tsx`: below 960px on non-board pages the `/boards` link holds `mark` (decorative) and the text RevoTask. Root and page titles stay "RevoTask" and "... · RevoTask".
+    - _Requirements: 21.8, 21.9, 21.10, 21.11, 21.12, 14.16, 14.19_
+  - [ ]* 34.4 Write the branding component tests
+    - `frontend/tests/branding.test.tsx` as in the design "Testing strategy": variants, alt text and `decorative`, Sidebar expanded and collapsed, the source scan (`/brand/` and `<img` only in `BrandLogo.tsx`, no hex), the file checks (`frontend/images/` absent or empty, `public/brand/` with both files, `app/favicon.ico` with the ICO header). Update any existing test that looks for the Sidebar text "RevoTask".
+    - _Requirements: 21.4, 21.12, 21.14, 21.17_
+  - [ ]* 34.5 Write the Playwright branding spec
+    - `frontend/tests/e2e/branding.spec.ts`: favicon request 200 with an icon content type and one `link[rel="icon"]`; logo alt text and `naturalWidth` above 0 on `/login` at 1280 and 360 pixels; no request to a third-party host on `/login` and on `/boards`; web-first assertions and `expect.poll`, no `waitForTimeout`.
+    - _Requirements: 21.1, 21.2, 21.7, 21.13, 21.17, 15.28_
+  - [x] 34.6 Sync steering and guidelines to V11
+    - Done in this revision: `.kiro/steering/frontend.md`, `structure.md`, `tech.md`, and `guidelines/frontend.md`.
+    - _Requirements: 21.4, 21.5_
+  - [ ] 34.7 Checkpoint - Run the V11 checks
+    - Ensure `tsc --noEmit`, `vitest run`, and `next build` pass; start the app and check `/favicon.ico`, `/brand/logo-revo.svg`, `/brand/logo-text-revo.svg`, `/login` at 360 and 1280 pixels, and the Sidebar in both states; confirm `ls frontend/images` fails. Ask the owner for true vector SVGs and other icon sizes (Open Questions 19 and 20).
+    - _Requirements: 21.17_
 ## Notes
+- Group 34 (V11, Decision X) changes only the Frontend and moves three files; 34.2 needs 34.1, 34.3 needs 34.2, and 34.4 and 34.5 need 34.3. V10 round 3 (Decisions U to W) is applied separately; group 34 touches `Sidebar.tsx`, `AuthSplitLayout.tsx`, and `AppHeader.tsx`, which round 3 tasks may also edit, so merge in whichever order they land.
 - Round 2 within V10 (33.28 to 33.40, Decisions Q to T) amends unimplemented V10 work and is not a new version; 33.5, 33.16, 33.18, and 33.19 were edited in place for it. 33.35 builds on 33.3, 33.28 on 33.1 and 33.11, and 33.33 on 33.11 and 33.19.
 - Group 33 (V10) must deploy the Backend and the Frontend together: the login request field, the `user` shape, and Guest access change on both sides. 33.9 (Guest access) and 33.10 to 33.11 (share links) land before the Frontend tasks 33.14 to 33.20, and the e2e update 33.22 to 33.25 runs last. If group 33 reaches the Frontend before group 32 is executed, write 32.2 to 32.4 directly in their V10 form (33.22 to 33.24) and skip the V9 variants.
 - The ticked tasks of groups 1 to 19 that mention `login_identifier`, Guest access to public Boards, or the Sidebar Log out item describe the V9 build; group 33 supersedes those behaviours.
@@ -860,7 +917,15 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     { "id": 80, "tasks": ["33.29", "33.34", "33.36"] },
     { "id": 81, "tasks": ["33.30", "33.31", "33.37"] },
     { "id": 82, "tasks": ["33.32", "33.38"] },
-    { "id": 83, "tasks": ["33.40"] }
+    { "id": 83, "tasks": ["33.40"] },
+    { "id": 84, "tasks": ["33.41", "33.42", "33.45"] },
+    { "id": 85, "tasks": ["33.43", "33.44", "33.46", "33.47"] },
+    { "id": 86, "tasks": ["33.48"] },
+    { "id": 90, "tasks": ["34.1", "34.6"] },
+    { "id": 91, "tasks": ["34.2"] },
+    { "id": 92, "tasks": ["34.3"] },
+    { "id": 93, "tasks": ["34.4", "34.5"] },
+    { "id": 94, "tasks": ["34.7"] }
   ]
 }
 ```

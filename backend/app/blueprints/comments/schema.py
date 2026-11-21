@@ -19,6 +19,7 @@ class ReplySchema(BaseSchema):
     card_id = fields.UUID()
     author_id = fields.UUID()
     author_name = fields.String(allow_none=True, metadata={"description": "Display name of the author"})
+    author_avatar_url = fields.String(allow_none=True, metadata={"description": "Signed avatar URL (15 minutes) or null"})
     parent_id = fields.UUID(allow_none=True)
     content = fields.String()
     is_priority = fields.Boolean()

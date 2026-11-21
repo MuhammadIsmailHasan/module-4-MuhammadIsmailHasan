@@ -94,7 +94,13 @@ export function Board({ columns, cards, categories, members, canMove, canCreate,
             key={card.id}
             card={card}
             category={card.category_id ? categoryById.get(card.category_id) : undefined}
-            assignee={card.assignee_id ? memberById.get(card.assignee_id) : undefined}
+            assignee={
+              card.assignee_name
+                ? { full_name: card.assignee_name, avatar_url: card.assignee_avatar_url ?? null }
+                : card.assignee_id
+                  ? memberById.get(card.assignee_id)
+                  : undefined
+            }
             overdue={!!card.end_date && card.end_date < today && col.id !== doneColumnId}
             draggable={canMove}
             onOpen={() => onOpen(card)}

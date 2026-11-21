@@ -210,7 +210,7 @@ export function Sidebar({ boards, open, onNavigate }: SidebarProps) {
             {members.length === 0 && <p className="px-3 text-xs text-ink-muted">No members yet.</p>}
             {members.map((m) => (
               <div key={m.id} className="flex min-h-control items-center gap-3 rounded-sm px-3 py-2">
-                <BaseAvatar name={m.full_name} size="md" />
+                <BaseAvatar name={m.full_name} src={m.avatar_url} size="md" />
                 <div className="min-w-0 flex-1">
                   <div className="text-meta font-medium break-words">{m.full_name}</div>
                   <div className="truncate text-xs text-ink-muted">{m.username}</div>

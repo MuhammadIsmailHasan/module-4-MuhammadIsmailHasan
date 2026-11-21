@@ -77,7 +77,7 @@ export function SharedBoard({ token, board, cards, categories }: SharedBoardProp
                       key={card.id}
                       card={card}
                       category={card.category_id ? byCategory.get(card.category_id) : undefined}
-                      assignee={card.assignee_name ? { id: card.assignee_id ?? "", full_name: card.assignee_name, username: "", avatar_url: null } : undefined}
+                      assignee={card.assignee_name ? { full_name: card.assignee_name, avatar_url: null } : undefined}
                       overdue={!!card.end_date && card.end_date < today && col.id !== doneId}
                       draggable={false}
                       onOpen={() => setOpenId(card.id)}

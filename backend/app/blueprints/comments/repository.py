@@ -49,12 +49,12 @@ def list_for_card(card_id, sort="latest"):
     return comments, roles
 
 
-def author_names(comments):
-    """Display names of the authors of these comments and their replies: one query whatever the row count."""
+def author_identities(comments):
+    """Name and avatar path of the authors of these comments and their replies: one query whatever the row count."""
+    from app.blueprints.auth import repository as users
+
     ids = {c.author_id for c in comments}
     for c in comments:
         if "replies" in c.__dict__:  # replies are loaded explicitly by list_for_card; never lazy-load here
             ids |= {r.author_id for r in c.replies}
-    if not ids:
-        return {}
-    return dict(db.session.execute(db.select(User.id, User.full_name).where(User.id.in_(ids))).all())
+    return users.identities(ids)

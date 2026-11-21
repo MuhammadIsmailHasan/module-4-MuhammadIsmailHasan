@@ -71,6 +71,7 @@ export interface Comment {
   author_id: string;
   parent_id: string | null;
   author_name?: string | null;
+  author_avatar_url?: string | null;
   content: string;
   is_priority: boolean;
   reply_count: number;
@@ -95,6 +96,8 @@ export interface Card {
   column_id: string;
   category_id: string | null;
   assignee_id: string | null;
+  assignee_name?: string | null;
+  assignee_avatar_url?: string | null;
   title: string;
   description: string | null;
   priority: Priority;
@@ -149,6 +152,6 @@ export interface SharedBoard {
 }
 
 /** A card as the Shared_View gets it: no comments or activity, assignee by name only. */
-export interface SharedCard extends Omit<Card, "comments" | "activity"> {
+export interface SharedCard extends Omit<Card, "comments" | "activity" | "assignee_avatar_url"> {
   assignee_name: string | null;
 }

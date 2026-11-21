@@ -89,3 +89,100 @@ def test_avatar_signature_never_opens_an_attachment_and_admin_cannot_set_url(cli
     assert client.post("/api/users", headers=ha, json={"full_name": "N", "username": "newbie", "email": "n@x.com", "password": TEST_PASSWORD, "avatar_url": "https://x.y"}).status_code == 400
     listing = client.get("/api/users", headers=ha).get_json()["data"]
     assert any(u["avatar_url"] for u in listing)
+
+
+def _set_avatar(app, user, kind="png"):
+    from app.extensions import db
+
+    user.avatar_path = f"{'a' * 32}.{kind}"
+    db.session.commit()
+
+
+def test_avatar_fields_in_comment_member_candidate_and_card_payloads(client):
+    from helpers import Env
+
+    env = Env(client, "public")
+    _set_avatar(client.application, env.users["member"])
+    card = env.card()
+    client.patch(f"/api/cards/{card['id']}", headers=env.h["manager"], json={"assignee_id": env.uid("member")})
+    comment = client.post(f"/api/cards/{card['id']}/comments", headers=env.h["member"], json={"content": "hi"}).get_json()["data"]
+    client.post(f"/api/comments/{comment['id']}/replies", headers=env.h["manager"], json={"content": "re"})
+    url_prefix = f"/api/users/{env.uid('member')}/avatar/file?exp="
+
+    got = client.get(f"/api/cards/{card['id']}/comments", headers=env.h["manager"]).get_json()["data"][0]
+    assert got["author_avatar_url"].startswith(url_prefix) and got["replies"][0]["author_avatar_url"] is None
+    assert comment["author_avatar_url"].startswith(url_prefix)
+
+    for payload in (
+        client.get(f"/api/cards/{card['id']}", headers=env.h["manager"]).get_json()["data"],
+        client.get(f"/api/boards/{env.bid}/cards", headers=env.h["manager"]).get_json()["data"][0],
+        client.patch(f"/api/cards/{card['id']}", headers=env.h["manager"], json={"title": "t2"}).get_json()["data"],
+    ):
+        assert payload["assignee_name"] == "member" and payload["assignee_avatar_url"].startswith(url_prefix)
+    bare = env.card()
+    assert bare["assignee_name"] is None and bare["assignee_avatar_url"] is None
+
+    for path, who in ((f"/api/boards/{env.bid}/members", "member"), (f"/api/boards/{env.bid}/members?include=email", "owner")):
+        rows = client.get(path, headers=env.h[who]).get_json()["data"]
+        mine = next(r for r in rows if r["id"] == env.uid("member"))
+        assert mine["avatar_url"].startswith(url_prefix)
+        assert all("avatar_url" in r for r in rows)
+    cand = client.get(f"/api/boards/{env.bid}/candidates?search=member", headers=env.h["manager"]).get_json()["data"]
+    assert all("avatar_url" in r for r in cand)
+
+    # no avatar and no email in any shared payload; no email in comments, cards or members for a member
+    token = client.post(f"/api/boards/{env.bid}/share", headers=env.h["manager"]).get_json()["data"]["token"]
+    blob = str([client.get(f"/api/shared/{token}/cards").get_json(), client.get(f"/api/shared/{token}").get_json()])
+    assert "avatar" not in blob and "@t.test" not in blob
+    member_view = str([
+        client.get(f"/api/cards/{card['id']}/comments", headers=env.h["member"]).get_json(),
+        client.get(f"/api/boards/{env.bid}/cards", headers=env.h["member"]).get_json(),
+        client.get(f"/api/boards/{env.bid}/members", headers=env.h["member"]).get_json(),
+        client.get("/api/notifications", headers=env.h["member"]).get_json(),
+    ])
+    assert "@t.test" not in member_view
+
+
+def test_property_50_query_count_does_not_depend_on_authors_or_assignees(app, client, make_user, auth):
+    from sqlalchemy import event
+
+    from app.extensions import db
+    from app.models import Board, Card, Column, Comment
+
+    manager = make_user("manager", "mgr50")
+    board = Board(name="b", visibility="public")
+    db.session.add(board)
+    db.session.flush()
+    col = Column(board_id=board.id, name="c", order=0)
+    db.session.add(col)
+    db.session.flush()
+    card_ids = []
+
+    def grow(n):
+        for i in range(n):
+            u = make_user("member", f"m50x{len(card_ids)}x{i}")
+            _set_avatar(app, u)
+            c = Card(column_id=col.id, title="t", order=float(len(card_ids)), assignee_id=u.id)
+            db.session.add(c)
+            db.session.flush()
+            db.session.add(Comment(card_id=c.id, author_id=u.id, content="x"))
+            card_ids.append(c.id)
+        db.session.commit()
+
+    def count(path):
+        statements = []
+        engine = db.engine
+        listener = lambda conn, cur, stmt, *a: statements.append(stmt)  # noqa: E731
+        event.listen(engine, "before_cursor_execute", listener)
+        try:
+            db.session.expire_all()
+            assert client.get(path, headers=auth(manager)).status_code == 200
+        finally:
+            event.remove(engine, "before_cursor_execute", listener)
+        return len(statements)
+
+    grow(2)
+    small = (count(f"/api/boards/{board.id}/cards"), count(f"/api/cards/{card_ids[0]}/comments"))
+    grow(20)
+    big = (count(f"/api/boards/{board.id}/cards"), count(f"/api/cards/{card_ids[0]}/comments"))
+    assert small == big

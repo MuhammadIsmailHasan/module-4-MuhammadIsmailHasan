@@ -1,3 +1,4 @@
+from app.common.identities import Identity
 from app.extensions import db
 from app.models import User
 
@@ -8,6 +9,15 @@ def get_by_username(username):
 
 def get_by_email(email):
     return User.query.filter(db.func.lower(User.email) == email.lower()).first()
+
+
+def identities(user_ids):
+    """id -> Identity for these users in one query. Columns only, so the email is never loaded."""
+    ids = {i for i in user_ids if i is not None}
+    if not ids:
+        return {}
+    rows = db.session.execute(db.select(User.id, User.full_name, User.avatar_path).where(User.id.in_(ids))).all()
+    return {r.id: Identity(r.full_name, r.avatar_path) for r in rows}
 
 
 def get_by_id(user_id):

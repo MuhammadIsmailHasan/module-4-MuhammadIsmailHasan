@@ -60,7 +60,7 @@ export function MemberSearch({ boardId, onAdded }: MemberSearchProps) {
         {results?.map((u) => (
           <li key={u.id}>
             <BaseButton variant="ghost" className="h-auto min-h-control w-full justify-start gap-2 px-2 font-normal text-ink" onClick={() => void add(u)}>
-              <BaseAvatar name={u.full_name} size="md" />
+              <BaseAvatar name={u.full_name} src={u.avatar_url} size="md" />
               <span className="min-w-0 text-left">
                 <span className="block truncate text-sm">{u.full_name}</span>
                 <span className="block truncate text-xs text-ink-muted">

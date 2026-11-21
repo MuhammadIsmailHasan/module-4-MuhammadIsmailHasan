@@ -11,7 +11,7 @@ const PRIORITY_TONE: Record<Priority, BadgeTone> = { high: "red", medium: "orang
 interface CardTileProps {
   card: Card;
   category?: Category;
-  assignee?: Member;
+  assignee?: Pick<Member, "full_name" | "avatar_url">;
   overdue: boolean;
   draggable: boolean;
   onOpen: () => void;
@@ -75,7 +75,7 @@ export function CardTile({ card, category, assignee, overdue, draggable, onOpen,
             {card.attachments.length}
           </span>
         )}
-        {assignee && <BaseAvatar name={assignee.full_name} className="ml-auto" />}
+        {assignee && <BaseAvatar name={assignee.full_name} src={assignee.avatar_url} className="ml-auto" />}
       </div>
     </div>
   );

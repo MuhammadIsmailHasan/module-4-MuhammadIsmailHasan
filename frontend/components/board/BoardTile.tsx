@@ -52,7 +52,7 @@ export function BoardTile({ board, members }: { board: Board; members: Member[] 
           {shown.length > 0 && (
             <div className="flex items-center">
               {shown.map((m, i) => (
-                <BaseAvatar key={m.id} name={m.full_name} className={i > 0 ? "stack-overlap" : undefined} />
+                <BaseAvatar key={m.id} name={m.full_name} src={m.avatar_url} className={i > 0 ? "stack-overlap" : undefined} />
               ))}
               {extra > 0 && <BaseAvatar name={`${extra} more members`} label={`+${extra}`} className="stack-overlap bg-surface text-brand" />}
             </div>

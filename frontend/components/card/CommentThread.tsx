@@ -50,7 +50,7 @@ export function CommentThread({ comments, sort, names = {}, canReply, canPriorit
     return (
       <div className="flex gap-3">
         <div className="flex flex-col items-center gap-2">
-          <BaseAvatar name={author(c)} size={reply ? "sm" : "md"} />
+          <BaseAvatar name={author(c)} src={c.author_avatar_url} size={reply ? "sm" : "md"} />
           {replies.length > 0 && <span aria-hidden="true" className="w-px flex-1 bg-line" />}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1">

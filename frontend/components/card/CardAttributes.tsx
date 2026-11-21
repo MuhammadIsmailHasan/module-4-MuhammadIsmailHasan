@@ -24,6 +24,8 @@ interface CardAttributesProps {
   onChange: (patch: Partial<AttributeValues>) => void;
   categories: Category[];
   members: Member[];
+  /** The Card's own assignee name and avatar, for an assignee who is no longer on the member list. */
+  assigneeFallback?: { name: string; avatar_url: string | null } | null;
   columnName?: string;
   /** May change category, priority, and dates. */
   canEdit: boolean;
@@ -38,19 +40,19 @@ const PRIORITIES: Priority[] = ["high", "medium", "low"];
 const row = "h-auto min-h-control w-full justify-start gap-3 px-3 text-sm font-normal text-ink";
 
 /** The icon and the text of one attribute row; every row has the same height, font, and icon size. */
-function RowContent({ icon: Icon, iconClass, children }: { icon: LucideIcon; iconClass?: string; children: ReactNode }) {
+function RowContent({ icon: Icon, iconClass, lead, children }: { icon: LucideIcon; iconClass?: string; lead?: ReactNode; children: ReactNode }) {
   return (
     <>
-      <Icon className={cn("size-icon shrink-0 text-ink-muted", iconClass)} aria-hidden="true" />
+      {lead ?? <Icon className={cn("size-icon shrink-0 text-ink-muted", iconClass)} aria-hidden="true" />}
       <span className="min-w-0 flex-1 truncate text-left">{children}</span>
     </>
   );
 }
 
-function StaticRow({ icon, iconClass, label, children, danger }: { icon: LucideIcon; iconClass?: string; label: string; children: ReactNode; danger?: boolean }) {
+function StaticRow({ icon, iconClass, lead, label, children, danger }: { icon: LucideIcon; iconClass?: string; lead?: ReactNode; label: string; children: ReactNode; danger?: boolean }) {
   return (
     <div role="group" aria-label={label} className={cn("flex min-h-control w-full items-center gap-3 rounded-sm border border-line px-3 text-sm", danger && "text-danger")}>
-      <RowContent icon={icon} iconClass={iconClass}>
+      <RowContent icon={icon} iconClass={iconClass} lead={lead}>
         {children}
       </RowContent>
     </div>
@@ -58,7 +60,7 @@ function StaticRow({ icon, iconClass, label, children, danger }: { icon: LucideI
 }
 
 /** Column, category, priority, dates, and assignee as plain icon rows; each editable row opens a searchable select or a popover on the draft. */
-export function CardAttributes({ value, onChange, categories, members, columnName, canEdit, canAssign, overdue }: CardAttributesProps) {
+export function CardAttributes({ value, onChange, categories, members, assigneeFallback, columnName, canEdit, canAssign, overdue }: CardAttributesProps) {
   const [datesOpen, setDatesOpen] = useState(false);
   const category = categories.find((c) => c.id === value.category_id);
   const assignee = members.find((m) => m.id === value.assignee_id);
@@ -90,7 +92,7 @@ export function CardAttributes({ value, onChange, categories, members, columnNam
       keywords: m.email ? [m.username, m.email] : [m.username],
       render: (
         <span className="flex items-center gap-2">
-          <BaseAvatar name={m.full_name} />
+          <BaseAvatar name={m.full_name} src={m.avatar_url} />
           <span className="min-w-0">
             <span className="block truncate">{m.full_name}</span>
             {m.email && <span className="block truncate text-xs text-ink-muted">{m.email}</span>}
@@ -102,7 +104,9 @@ export function CardAttributes({ value, onChange, categories, members, columnNam
 
   const priorityName = value.priority[0].toUpperCase() + value.priority.slice(1);
   const categoryText = category?.name ?? "No label";
-  const assigneeText = assignee?.full_name ?? "Unassigned";
+  const assigneeName = assignee?.full_name ?? (value.assignee_id && assigneeFallback ? assigneeFallback.name : null);
+  const assigneeText = assigneeName ?? "Unassigned";
+  const assigneeLead = assigneeName ? <BaseAvatar name={assigneeName} src={assignee?.avatar_url ?? assigneeFallback?.avatar_url} /> : undefined;
 
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -179,12 +183,14 @@ export function CardAttributes({ value, onChange, categories, members, columnNam
           onChange={(v) => onChange({ assignee_id: v })}
           trigger={
             <BaseButton variant="secondary" className={row} aria-label={`Assignee: ${assigneeText}`}>
-              <RowContent icon={UserIcon}>{assigneeText}</RowContent>
+              <RowContent icon={UserIcon} lead={assigneeLead}>
+                {assigneeText}
+              </RowContent>
             </BaseButton>
           }
         />
       ) : (
-        <StaticRow icon={UserIcon} label={`Assignee: ${assigneeText}`}>
+        <StaticRow icon={UserIcon} lead={assigneeLead} label={`Assignee: ${assigneeText}`}>
           {assigneeText}
         </StaticRow>
       )}

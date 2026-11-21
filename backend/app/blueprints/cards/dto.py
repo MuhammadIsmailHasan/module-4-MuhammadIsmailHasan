@@ -62,12 +62,15 @@ def serialize_attachment(a, now=None, scope=None):
     return data
 
 
-def serialize_card(card, viewer, subtasks=(), attachments=(), comments=None, activity=None):
+def serialize_card(card, viewer, subtasks=(), attachments=(), comments=None, activity=None, idents=None, urls=None):
+    ident = (idents or {}).get(card.assignee_id) if card.assignee_id else None
     data = {
         "id": str(card.id),
         "column_id": str(card.column_id),
         "category_id": str(card.category_id) if card.category_id else None,
         "assignee_id": str(card.assignee_id) if card.assignee_id else None,
+        "assignee_name": ident.full_name if ident else None,
+        "assignee_avatar_url": (urls or {}).get(card.assignee_id) if card.assignee_id else None,
         "title": card.title,
         "description": card.description,
         "priority": card.priority,

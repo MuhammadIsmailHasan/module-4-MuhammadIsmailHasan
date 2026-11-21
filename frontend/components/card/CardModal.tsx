@@ -242,6 +242,7 @@ export function CardModal({ cardId, board, columns, categories, onClose, onChang
                   onChange={(patch) => setForm((f) => (f ? { ...f, ...patch } : f))}
                   categories={categories}
                   members={members}
+                  assigneeFallback={card?.assignee_name ? { name: card.assignee_name, avatar_url: card.assignee_avatar_url ?? null } : null}
                   columnName={columnName}
                   canEdit={canEdit}
                   canAssign={staff}
