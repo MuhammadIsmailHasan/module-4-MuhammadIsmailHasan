@@ -382,3 +382,14 @@ Contradictions and gaps found; none was resolved silently.
 #### Still open
 - Open Questions 19 to 21 (V11 logo files and icons) are unchanged and not part of this round.
 - Nothing from 22 to 28 is open; 25 to 27 were resolved by default and can be reversed by the owner.
+
+## V13 - 2026-11-21
+### Requirements changes
+- New Requirements 30 (role tag), 31 (control sizes), 32 (document titles); Decisions AG to AI; BRAND-11 labelled superseded. Open Questions 29 and 30 (default answers).
+### Design changes
+- `design.md`: "V13 design" (role in the members payload, `RoleTag`, control sizes, `lib/titles.ts`, `generateMetadata`, panel and Card modal title effects), Properties 59 and 60.
+### Implementation changes
+- None yet. `tasks.md`: group 36 (36.1 to 36.6) and waves 102 and 103.
+### Impact
+- One additive API field (`role` on members); no data change. Consistency check: V12 criterion ACC-13 lists the member fields without `role` (amended by ROLE-01, not rewritten); V12 steering says the picker shows "full name, Username, Email" (extended by the tag); PRO-02 and the V12 build use the `lg` class for the 960 pixel breakpoint, which matches.
+- Finding: the Activity_Log `metadata` is implemented in the Frontend (`describeActivity`); the Next.js page `metadata` is only a static title with the suffix "· RevoTask" on six pages and has nothing for a Board or a panel (the gap Requirement 32 closes).

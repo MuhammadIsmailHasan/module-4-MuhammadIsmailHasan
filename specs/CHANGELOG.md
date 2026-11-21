@@ -135,3 +135,14 @@ Versions match `.kiro/specs/CHANGELOG.md`. Each folder holds requirement domains
 - `v12/00-OVERVIEW` (Open Questions 22 to 24 resolved by the owner, 25 to 27 resolved by default, 28 unchanged; labels on Decisions M and S; Decisions Y and AA reworded), `v12/03-BOARDS` (ACC-13 reworded; ACC-19 and ACC-20 added; Requirement 3 criteria 24 and 31 labelled), `v12/04-CARDS` (criterion 33: owner listed first), `v12/13-API-CONVENTIONS` (join-requests rows carry `email`; members endpoint lists the owner once), `v12/15-TESTING` (V12-T2 reworded; V12-T8, V12-T9, V12-M1, V12-D1 added as criteria 36 to 39), `v12/22-INVITES-JOIN-REQUESTS` (INV-13 and INV-19 reworded; INV-27 and INV-28 added).
 - Impact: the pending join-request list carries each requester's Email for the owner, a Manager, and an Admin only (the Email now has three staff-only places); the Sidebar Team members list starts with the owner, tagged "Owner", with no remove action; no data-writing Playwright test for the invite flow is scheduled (manual checklist, automated test deferred).
 - `v1/` to `v11/` are unchanged (V11 branding untouched). Details and the consistency check: `.kiro/specs/CHANGELOG.md`, "Round 2 within V12".
+
+## V13 - 2026-11-21
+### Changes
+- `v13/` holds `00-OVERVIEW` (Decisions AG to AI, Open Questions 29 and 30), `04-CARDS` (Requirement 30, role tag), `22-INVITES-JOIN-REQUESTS` (Requirement 31, control sizes), the new domain `23-DOCUMENT-TITLES` (Requirement 32), `13-API-CONVENTIONS` (`role` on members), and `15-TESTING`.
+- Requirement 21 criterion BRAND-11 (the suffix "· RevoTask") is superseded by TITLE-01 and TITLE-02.
+### Reason
+- The owner asked for a role tag in the assignee picker, Invite and Generate controls that match the design system, and titles of the form "RevoTask | name of the open menu".
+### Impact
+- API: one additive field. No migration. Frontend: new `RoleTag`, `lib/titles.ts`, `generateMetadata` on three routes, control sizes in two components.
+- Nothing in V13 is implemented; task group 36 carries the work. `v1/` to `v12/` are unchanged.
+- Open for the owner: Open Questions 29 and 30 (both resolved by default).

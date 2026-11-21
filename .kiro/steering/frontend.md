@@ -369,3 +369,8 @@ overriding any looser prose description elsewhere.
   shows one "link is not valid" page.
   **Rationale:** A guest gets status only, and the token must not leak.
   **Example:** `GET /api/shared/{token}` returns `has_board_access`; when true the page redirects.
+
+## V13: titles, role tag, control sizes
+- **Rule:** every document title is `RevoTask | <name>` (root `title.template`); a Board uses `generateMetadata`; an open Inbox or Activity panel (and an open Card) sets and restores `document.title`. Cut at 60 characters; never put a token or Email in a title.
+- **Rule:** assignee options and Team members rows carry a role tag (`BaseBadge`, "Supervisor" or "Member"); the members endpoint returns `role`.
+- **Rule:** header and modal buttons are 40 pixels (`md`); compact 32 pixels only inside a dense row; a field and its button share one height.

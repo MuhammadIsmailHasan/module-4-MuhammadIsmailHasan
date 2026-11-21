@@ -921,7 +921,27 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
   - [ ] 35.30 Checkpoint - Run the V12 checks
     - Ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass; run the migration on a scratch database; run `flask seed-data`; check Home as `member` (only Alpha Board), the invite flow by the manual checklist of task 35.31, a card edit with the network throttled, and the Profile page at 360 and 1280 pixels. Ask the user if questions arise.
     - _Requirements: 15.29, 15.30, 15.31, 15.32, 15.33, 15.34, 15.35_
+- [ ] 36. Role tag, control sizes, and document titles (Decisions AG to AI, V13)
+  - [ ] 36.1 Return `role` from the members endpoint and add the Frontend `RoleTag`
+    - Rework of ticked 35.3 (members list), 35.19 (assignee picker, Sidebar), and 16.x: `role` on `BoardMemberSchema`; `Member.role`; `RoleTag`; assignee option text, keywords, and Sidebar rows; no role in `/api/shared`.
+    - _Requirements: 30.1, 30.2, 30.3, 30.4, 30.5_
+  - [ ]* 36.2 Write the role tests
+    - **Property 60: Role tag follows the list** (`vitest`, fast-check) and a `pytest` check that the members rows carry `role` and never `manager` or `admin`, and that the query count is unchanged.
+    - **Validates: Requirements 30.1, 30.2**
+  - [ ] 36.3 Bring the Invite and Public link controls to the control scale
+    - Rework of ticked 35.20 and 35.21: header buttons at `md`, modal buttons at `md`, link field and Copy in one row at 40 pixels, titled sections, compact Approve and Reject with a 44 pixel target below 960 pixels, icon-only header labels when narrow; run `styling.test.ts`.
+    - _Requirements: 31.1, 31.2, 31.3, 31.4, 31.5, 31.6_
+  - [ ] 36.4 Build `lib/titles.ts` and set every document title
+    - Root `title.template`, page `metadata`, `generateMetadata` for the Board, Categories, and Shared pages, `AppShell` and Card modal title effects, the 60 character cut.
+    - _Requirements: 32.1, 32.2, 32.3, 32.4, 32.5, 32.6, 32.7_
+  - [ ]* 36.5 Write the title tests
+    - **Property 59: Title builder**, one render test per route title, and `document.title` of `/login` and `/register` in the auth e2e suite.
+    - **Validates: Requirements 32.1, 32.4, 32.6, 32.8**
+  - [ ] 36.6 Sync steering and guidelines to V13, then checkpoint
+    - `.kiro/steering/frontend.md` and `guidelines/frontend.md` (titles, role tag, header control size); ensure `pytest`, `tsc --noEmit`, `vitest run`, and `next build` pass and check the three changes in Chrome at 360 and 1280 pixels.
+    - _Requirements: 30.2, 31.1, 32.1_
 ## Notes
+- Group 36 (V13) is Frontend work plus one field (`role`) on the members endpoint; 36.1 and 36.3 and 36.4 are independent, and 36.6 comes last. It reworks ticked 35.x tasks; their checkboxes stay ticked.
 - Round 2 within V12 (no new version) adds 35.31 to 35.33 (placed before 35.29 so that the checkpoint 35.30 stays last) and rewords 35.3, 35.9, 35.10, 35.19, 35.21, 35.28, and 35.30. Explicitly deferred: automated invite-flow end-to-end test; the invite flow is a manual checklist (35.31).
 - Group 35 (V12) is the only group that changes behaviour built by ticked groups 2 to 5, 8 to 10, 13, 16 to 18, 26 to 28, and 33; their checkboxes stay ticked and each 35.x task names what it reworks. 35.1 comes first; 35.3 and 35.11 need 35.1; 35.5, 35.7, 35.9, 35.13, 35.15, and 35.17 need 35.3 (and 35.9 needs 35.11); the Frontend tasks 35.19 to 35.27 need the Backend tasks they call. Task 22.1 (stored `progress`) is superseded by 35.15: build only `views_count` there. The Backend and the Frontend deploy together.
 - Group 34 (V11, Decision X) changes only the Frontend and moves three files; 34.2 needs 34.1, 34.3 needs 34.2, and 34.4 and 34.5 need 34.3. V10 round 3 (Decisions U to W) is applied separately; group 34 touches `Sidebar.tsx`, `AuthSplitLayout.tsx`, and `AppHeader.tsx`, which round 3 tasks may also edit, so merge in whichever order they land.
@@ -1047,7 +1067,9 @@ V4 adds group 24, which migrates the already-implemented backend (tasks 1 to 13,
     { "id": 98, "tasks": ["35.6", "35.8", "35.10", "35.14", "35.16", "35.18", "35.19"] },
     { "id": 99, "tasks": ["35.20", "35.21", "35.22", "35.24", "35.25", "35.26", "35.27"] },
     { "id": 100, "tasks": ["35.23", "35.28", "35.31", "35.32", "35.33"] },
-    { "id": 101, "tasks": ["35.30"] }
+    { "id": 101, "tasks": ["35.30"] },
+    { "id": 102, "tasks": ["36.1", "36.3", "36.4"] },
+    { "id": 103, "tasks": ["36.2", "36.5", "36.6"] }
   ]
 }
 ```

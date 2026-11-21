@@ -1870,3 +1870,22 @@ The findings below were not resolved silently. Each states what was kept in V12 
 - Requirements: Open Questions 22 to 24 resolved by the owner, 25 to 27 resolved by default, 28 unchanged; Decisions M, S, Y, and AA amended; ACC-13 reworded, ACC-19 and ACC-20 added; INV-13 and INV-19 reworded (Email), INV-27 and INV-28 added; EML-02, Requirement 3 criterion 24, Requirement 4 criterion 33, and V12-T2 reworded; Requirement 15 criteria 36 to 39 added.
 - Design: Property 49 extended; members endpoint, join-requests endpoint, Invite modal, Sidebar row, access matrix row, testing strategy, consistency items 15 to 17, risks; the "Manual verification checklist (V12 invite flow)" section.
 - Tasks: 35.3, 35.9, 35.10, 35.19, 35.21, 35.28, and 35.30 reworded; 35.31 to 35.33 added.
+
+## V13 design (Decisions AG to AI)
+
+### Role tag (Decision AG)
+- Backend: `serialize_member` stays email-free; the members route adds `role` next to `is_owner` (`BoardMemberSchema.role`). `repository.list_members` already loads `User` rows, so there is no extra query (Property 39 unchanged). `/api/shared` payloads are untouched.
+- Frontend: `Member.role?: "member" | "supervisor"`. A small `RoleTag` (`BaseBadge`, `shape="tag"`, tones `blue` for Supervisor and `neutral` for Member) is used by `CardAttributes` (assignee option `render` and `keywords` gain the role word) and by the Sidebar member rows. The option label stays the full name; the tag is inside the option text so the accessible name reads "Member One, Member".
+
+### Control sizes (Decision AH)
+- `InviteButton` and `PublicLinkButton`: `BaseButton variant="secondary"` at the default size; below 960 pixels the text label gets `sr-only` when the Board name needs the room (`hidden min-[…]` is not allowed: use the existing `lg:` breakpoint class and `sr-only`).
+- `InviteModal`: Generate, Regenerate, Disable at `md`; the link row is `flex items-center gap-2` with `BaseInput` and the Copy button both `min-h-control`; sections are `section` + `h3`; Approve and Reject keep `size="sm"` inside the row with a touch-target wrapper below 960 pixels.
+
+### Document titles (Decision AI)
+- `app/layout.tsx`: `metadata.title = { default: "RevoTask", template: "RevoTask | %s" }`. Pages export `metadata = { title: "Profile" }` or `generateMetadata` (`boards/[id]/page.tsx`, `boards/[id]/categories/page.tsx`, `shared/[token]/page.tsx`). The Board page loads the Board once; `generateMetadata` reads the same request through `React.cache` so the Board is fetched once per render.
+- `lib/titles.ts`: `pageTitle(name)` (cut at 60 characters with "…") and `panelTitle(view, unread)`; pure functions, unit tested.
+- `AppShell` sets `document.title` in an effect while a side panel is open and restores the previous title on close; the Card modal does the same while open (Open Question 29). A route change clears both.
+
+### Properties (V13)
+- **Property 59: Title builder.** For any name, `pageTitle(name)` starts with `RevoTask | `, is at most 60 characters after the prefix, and contains no newline; `panelTitle` adds `(n)` only when `n > 0`. **Validates: Requirements 32.1, 32.4, 32.6**
+- **Property 60: Role tag follows the list.** For any members list, every assignee option shows exactly the role the list returned, never `manager` or `admin`. **Validates: Requirements 30.1, 30.2**

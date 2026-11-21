@@ -230,3 +230,6 @@ visibility icon or computes card progress; every Inbox row is a link; the
 Profile page uses the one-column and two-column grid with token classes only.
 **Rationale:** A reviewer checks the V12 behaviour against one named rule.
 **Example:** a `<button>Save changes</button>` in `CardModal` is a violation.
+
+## V13: titles, role tag, control sizes
+Titles are `RevoTask | <name>` through `metadata.title.template`; use `generateMetadata` for a Board. Show a role tag beside each person in the assignee picker. Buttons beside a 40 pixel field are 40 pixels (`md`), not `sm`.
