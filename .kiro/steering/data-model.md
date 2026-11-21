@@ -118,17 +118,17 @@ inclusion: always
 
 - **Rule:** `User` has a unique, case-insensitive `username` (3 to 30 characters
   from `a-z 0-9 _ .`, stored lowercase, not null) and a unique,
-  case-insensitive `email` (valid format, at most 255, stored lowercase;
-  nullable in the database only for migrated legacy accounts). There is no
+  case-insensitive `email` (valid format, at most 255, stored lowercase,
+  not null). There is no
   `login_identifier` column. `avatar_path` is a nullable generated file name
   (`<32 hex>.png|jpg|webp`) under `UPLOAD_DIR/avatars/`, never a URL; the API's
   `avatar_url` is computed from it as a signed, time-limited URL.
   **Rationale:** Two real columns give field-level validation and errors; the
-  nullable email exists only so the V10 migration can keep username-only
-  accounts until they add an address.
+  V10 migration resets local development data instead of converting legacy
+  accounts, so both columns are NOT NULL and the seed fills them.
   **Example:** `db.Index("uq_users_username_lower", db.func.lower(User.username), unique=True)` and `db.Index("uq_users_email_lower", db.func.lower(User.email), unique=True)`.
 - **Rule:** `RateLimitAttempt` is `id, scope (login_pair | login_ip |
-  availability), key_hash, created_at`, with an index on `(scope, key_hash,
+  availability | change_password), key_hash, created_at`, with an index on `(scope, key_hash,
   created_at)`. `key_hash` is a keyed hash, never a plaintext identifier,
   email, or address.
   **Rationale:** A shared table makes the limiter correct across workers

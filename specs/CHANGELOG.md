@@ -108,3 +108,17 @@ Versions match `.kiro/specs/CHANGELOG.md`. Each folder holds requirement domains
 - `v10/00-OVERVIEW` (Decisions Q to T; Decisions L, M, O, P annotated; Glossary: Avatar_Image, Avatar_URL, Initials_Avatar, Safe_Return_Path; Open Questions 7, 8, 10, 12 resolved, 14 to 16 added), `v10/01-AUTH` (1.6, 1.34, 1.37 reworded; 55 to 62 added: invalid or expired Token on any request, tests AUTH-E2E-SO-11 and -12), `v10/03-BOARDS` (25 reworded; 30 to 32 added: Email to staff), `v10/04-CARDS` (33 reworded: assignee popover with Email), `v10/13-API-CONVENTIONS` (10), `v10/14-NON-FUNCTIONAL` (28), `v10/15-TESTING` (16 reworded; 20 to 24 added), `v10/18-SHARE-LINKS` (24), `v10/19-APP-HEADER-PROFILE` (8 to 10 reworded; 18 to 33 added: avatar upload), `v10/20-RATE-LIMITING` (7 withdrawn; 8, 10, 15 reworded; 18 added: registration not limited).
 - Impact: no `RATE_LIMIT_REGISTER_MAX` and no register limiter; avatar upload endpoints and `avatar_path` replace the `https` avatar URL; `GET /api/boards/{id}/candidates` and `GET /api/boards/{id}/members?include=email` return `email` to staff; an unusable Token ends on `/login` with the cookie removed. Full list in `.kiro/specs/CHANGELOG.md`, "Round 2 within V10".
 - Open for the owner: the availability limiter was kept by the specifier (Open Question 14); avatar visibility (15); Email exposure through name search (16).
+### V10 round 3 (same version; amendment)
+- `v10/00-OVERVIEW` (Decisions U to W; Open Questions 9, 11, 13 to 18 resolved), `v10/01-AUTH` (1.6 reworded; 1.52, 1.53 withdrawn; 1.63, 1.64 added), `v10/03-BOARDS`, `v10/04-CARDS`, `v10/07-COMMENTS`, `v10/12-SEARCH-FILTER`, `v10/15-TESTING` (16, 18, 24 reworded; 25 to 27 added), `v10/17-API-DOCS` (11), `v10/18-SHARE-LINKS` (11, 25), `v10/19-APP-HEADER-PROFILE` (avatar routes under `/api/users`; 13, 14 withdrawn; 34 to 40 added), `v10/20-RATE-LIMITING` (change-password limiter, 19 to 23).
+- Impact: avatar routes move to `/api/users/me/avatar`; `avatar_url` appears in Comment, member, candidate, and assignee payloads for signed-in viewers (Guests: initials); the V10 migration resets local development data and the seed fills username, email, and full_name; change-password is rate limited; candidate search needs 2 characters.
+- Still open: Open Questions 19 to 21 (V11). Details in `.kiro/specs/CHANGELOG.md`, "Round 3 within V10".
+## V11 - 2026-11-21
+### Changes
+- `v11/` holds the changed domains: `00-OVERVIEW` (Decision X, Glossary terms Brand_Assets, Logo_Mark, Logo_Full, BrandLogo, Embedded_Raster, Favicon_File, Open Questions 19 to 21), `14-NON-FUNCTIONAL` (criteria 16, 19, 26 reworded), `15-TESTING` (criterion 28 added), and the new domain `21-BRANDING` (BRAND-01 to BRAND-17: favicon through the Next.js file convention, logos in `public/brand/` shown only through `BrandLogo` with `next/image` and `unoptimized`, alt text, sizes, Sidebar, sign-in pages, header, tests).
+### Reason
+- The product owner supplied the RevoTask logo and favicon to replace the placeholder mark.
+### Impact
+- No API, data model, or permission change. Frontend only.
+- Finding: both SVG logos wrap a PNG (640 by 640 and 720 by 220 pixels, no alpha), so they are not true vector art (Open Question 19). Only `favicon.ico` is supplied (Open Question 20).
+- V10 round 3 is applied separately; `v10/` is unchanged by V11. Full list in `.kiro/specs/CHANGELOG.md`, V11.
+

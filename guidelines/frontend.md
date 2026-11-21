@@ -204,3 +204,18 @@ no other component reads an `email` field of another user.
 **Rationale:** The email is shown to staff in those two places and nowhere
 else; one narrow place is easy to review.
 **Example:** a sidebar member row renders `member.full_name` and `member.username`.
+An avatar is drawn only through `BaseAvatar` with the full name as `alt` and tooltip, never the email.
+---
+**Rule:** Show the logo only through `BrandLogo` (`components/shared/`), which
+renders `next/image` with `unoptimized` for the SVG files in `public/brand/`,
+passes `width` and `height` equal to the file's `viewBox`, and sets alt text
+`RevoTask`, or `alt=""` where a labelled control or the visible name is beside it.
+**Rationale:** One component keeps paths, size, and alt text consistent; the
+SVG files wrap a PNG, so the display size must not exceed the `viewBox`.
+**Example:**
+```tsx
+// Bad
+<img src="/brand/logo-revo.svg" />
+// Good
+<BrandLogo variant="mark" decorative />
+```

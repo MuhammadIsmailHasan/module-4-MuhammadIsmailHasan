@@ -153,4 +153,4 @@ sees is computed per response.
 **Rationale:** A stored URL expires or leaks; a bare name cannot be turned
 into a path outside the upload folder.
 **Example:** `avatar_path = db.Column(db.String(64), nullable=True)` holds
-`3f9c...e1.png`, and the API returns a signed `avatar_url` or `null`.
+`3f9c...e1.png`, and the API returns a signed `avatar_url` or `null`. A lookup that only needs a name and an avatar selects `id, full_name, avatar_path` columns, not the user entity, so `email` is never loaded.

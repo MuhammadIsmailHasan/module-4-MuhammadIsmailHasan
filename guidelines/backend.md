@@ -56,7 +56,7 @@ every error is `{"status": false, "message": ..., "error": {"code": ..., "detail
 with the matching HTTP status (`429` included, with a `Retry-After` header and
 `details.retry_after`) — produced by one shared helper, not re-typed per route.
 `details` appears only for `VALIDATION_ERROR`, a registration `CONFLICT`, and
-`RATE_LIMITED`.
+`RATE_LIMITED`. The change-password route is limited too (scope `change_password`, keyed by user id).
 
 **Rationale:** A single helper means every endpoint's envelope is identical by
 construction, not by each author remembering the convention.

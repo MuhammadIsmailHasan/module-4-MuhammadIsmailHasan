@@ -15,12 +15,15 @@ inclusion: always
   `card_repository.get_by_id(...)`; `schema.py` defines the marshmallow `CardCreateSchema` and `CardSchema`.
 
 - **Rule:** Shared, reusable frontend primitives live only in
-  `components/shared/` (`BaseButton`, `BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar`, `BaseTooltip`, `BaseCombobox`, `BaseMenu`), implemented as
+  `components/shared/` (`BaseButton`, `BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar`, `BaseTooltip`, `BaseCombobox`, `BaseMenu`, `BrandLogo`), implemented as
   thin wrappers over the shadcn/ui primitives in `components/ui/`; feature pages
   import the `Base*` components and never `components/ui/` directly, and never
   define their own buttons/badges/modals.
   **Rationale:** One place to fix styling, accessibility, and behavior across
   the whole app.
+  `BrandLogo` is the one renderer of the logo files (V11): feature code never
+  writes `/brand/...` or a raw `<img>`. Brand files live in `frontend/public/brand/`
+  and the favicon in `frontend/app/favicon.ico`; `frontend/images/` does not exist.
   **Example:** `My Tasks` and `Profile` pages both render `<BaseButton>`, never
   a raw `<button>`.
 

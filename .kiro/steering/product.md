@@ -87,7 +87,9 @@ Business rules Kiro must respect when generating requirements, design, or code.
   `Legal, Finance` — neither list leaks into the other board's filter row.
 
 - **Rule:** Accounts have a unique `username` and a unique `email`; login takes
-  one "username or email" value. Failed logins are rate limited (5 per
+  one "username or email" value. Every account has both fields (the local
+  database is reset on migration and re-seeded; there is no legacy-account
+  path and no first-login email prompt). Failed logins are rate limited (5 per
   identifier and address, 20 per address, in 15 minutes) and a blocked request
   is `429`. Registration is not rate limited yet (deferred); the availability
   check is. Sign-out and the profile live in a user menu in the app header, not
@@ -97,11 +99,13 @@ Business rules Kiro must respect when generating requirements, design, or code.
   **Example:** `POST /api/auth/login { "identifier": "ada", "password": "..." }`.
 - **Rule:** A user uploads a profile picture on the Profile page: PNG, JPEG, or
   WebP, at most 2 MB, checked by the file's real content on the server. A user
-  without a picture, or whose picture fails to load, shows initials. A guest on
-  a share link sees initials only.
+  without a picture, or whose picture fails to load, shows initials from the full
+  name. The picture shows in comments and replies, the board member lists
+  (sidebar Team members, member search, assignee popover), and on cards (board
+  card assignee, card modal chip). A guest on a share link sees initials only.
   **Rationale:** A picture the user owns replaces a URL that can break or
   track; the share view stays status-only.
-  **Example:** `POST /api/auth/me/avatar` with a 3 MB PNG returns `400`.
+  **Example:** `POST /api/users/me/avatar` with a 3 MB PNG returns `400`.
 - **Rule:** A user's email is shown only to staff, in two places: the board
   member search (owner, manager, admin) and the assignee popover (a supervisor,
   manager, or admin with write access to the board). It never appears in

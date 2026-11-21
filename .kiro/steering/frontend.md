@@ -136,13 +136,24 @@ overriding any looser prose description elsewhere.
   **Rationale:** A fixed-height modal that clips its content hides fields.
   **Example:** a card with many subtasks scrolls inside the left pane.
 
-- **Rule:** The application is named RevoTask. The Sidebar's toggle is the logo
-  mark: expanded it shows the name beside the mark; collapsed it shows the mark
-  alone with the tooltip "RevoTask". Corner radii stay small (Cards, columns,
+- **Rule:** The application is named RevoTask. The Sidebar's toggle is the logo:
+  expanded it shows the full logo (mark with the RevoTask wordmark); collapsed it
+  shows the mark alone with the tooltip "RevoTask". The logo and the favicon are
+  the files the product owner supplied (V11, Decision X): `app/favicon.ico` (file
+  convention, no manual `<link>`) and `public/brand/logo-revo.svg` and
+  `public/brand/logo-text-revo.svg`, shown only through `BrandLogo`
+  (`components/shared/BrandLogo`, variants `mark` and `full`, `next/image` with
+  `unoptimized` because Next.js does not optimize SVG). Alt text is "RevoTask", or
+  empty where a labelled control or the visible name sits beside it; `width` and
+  `height` are the `viewBox` (480 by 480, 540 by 165) and the display never
+  exceeds them. Both SVG files wrap a raster PNG (640 by 640 and 720 by 220, no
+  alpha), so they are not recolourable and sit on a token surface tile on the
+  brand panel. Corner radii stay small (Cards, columns,
   buttons, popovers, modal: 8px or less) through the radius tokens.
   **Rationale:** The product owner wants the calmer, less rounded look of the
   reference.
-  **Example:** `--radius-card: 6px` in `styles/tokens.css`.
+  **Example:** `--radius-card: 6px` in `styles/tokens.css`; `<BrandLogo variant="mark" decorative />`
+  inside the collapsed toggle, never a raw `<img src="/brand/logo-revo.svg">`.
 
 - **Rule:** Comments and activity rows show the name the API sends
   (`author_name`, `actor_name`); the board-member map is only a fallback, and
@@ -285,9 +296,9 @@ overriding any looser prose description elsewhere.
   are **Profile** above **Log out**. Log out calls `POST /api/auth/logout` and
   clears the cookie even when the call fails. The `/profile` page edits full
   name and avatar (choose an image, preview it, upload, remove; PNG, JPEG, or
-  WebP up to 2 MB, with initials as the fallback), shows username and email
-  read-only, and changes the password (current and new, at least 8). A user whose `email` is
-  null sees a blocking prompt to add one.
+  WebP up to 2 MB, with initials as the fallback; `BaseAvatar` draws every avatar: comments,
+  member lists, board cards, and the card modal), shows username and email
+  read-only, and changes the password (current and new, at least 8).
   **Rationale:** One entry point for account actions, reachable on a phone.
   **Example:** `<UserMenu />` renders `Profile` then `Log out`; the Sidebar has neither.
 - **Rule:** The login form is one "Username or email" field plus a password: a

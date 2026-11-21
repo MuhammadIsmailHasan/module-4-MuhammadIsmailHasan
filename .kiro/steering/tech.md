@@ -37,7 +37,7 @@ inclusion: always
 - **Rule:** Both apps ship a `.env.example`; no real `.env` file is ever committed.
   The backend's lists the rate-limit settings (`RATE_LIMIT_WINDOW_SECONDS`,
   `RATE_LIMIT_LOGIN_PAIR_MAX`, `RATE_LIMIT_LOGIN_IP_MAX`,
-  `RATE_LIMIT_AVAILABILITY_MAX`) and `TRUSTED_PROXY_COUNT`.
+  `RATE_LIMIT_AVAILABILITY_MAX`, `RATE_LIMIT_CHANGE_PASSWORD_MAX`) and `TRUSTED_PROXY_COUNT`.
   **Rationale:** A leaked database URL or JWT secret in a public repo is a real
   incident, not a hypothetical.
   **Example:** `.env.example` lists `DATABASE_URL=`, `JWT_SECRET=`,
@@ -82,3 +82,14 @@ inclusion: always
   third-party request.
   **Example:** `BasePopover` wraps the shadcn `Popover`; feature code never
   imports `components/ui/popover` directly.
+
+- **Rule:** The logo and favicon follow the Next.js 16 conventions: the favicon is
+  `app/favicon.ico` (no manual `<link>`, no `metadata.icons`), logos are static
+  files in `public/brand/` referenced by absolute `/brand/...` paths and rendered
+  with `next/image` plus `unoptimized` (SVG is not optimized; `dangerouslyAllowSVG`
+  stays off); `priority` is deprecated, so a logo uses `loading="eager"`. `app/icon`,
+  `app/apple-icon`, and `app/manifest` wait until the owner supplies PNG icons.
+  **Rationale:** File conventions need no code, and `unoptimized` avoids the
+  SVG injection risk the optimizer's opt-in carries.
+  **Example:** `<Image src="/brand/logo-revo.svg" width={480} height={480} alt="RevoTask" unoptimized />`
+  inside `BrandLogo`.

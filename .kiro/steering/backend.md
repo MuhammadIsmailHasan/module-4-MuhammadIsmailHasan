@@ -114,7 +114,11 @@ inclusion: always
   its own scope, a 15-minute signature, `avatar_url` issued only in responses
   to signed-in requests, and the file stored by the same file store under a
   generated name; the type is read from the file's leading bytes, not from its
-  name or the client's header.
+  name or the client's header. The same URL is added to comment authors,
+  board members, candidates, and card assignees by the batched name lookup
+  (it selects `id, full_name, avatar_path`, never `email`; no extra query per
+  row), signed once per distinct user per response; shared routes carry none.
+  Avatar routes live in the `users` blueprint under `/api/users/...`.
 
 - **Rule:** Board access is resolved in one place, `board_service.can_access(user, board)`:
   a guest never has board access (401 on every board route outside

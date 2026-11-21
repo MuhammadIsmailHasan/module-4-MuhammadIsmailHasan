@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document is the technical design for the Kanban Task Management application (Version V10). It implements the V10 `requirements.md` using the stack and conventions fixed in the workspace steering (updated to V10 in this revision): a Flask + SQLAlchemy + flask-smorest REST API (marshmallow schemas, generated OpenAPI) organized as one blueprint per domain, and a mobile-first Next.js (App Router, TypeScript) frontend. Requirement references use the criterion numbers of the current `requirements.md`. "Decision 1" to "Decision P" refer to the Decisions Log in `requirements.md`; Decisions K to P are new in V10 and are summarised in the section "V10 Design: Share Links, Identity, Header, Rate Limiting, Route Guard".
+This document is the technical design for the Kanban Task Management application (Version V11). It implements the V10 `requirements.md` using the stack and conventions fixed in the workspace steering (updated to V10 in this revision): a Flask + SQLAlchemy + flask-smorest REST API (marshmallow schemas, generated OpenAPI) organized as one blueprint per domain, and a mobile-first Next.js (App Router, TypeScript) frontend. Requirement references use the criterion numbers of the current `requirements.md`. "Decision 1" to "Decision P" refer to the Decisions Log in `requirements.md`; Decisions K to P are new in V10 and are summarised in the section "V10 Design: Share Links, Identity, Header, Rate Limiting, Route Guard".
 
 Key design decisions:
 
@@ -357,7 +357,8 @@ Frontend handling: `AttachmentList` renders `<a href={file_url} target="_blank" 
 | `CommentThread` | Client | Priority first, Latest/Popular toggle with reply-count badge, Reply only where `parentId === null`, create-card button only where `comment.canCreateCard`. |
 | `CategoriesScreen` | Client | CRUD scoped to the current board. |
 | `BoardMembersScreen` | Client | Add and remove members; shown to the owner, Manager, Admin. |
-| `AuthSplitLayout` | Server | Brand panel hidden at mobile width; form card elevated and rounded. |
+| `AuthSplitLayout` | Server | Brand panel hidden at mobile width; form card elevated and rounded. V11: the brand panel and the mobile form header show `BrandLogo variant="full"` (section "V11 Design"). |
+| `BrandLogo` | Shared (Server) | V11. The only renderer of the logo files: `variant` `mark` or `full`, `decorative`, `size`; `next/image` with `unoptimized`. |
 | `BaseCard`, `BaseVisibility` | Shared | `BaseCard` is a titled bordered section (heading bar plus content) used to group the card modal; `BaseVisibility` is the lock or open-lock icon with its label. |
 | `BaseMenu` | Shared | V10. Thin wrapper over shadcn/ui `DropdownMenu` (`@radix-ui/react-dropdown-menu`); the only file group that imports it. |
 | `BaseButton`, `BaseBadge`, `BaseModal`, `BasePopover`, `BaseCalendar` | Shared | Only place buttons, badges, modals (header, scrolling body, footer slot), popovers, and calendars are defined; thin wrappers over shadcn/ui `Button`, `Badge`, `Dialog`, `Popover`, `Calendar` (Decisions H and I), themed from the tokens. |
@@ -1380,8 +1381,8 @@ See "Migration `b7d2e4f6a801`". The Email is NOT NULL, so `UserSchema.email` is 
 
 - Avatar files keep their EXIF data and no image library re-encodes them; a polyglot file that begins with valid image bytes is accepted (served with `nosniff` and a fixed type). Accepted for V10.
 - Werkzeug buffers the multipart body, so the reverse proxy caps the request near 3 MB; the app-level 2 MB check limits only what is stored. Accepted for V10 and recorded in the PR (task 33.28).
-- `POST /api/auth/register` still reveals taken Usernames and Emails through its 409, so the availability limiter alone does not stop enumeration (Decision W, Open Question 14 resolved as an accepted gap).
-- Fresh avatar URLs per response cause refetches (Open Question 17).
+- `POST /api/auth/register` still reveals taken Usernames and Emails through its 409, so the availability limiter alone does not stop enumeration (Decision W, Open Question 14 resolved as an accepted gap). Avatars beside activity rows and Notifications stay initials-only (Open Question 18, resolved)..
+- Fresh avatar URLs per response cause refetches (Open Question 17, resolved as accepted; a stable `exp` per 15-minute bucket is the later fix).
 - The migration deletes local data; the `APP_ENV` guard is the only protection, and a developer whose `.env` leaves `APP_ENV` empty must set it before `alembic upgrade`.
 
 ## V10 Revision Notes
@@ -1401,3 +1402,79 @@ See "Migration `b7d2e4f6a801`". The Email is NOT NULL, so `UserSchema.email` is 
 - The existing seed (`backend/app/seed.py`) and `SEED_PASSWORD` create users by `login_identifier`; the seed gets `username`, `email`, and `full_name` values for every user (round 3, Decision V).
 - Existing backend tests that register with `login_identifier` or log in with `login_identifier` change to `username`, `email`, and `identifier`.
 
+
+## V11 Design: Branding, Logo and Favicon (Decision X)
+Implements Decision X and Requirement 21 (criteria 1 to 17), and rewords Requirement 14, criteria 16 and 19. No Backend, API, data model, permission, or migration change. Next.js 16.4.6 is installed; the rules below were read from `frontend/node_modules/next/dist/docs/01-app/` (`app-icons.md`, `image.md`), as `frontend/AGENTS.md` requires.
+
+### Files and where they go
+| From (untracked) | To | Why this place |
+|---|---|---|
+| `frontend/images/favicon.ico` | `frontend/app/favicon.ico` | Next.js file convention: a `favicon.ico` in the top level of `app/` produces `<link rel="icon" href="/favicon.ico" sizes="any">` with no code. |
+| `frontend/images/logo-revo.svg` | `frontend/public/brand/logo-revo.svg` | `public/` serves static files at `/brand/...`; a folder keeps brand files together. |
+| `frontend/images/logo-text-revo.svg` | `frontend/public/brand/logo-text-revo.svg` | Same. |
+
+`frontend/public/` does not exist yet and is created by the move. The move is a plain `mv` (the three files are untracked; `git status` shows `?? frontend/images/`), followed by `rmdir frontend/images` and `git add` of the new paths. No source file refers to `frontend/images/`.
+
+### Favicon (Req 21.1, 21.2)
+`app/favicon.ico` is the only icon file. The Favicon_File holds 16, 32, and 48 pixel images, which covers the browser tab and a Windows shortcut. `app/layout.tsx` keeps `metadata = { title: "RevoTask", description: ... }` and gains no `icons` field and no manual `<link>`. `GET /favicon.ico` is answered by Next.js with `image/x-icon`.
+
+### `BrandLogo` (Req 21.3 to 21.7, 21.12, 21.15)
+`components/shared/BrandLogo.tsx`, a plain function component without `"use client"`, in the same folder as the other `Base*` primitives and the only file that writes `/brand/...`.
+```tsx
+type BrandLogoProps = {
+  variant: "mark" | "full";
+  size?: "sm" | "md" | "lg";   // token height classes, default "md"
+  decorative?: boolean;        // alt="" when a name or visible text sits beside it
+  className?: string;
+};
+const FILES = {
+  mark: { src: "/brand/logo-revo.svg",      width: 480, height: 480 },
+  full: { src: "/brand/logo-text-revo.svg", width: 540, height: 165 },
+} as const;
+// <Image {...FILES[variant]} alt={decorative ? "" : "RevoTask"} unoptimized loading="eager"
+//        className={cn("w-auto", HEIGHT[size], className)} />
+```
+- **Size.** `width` and `height` are the `viewBox` numbers, so the browser reserves the aspect ratio before the file loads and nothing shifts. The displayed size comes from a height class with `w-auto`. `HEIGHT` maps `sm`, `md`, `lg` to the existing control-size tokens (`size-control-sm`, `size-control`) and, for the brand panel, a new `--logo-lg` token in `styles/tokens.css`; no pixel literal appears in the component, so `tests/styling.test.ts` stays green. The largest use in V11 is `full` about 64 CSS pixels high (about 209 wide) on the brand panel, below the 540 cap of Req 21.6; a `max-w` token class on the component keeps a later caller under the cap.
+- **Why `unoptimized`.** Next.js never optimizes SVG, and the optimizer rejects it unless `dangerouslyAllowSVG: true`, which opens an injection path that needs a strict Content-Security-Policy. `next/image` already skips optimization for a `src` ending in `.svg`; the prop is set explicitly so the choice shows in the code and survives a rename. Alternatives considered: a plain `<img>` (simplest, but breaks Req 21.4 and loses `loading` handling), an inline SVG through SVGR (extra loader, and the file is a raster in any case), a CSS `background-image` (no alt text). Choice: `next/image` with `unoptimized`.
+- **Loading.** `loading="eager"` because every logo is above the fold. `priority` is deprecated in Next.js 16, and `preload` is not used for a 14 KB file.
+- **Alt text.** Default `alt="RevoTask"`. `decorative` gives `alt=""` where the control already has a name (the Sidebar toggle button) or the visible text "RevoTask" sits beside it (the header link).
+- **Colour.** The component and its callers use token classes only (`bg-surface-raised`, `bg-brand`). The SVG files contain no colour values of their own, only the embedded PNG.
+
+### Where it is used
+| Place | Variant and rule |
+|---|---|
+| Sidebar toggle, 960px and wider, expanded (`Sidebar.tsx`, 14.16) | `full`, `decorative`, inside the existing `BaseButton` (aria-label "Collapse sidebar", `aria-expanded`). The separate text "RevoTask" is removed because the wordmark is in the image. The button changes from a `size-control` square to `h-control w-auto px-2`. |
+| Sidebar toggle, 960px and wider, collapsed | `mark`, `decorative`, in the `size-control` square button; the `BaseTooltip` label stays `RevoTask` (Decision I, on hover and focus only). The `bg-brand` fill and the `LayoutGrid` icon are removed. |
+| Sidebar drawer top, below 960px | `full`, not decorative (alt `RevoTask`), non-interactive, replacing the `LayoutGrid` tile and the text. The drawer is opened by the header Menu button. |
+| `AuthSplitLayout` brand panel (`aria-hidden`) | `full`, `size="lg"`, `decorative`, on a `bg-surface-raised` rounded tile (opaque raster, Open Question 21), replacing the "R" tile and the small text. |
+| `AuthSplitLayout` form card header, below 960px | `full`, not decorative, replacing the "R" tile and the text. This is the visible logo that Playwright checks at 360 px. |
+| `AppHeader`, pages that are not a Board, below 960px | The link to `/boards` holds `mark` (`decorative`) and the visible text RevoTask. At 960px and wider the Sidebar shows the logo and the header keeps the text link as today. |
+| Board header, shared view, profile | No logo: a Board header needs the space for the board name, and Req 18 gives the shared view no brand slot. |
+
+### Metadata (Req 21.11)
+The root `metadata.title` stays `RevoTask` and page titles keep "· RevoTask". Not added in V11: `app/icon.*`, `app/apple-icon.*`, `app/manifest.ts`, `openGraph.images`. `apple-icon` accepts only `jpg`, `jpeg`, and `png`, and a 180 pixel PNG would have to be cut from the Embedded_Raster, a derived opaque image the owner did not supply. Recorded as Open Question 20.
+
+### Finding: the SVG files are wrapped rasters (Open Question 19)
+Both files are `<svg>` documents whose only content is `<image xlink:href="data:image/png;base64,...">`. Measured: `logo-revo.svg` embeds a 640 by 640 pixel PNG (9,861 bytes) and `logo-text-revo.svg` a 720 by 220 pixel PNG (10,506 bytes); both are 8-bit RGB with no alpha channel. A group transform of about 0.75 scales them to the `viewBox`, so the `viewBox` size is where the raster has about 1.33 pixels per CSS pixel. Consequences:
+- Not scalable: above 480 (mark) and 540 (wordmark) CSS pixels the image blurs, and on a 2x screen it is already soft above 320 and 360 CSS pixels. All V11 uses are smaller; the largest is about 209 CSS pixels wide.
+- Not recolourable with CSS (`fill`, `currentColor`) and no dark variant.
+- Opaque background: the logo shows as a rectangle on a coloured surface, hence the tile on the brand panel.
+- The owner's note gave 480 and 540 as the embedded raster width. Those are the `viewBox` widths; the real raster is 640 and 720 pixels wide. Req 21.6 caps the display at the `viewBox` values because they are the smaller numbers.
+- Recommendation: ask for true vector SVGs (transparent background, light and dark variants). Replacing the files in place with the same names and `viewBox` needs no code change (Req 21.16).
+
+### Testing strategy
+Example-based. The behaviour does not vary over a generated input space (static files and fixed variants), so V11 adds no numbered Property.
+- **Playwright** `frontend/tests/e2e/branding.spec.ts` (against the deployed URL, web-first assertions, no `waitForTimeout`): `request.get("/favicon.ico")` is `ok()` with a content type matching `image/x-icon` or `image/vnd.microsoft.icon`; `page.locator('link[rel="icon"]')` has count 1; on `/login` at 1280 and at 360 pixels the visible logo image has `alt` `RevoTask` (or `alt=""` beside the text RevoTask) and `naturalWidth` above 0, read with `expect.poll`; a `page.on("request")` list for `/login` and for a signed-in `/boards` holds no host other than the application origin and the API origin.
+- **Vitest** `frontend/tests/branding.test.tsx`: `BrandLogo` renders `src`, `width`, `height`, and alt for both variants and `alt=""` with `decorative`; the Sidebar renders `full` when expanded and `mark` plus the tooltip `RevoTask` when collapsed; a source scan finds `/brand/` and `<img` only in `BrandLogo.tsx` and no hex colour in it; a file check that `frontend/images/` is absent or empty, that `public/brand/` holds both SVG files, and that `app/favicon.ico` exists and starts with the ICO header bytes `00 00 01 00`.
+- `tests/styling.test.ts` and the existing Sidebar and auth tests keep running; any Sidebar test that looks for the text "RevoTask" changes to look for the logo (task 34.4).
+
+### Risks
+- The brand panel background: the missing alpha channel is confirmed, but the background colour has not been viewed; task 34.3 opens the files in the browser and picks the tile token.
+- Replacing the Sidebar text "RevoTask" with an image removes selectable text, and the toggle's accessible name stays "Collapse sidebar". The `aside` keeps `aria-label="Sidebar"`, and the header link and the page title carry the product name.
+- `Logo_Full` at 40 px high is about 131 px wide and must fit the expanded `w-sidebar` button; checked in 34.3.
+- Browsers cache `/favicon.ico` hard; the owner may need a hard refresh to see the new icon.
+
+### V11 Revision Notes
+- Requirements: Decision X, Glossary (Brand_Assets, Logo_Mark, Logo_Full, BrandLogo, Embedded_Raster, Favicon_File), Open Questions 19 to 21, Requirement 21, Requirement 14 criteria 16 and 19 reworded, Requirement 15 criterion 28 added.
+- Code: nothing implemented; task group 34 carries the work.
+- V10 round 3 (Decisions U to W) is applied separately and is not touched by V11.

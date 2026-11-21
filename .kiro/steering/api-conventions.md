@@ -98,9 +98,14 @@ inclusion: always
   `GET /api/boards/{id}/members` returns `id`, `full_name`, `username`, and adds
   `email` only with `?include=email`, which needs write access to the board
   (otherwise `403`). Avatar endpoints: `POST` (multipart, field `file`) and
-  `DELETE /api/auth/me/avatar`, and the signature-checked, token-free
-  `GET /api/auth/avatars/{user_id}/file`; `avatar_url` in a `user` payload is a
-  signed URL or `null`, and no other payload carries it.
+  `DELETE /api/users/me/avatar`, and the signature-checked, token-free
+  `GET /api/users/{user_id}/avatar/file`; `avatar_url` in a `user` payload is a
+  signed URL or `null`. Signed-in responses also carry it as `author_avatar_url`
+  (comments, replies), `avatar_url` (members, candidates), and
+  `assignee_avatar_url` beside `assignee_name` (cards); no `/api/shared` payload
+  carries any avatar, and the shared card carries `assignee_name` only.
+  `candidates` needs a search of at least 2 characters (`400 details.search`).
+  `POST /api/auth/change-password` is rate limited (`429 RATE_LIMITED`).
   A malformed, expired, or invalid Bearer Token on a `/api/shared` route is
   ignored (the caller is a guest, never `401`).
   **Rationale:** One identifier column keeps register/login matching simple;

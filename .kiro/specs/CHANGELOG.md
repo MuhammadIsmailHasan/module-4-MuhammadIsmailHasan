@@ -234,3 +234,68 @@ This is an amendment of V10, not a new version. V10 is specified but not impleme
 - Ordering: checkpoint 33.27 sits before the round 2 tasks (33.28 to 33.38) in the file, and 33.40 re-runs the checks; 33.27 also mentions the suite, which gains SO-11 and SO-12 only in 33.38.
 - Risk: avatar files keep EXIF data (no re-encoding); Werkzeug buffers the multipart body, so the reverse proxy must cap it near 3 MB. A file URL works for 15 minutes without a Token once issued (the Decision D trade-off).
 - Old ticked tasks and the V8 to V9 snapshots keep their earlier wording by design.
+
+### Round 3 within V10 - 2026-11-21
+This is an amendment of V10, not a new version. V10 stays unimplemented in the specification sense; where this entry and earlier V10 text disagree, this entry wins.
+#### Changes
+**Specification changes**
+- **Decision U (amends R; resolves Open Question 15):** avatar routes move to `POST` and `DELETE /api/users/me/avatar` and `GET /api/users/{user_id}/avatar/file` (the round 2 `/api/auth/me/avatar` paths are gone from every document). `avatar_url` (signed, 15 minutes, signed-in viewers only) is added as `author_avatar_url` (Comments, Replies), `avatar_url` (members, candidates), and `assignee_avatar_url` plus `assignee_name` (Cards). The Frontend shows the picture or initials from `full_name` in Comments, Sidebar Team members, member search, assignee popover, board Card, and Card modal chip. Shared_View: initials only, because a share-scoped signature would need a new scope, a shared field, and a file-route branch (simpler option chosen). No extra query: the existing batched lookups also select `avatar_path`.
+- **Decision V (amends M; resolves Open Question 11):** the app is not deployed, so the V10 migration resets local data (guarded by `APP_ENV`), with no `login_identifier` backfill, no sanitized Username, no Email_Prompt, and no Email save on `PATCH /api/auth/me`. The seed gives every user `username`, `email`, `full_name`. Criteria 1.52, 1.53, 19.13, 19.14 withdrawn (IDs kept); 1.63, 1.64 added; the risk "the migration drops `avatar_url` values" removed.
+- **Decision W (amends O and S; resolves Open Questions 9, 13, 14, 16, 17, 18):** `POST /api/auth/change-password` limited under scope `change_password` (`RATE_LIMIT_CHANGE_PASSWORD_MAX`, default 5); candidate search needs at least 2 characters; Shared_View shows the assignee `full_name` only; availability limiter and open registration kept (enumeration through the register 409 is an accepted gap); EXIF retention, multipart buffering, avatar URL churn, and initials-only avatars beside activity rows and Notifications accepted.
+**Design changes**
+- Design section "Round 3 within V10"; migration section rewritten as a reset; Property 45 (reset) and 44, 46, 49 revised; Property 50 added.
+**Task changes**
+- 33.1, 33.2, 33.7, 33.18, 33.28 to 33.30 reworded; 33.27 ordering note (its suite run precedes SO-11 and SO-12; the final run is 33.48); new 33.41 to 33.48 in waves 84 to 86. No ID renumbered; V11 (group 34, waves 90 to 94) untouched.
+**Steering and guidelines**
+- `product.md`, `data-model.md`, `api-conventions.md`, `backend.md`, `frontend.md`, `tech.md`, `guidelines/backend.md`, `guidelines/database.md`, `guidelines/frontend.md`.
+**Implementation changes**
+- None made in this revision (documentation only).
+**Breaking changes**
+- Avatar route paths differ from round 2 (nothing implemented, no client affected); `user.email` becomes non-null.
+#### Reason
+- Owner answers: avatars under `/api/users`, avatars visible where people act, local-only development, and agreement with the recommendations for Open Questions 9, 13, 14 to 18.
+#### Impact
+- Requirements: 1.6, 1.52, 1.53, 1.63, 1.64, 3.25, 3.30, 3.32, 4.33, 7.21, 7.22, 15.25 to 15.27, 17.11, 18.11, 18.25, 19.11 to 19.16, 19.26, 19.34 to 19.40, 20.10, 20.12, 20.19 to 20.23, Decisions U to W, Open Questions 9, 11, 13 to 18. Snapshots: `specs/v10/` domains 00, 01, 03, 04, 07, 12, 15, 17, 18, 19, 20.
+- Still open: Open Questions 19 to 21 (V11).
+#### Consistency check (round 3)
+- Resolved: the round 2 deviation note (avatar paths under `/api/auth`) is superseded by Decision U; checkpoint 33.27 vs SO-11 and SO-12 ordering (33.27 now says SO-11 and SO-12 are first run in 33.48).
+- Open for the owner: tasks 33.1, 33.3, 33.5 and others are ticked `[x]` while design.md says nothing is implemented; if code exists, 33.1 and 33.7 describe a migration and a Profile that the reset and Email changes alter, and 33.2 is still unticked.
+- Open for the owner: requirement 19.38 lists Home tile member avatars but Decision U's list does not name them.
+
+## V11 - 2026-11-21
+This is a new version: V10 stays as written, and V11 is a separate request. It follows V10 in this file; V10 round 3 is recorded above this heading.
+
+### Changes
+**Specification changes**
+- **Decision X, RevoTask logo and favicon:** the owner's `favicon.ico`, `logo-revo.svg` (square mark, `viewBox` 480 by 480), and `logo-text-revo.svg` (mark plus wordmark, `viewBox` 540 by 165) replace the placeholder mark. Favicon: `frontend/app/favicon.ico` (Next.js file convention, no manual `<link>`). Logos: `frontend/public/brand/`, referenced as `/brand/...` only inside the new shared `BrandLogo` (variants `mark` and `full`), rendered with `next/image` and `unoptimized` (Next.js does not optimize SVG), alt text `RevoTask` (empty where a labelled control or visible name is beside it), `width` and `height` equal to the `viewBox`, display never above the `viewBox`.
+- New Requirement 21 (BRAND-01 to BRAND-17), Glossary terms (Brand_Assets, Logo_Mark, Logo_Full, BrandLogo, Embedded_Raster, Favicon_File), Open Questions 19 to 21. Requirement 14 criteria 16, 19, and 26 reworded (the Sidebar toggle shows Logo_Full expanded and Logo_Mark collapsed; the brand is an image, not a 16 pixel text). Requirement 15 criterion 28 added (branding checks). No requirement renumbered.
+- Only `favicon.ico` is supplied, so no `app/icon`, `app/apple-icon`, or `app/manifest` in V11 (Open Question 20, follow-up).
+- **Finding recorded (Open Question 19):** both SVG files are rasters: each wraps a base64 PNG (640 by 640 and 720 by 220 pixels, 8-bit RGB, no alpha; about 13 KB per file). They are not scalable beyond their `viewBox`, cannot be recoloured with CSS, and have an opaque background (Open Question 21: shown on a `bg-surface-raised` tile on the brand panel). The owner's note gave the embedded size as 480 and 540 pixels; those are the `viewBox` widths, and the raster is 640 and 720 pixels wide. The cap uses the `viewBox` values (the smaller, safer numbers).
+
+**Design changes**
+- New section "V11 Design: Branding, Logo and Favicon (Decision X)": file moves, favicon convention, `BrandLogo`, the `unoptimized` choice and alternatives, where the logo appears, metadata, the raster finding, testing strategy (examples, no new Property), risks. Components table: `BrandLogo` added, `AuthSplitLayout` row updated.
+
+**Implementation changes**
+- None. Task group 34 (34.1 to 34.7) carries the work; 34.6 (steering and guidelines sync) is done in this revision. Wave ids 90 to 94 are used so ids 84 to 89 stay free for V10 round 3.
+- Nothing is moved yet: the three files are still untracked in `frontend/images/`.
+
+**Steering and guidelines (done in this revision)**
+- `.kiro/steering/frontend.md` (brand rule), `structure.md` (`BrandLogo` in `components/shared/`, brand folders), `tech.md` (Next.js 16 favicon, `next/image` with `unoptimized`, no `priority`), `guidelines/frontend.md` (logo only through `BrandLogo`). `product.md`, `data-model.md`, `api-conventions.md`, and `backend.md` are unchanged: nothing there is affected.
+
+### Breaking changes
+- None for the API. Visible: the Sidebar text "RevoTask" becomes an image, so any test that looks for that text in the Sidebar changes (task 34.4).
+
+### Reason
+- The product owner supplied the real logo and favicon in `frontend/images/` and asked for them to be placed where Next.js expects them.
+
+### Impact
+- Requirements: Decision X, Glossary, Open Questions 19 to 21, Requirement 21, 14.16, 14.19, 14.26, 15.28. Design: V11 section and the components table. Tasks: group 34. Root `specs/v11/` holds `00-OVERVIEW`, `14-NON-FUNCTIONAL`, `15-TESTING`, and the new `21-BRANDING`.
+
+### Consistency check (V11)
+- Resolved: Req 14.16 and 14.19 (name beside the mark, text name) against Requirement 21; both reworded. Req 14.26 (brand at 16 pixels semibold) no longer applies to an image and is reworded.
+- Deviation to confirm: the owner's size note (480 and 540 pixel raster) differs from the measured raster (640 and 720 pixels); the `viewBox` numbers are used as the display cap.
+- Risk: the raster is opaque RGB, so the brand panel needs a surface tile (Open Question 21); the tile colour is chosen after the files are viewed in task 34.3.
+- Risk: the Sidebar toggle's accessible name stays "Collapse sidebar" or "Expand sidebar" because the image inside is decorative; the product name reaches assistive technology through the header link and the page title.
+- Risk: only `favicon.ico` exists, so iOS home-screen and manifest icons are absent (Open Question 20).
+- Overlap: group 34 and V10 round 3 may both edit `Sidebar.tsx`, `AuthSplitLayout.tsx`, and `AppHeader.tsx` (round 3 adds avatars to member rows); they touch different parts but merge in landing order.
+- Not claimed: nothing in V11 is implemented, and V10 is still unimplemented (group 33).
