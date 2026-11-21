@@ -1,6 +1,8 @@
+from flask import current_app
+
 from app.common import clock
 from app.extensions import db
-from app.models import Card, Notification
+from app.models import Board, Card, Column, Notification, User
 
 
 def _insert():
@@ -18,7 +20,22 @@ def insert_ignore(user_id, card_id, type_, notify_date):
     stmt = (
         _insert()(Notification)
         .values(id=uuid.uuid4(), user_id=user_id, card_id=card_id, type=type_, notify_date=notify_date, is_read=False, created_at=clock.now())
-        .on_conflict_do_nothing(index_elements=["user_id", "card_id", "type", "notify_date"])
+        .on_conflict_do_nothing()
+    )
+    db.session.execute(stmt)
+
+
+def add_board(user_id, board_id, type_, actor_id=None, join_request_id=None):
+    """A Board-scoped Notification (no card). INSERT ... ON CONFLICT DO NOTHING against the partial unique indexes."""
+    import uuid
+
+    stmt = (
+        _insert()(Notification)
+        .values(
+            id=uuid.uuid4(), user_id=user_id, type=type_, card_id=None, board_id=board_id, actor_id=actor_id,
+            join_request_id=join_request_id, notify_date=clock.today(current_app.config["APP_TIMEZONE"]), is_read=False, created_at=clock.now(),
+        )
+        .on_conflict_do_nothing()
     )
     db.session.execute(stmt)
 
@@ -55,3 +72,26 @@ def get_for_user(notification_id, user_id):
 
 def mark_all_read(user_id):
     Notification.query.filter_by(user_id=user_id, is_read=False).update({"is_read": True})
+
+
+def card_context(card_ids):
+    """card id -> (title, board_id) in one query."""
+    if not card_ids:
+        return {}
+    rows = db.session.execute(
+        db.select(Card.id, Card.title, Column.board_id).join(Column, Column.id == Card.column_id).where(Card.id.in_(card_ids))
+    ).all()
+    return {r.id: (r.title, r.board_id) for r in rows}
+
+
+def board_names(board_ids):
+    if not board_ids:
+        return {}
+    return dict(db.session.execute(db.select(Board.id, Board.name).where(Board.id.in_(board_ids))).all())
+
+
+def user_names(user_ids):
+    """Full names only (never the Email), selected as columns."""
+    if not user_ids:
+        return {}
+    return dict(db.session.execute(db.select(User.id, User.full_name).where(User.id.in_(user_ids))).all())

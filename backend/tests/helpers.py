@@ -62,7 +62,7 @@ STAFF = {"manager", "admin", "owner", "sup_member"}
 class Env:
     """One board plus one user per relationship to it. Call build() once per example."""
 
-    def __init__(self, client, visibility="private"):
+    def __init__(self, client):
         reset_db()
         self.c = client
         u = self.users = {
@@ -76,7 +76,7 @@ class Env:
         }
         self.h = {k: hdr(v) for k, v in u.items()}
         self.h["guest"] = {}
-        b = client.post("/api/boards", headers=self.h["manager"], json={"name": "B", "visibility": visibility}).get_json()["data"]
+        b = client.post("/api/boards", headers=self.h["manager"], json={"name": "B"}).get_json()["data"]
         self.board = b
         self.bid = b["id"]
         self.cols = [c["id"] for c in b["columns"]]

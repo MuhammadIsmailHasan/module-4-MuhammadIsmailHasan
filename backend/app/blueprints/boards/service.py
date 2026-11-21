@@ -3,7 +3,8 @@ import secrets
 from app.blueprints.activity import repository as activity
 from app.blueprints.auth import repository as users
 from app.blueprints.boards import repository as repo
-from app.blueprints.boards.dto import DEFAULT_COLUMNS, clean_description, clean_name, clean_visibility
+from app.blueprints.notifications import repository as notifications
+from app.blueprints.boards.dto import DEFAULT_COLUMNS, clean_description, clean_name
 from app.common import clock
 from app.common.errors import Forbidden, NotFound, Unauthorized, ValidationError
 from app.common.ids import to_uuid
@@ -27,8 +28,6 @@ def can_access(actor, board):
         return False
     if actor is None:  # a Guest sees nothing here; shared links use /api/shared (V10, Decision K)
         return False
-    if board.visibility == "public":
-        return True
     return actor.role in PRIVILEGED or is_owner(actor, board) or is_board_member(actor, board)
 
 
@@ -75,8 +74,7 @@ def reload_detail(board):
 
 def create_board(actor, data):
     name = clean_name(data.get("name"))
-    visibility = clean_visibility(data.get("visibility", "private"))
-    board = repo.create_board(name, visibility, description=clean_description(data.get("description")))
+    board = repo.create_board(name, description=clean_description(data.get("description")))
     for i, col_name in enumerate(DEFAULT_COLUMNS):
         repo.add_column(board.id, col_name, float(i))
     activity.add(to_uuid(actor.id), "board.created", "board", board.id, {"name": name})
@@ -99,16 +97,11 @@ def update_board(actor, board_id, data):
             user = users.get_by_id(uid) if uid else None
             if user is None or user.role != "supervisor":
                 raise ValidationError("owner_id must reference a user with role supervisor")
+            if board.owner_id != user.id:
+                _owner_changed(actor, board, user)
             board.owner_id = user.id
         meta["owner_id"] = str(board.owner_id) if board.owner_id else None
         activity.add(to_uuid(actor.id), "board.owner_changed", "board", board.id, {"owner_id": meta["owner_id"]})
-    if "visibility" in data:
-        visibility = clean_visibility(data["visibility"])
-        if not (privileged or (actor.role == "supervisor" and (is_owner(actor, board) or is_board_member(actor, board)))):
-            raise Forbidden("Not allowed to change visibility")
-        if visibility != board.visibility:
-            board.visibility = visibility
-            activity.add(to_uuid(actor.id), "board.visibility_changed", "board", board.id, {"visibility": visibility})
     if "name" in data or "description" in data:
         if not (privileged or is_owner(actor, board)):
             raise Forbidden("Not allowed to rename the board")
@@ -120,6 +113,20 @@ def update_board(actor, board_id, data):
         activity.add(to_uuid(actor.id), "board.updated", "board", board.id, {"name": board.name, "description_changed": True})
     db.session.commit()
     return board
+
+
+def _unassign_cards(actor, board, user_id):
+    """Clear the assignee on every live Card of the Board assigned to this user; one card.unassigned row each, no Notification."""
+    for card in repo.assigned_cards(board.id, user_id):
+        card.assignee_id = None
+        activity.add(to_uuid(actor.id), "card.unassigned", "card", card.id, {"card_title": card.title, "board_id": str(board.id)})
+
+
+def _owner_changed(actor, board, new_owner):
+    previous = board.owner_id
+    if previous is not None and repo.get_member(board.id, previous) is None:
+        _unassign_cards(actor, board, previous)
+    notifications.add_board(new_owner.id, board.id, "board_added", actor_id=to_uuid(actor.id))
 
 
 def _manager_only(actor, board_id, include_deleted=False):
@@ -163,32 +170,44 @@ def list_members(actor, board_id, with_email=False):
     board = load_board(actor, board_id)
     if with_email and not can_write_staff(actor, board):
         raise Forbidden("Staff access required")
-    return repo.list_members(board.id)
+    return repo.list_members(board)
 
 
 def member_candidates(actor, board_id, search):
     board = load_board(actor, board_id)
-    require_manage_members(actor, board)
     if len((search or "").strip()) < 2:
         raise ValidationError("search must be at least 2 characters", details={"search": ["search must be at least 2 characters"]})
-    return repo.candidates(board.id, search, 20)
+    return repo.candidates(board, search, 20)
 
 
 def add_member(actor, board_id, data):
     board = load_board(actor, board_id)
-    require_manage_members(actor, board)
     uid = to_uuid(data.get("user_id"))
     user = users.get_by_id(uid) if uid else None
     if user is None:
         raise NotFound("User not found")
+    if user.role not in ("member", "supervisor"):
+        raise ValidationError(
+            "Only Member and Supervisor accounts can be added", details={"user_id": ["Managers and Admins already see every board"]}
+        )
     if repo.get_member(board.id, user.id):
         from app.common.errors import Conflict
 
         raise Conflict("User is already a member")
-    repo.add_member(board.id, user.id)
-    activity.add(to_uuid(actor.id), "board.member_added", "board", board.id, {"user_id": str(user.id)})
+    add_member_row(actor, board, user)
     db.session.commit()
     return user
+
+
+def add_member_row(actor, board, user, via=None):
+    """The shared part of add and approve: the row, the Activity_Log row, and the board_added Notification."""
+    if repo.get_member(board.id, user.id) is None:
+        repo.add_member(board.id, user.id)
+        meta = {"user_id": str(user.id)}
+        if via:
+            meta["via"] = via
+        activity.add(to_uuid(actor.id), "board.member_added", "board", board.id, meta)
+    notifications.add_board(user.id, board.id, "board_added", actor_id=to_uuid(actor.id))
 
 
 def remove_member(actor, board_id, user_id):
@@ -199,6 +218,7 @@ def remove_member(actor, board_id, user_id):
     if member is None:
         raise NotFound("Member not found")
     repo.delete_member(member)
+    _unassign_cards(actor, board, uid)
     activity.add(to_uuid(actor.id), "board.member_removed", "board", board.id, {"user_id": str(uid)})
     db.session.commit()
 
@@ -219,8 +239,8 @@ def add_column(actor, board_id, data):
 
 def _share_manager(actor, board_id):
     board = load_board(actor, board_id)
-    if not (actor.role in PRIVILEGED or is_owner(actor, board)):
-        raise Forbidden("Only the board owner, a Manager or an Admin can manage the share link")
+    if actor.role not in PRIVILEGED:
+        raise Forbidden("Only a Manager or an Admin can manage the Public link")
     return board
 
 

@@ -488,8 +488,8 @@
         "tags": [
           "boards"
         ],
-        "summary": "List visible boards",
-        "description": "Signed-in users see public plus accessible boards. No Token: 401.",
+        "summary": "List my boards",
+        "description": "Owner or member Boards for Member and Supervisor; every Board for Manager and Admin. No Token: 401.",
         "security": [
           {
             "bearerAuth": []
@@ -648,8 +648,8 @@
         "tags": [
           "boards"
         ],
-        "summary": "Update name, visibility or owner",
-        "description": "owner_id: Manager or Admin, new owner must be a supervisor. visibility: Manager, Admin, owner or member Supervisor. name: Manager, Admin or owner.",
+        "summary": "Update name, description or owner",
+        "description": "owner_id: Manager or Admin, new owner must be a supervisor. name and description: Manager, Admin or owner.",
         "security": [
           {
             "bearerAuth": []
@@ -879,7 +879,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MemberWithEmailListEnvelope"
+                  "$ref": "#/components/schemas/BoardMemberWithEmailListEnvelope"
                 }
               }
             }
@@ -932,7 +932,7 @@
           "boards"
         ],
         "summary": "List board members",
-        "description": "Requires board access. `?include=email` adds emails and needs board staff access (403 otherwise).",
+        "description": "Owner first, once, with `is_owner`. Requires board access. `?include=email` adds emails and needs board staff access (403 otherwise).",
         "security": [
           {
             "bearerAuth": []
@@ -1033,7 +1033,7 @@
           "boards"
         ],
         "summary": "Add a board member",
-        "description": "Owner, Manager or Admin. 409 when already a member.",
+        "description": "Manager or Admin, Member and Supervisor accounts only (400 otherwise). 409 when already a member. Notifies the user.",
         "security": [
           {
             "bearerAuth": []
@@ -1116,7 +1116,7 @@
           "boards"
         ],
         "summary": "Search users who can be added to a board",
-        "description": "Owner, Manager or Admin. At most 20 non-members matching `search` (at least 2 characters) on name, username prefix or exact email.",
+        "description": "Manager or Admin. Member and Supervisor accounts only, at most 20 non-members matching `search` (at least 2 characters) on name, username prefix or exact email.",
         "security": [
           {
             "bearerAuth": []
@@ -1371,8 +1371,8 @@
         "tags": [
           "boards"
         ],
-        "summary": "Get the share link state",
-        "description": "Board owner, Manager or Admin only.",
+        "summary": "Get the Public link state",
+        "description": "Manager or Admin only.",
         "security": [
           {
             "bearerAuth": []
@@ -3681,6 +3681,76 @@
         }
       ]
     },
+    "/api/comments/{comment_id}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "comments"
+        ],
+        "summary": "Delete my comment",
+        "description": "Author only (403 for everyone else, Manager and Admin included). A top-level comment takes its replies with it; the log row keeps no text.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "comment_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
     "/api/notifications": {
       "get": {
         "parameters": [
@@ -4680,6 +4750,593 @@
           }
         }
       ]
+    },
+    "/api/boards/{board_id}/invite": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "invites"
+        ],
+        "summary": "Get the invite link state",
+        "description": "Board owner, Manager or Admin only.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "board_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ],
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "invites"
+        ],
+        "summary": "Enable the invite link",
+        "description": "Creates a 256-bit token when invites are off; returns the existing one otherwise.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "invites"
+        ],
+        "summary": "Disable the invite link",
+        "description": "Idempotent: 200 when invites are already off.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/boards/{board_id}/invite/regenerate": {
+      "post": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "invites"
+        ],
+        "summary": "Replace the invite token",
+        "description": "The previous link stops working at once. Pending requests stay pending.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "board_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/invite/{token}": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteStateEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "invites"
+        ],
+        "summary": "Look up an invite",
+        "description": "Signed-in users only. One 404 for an unknown, disabled, replaced or deleted-board token.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "token",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/invite/{token}/requests": {
+      "post": {
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinRequestEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "invites"
+        ],
+        "summary": "Ask to join a board",
+        "description": "Member or Supervisor who is not on the board. 400 for Manager and Admin, 409 when already in or pending.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "token",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/boards/{board_id}/join-requests": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "default": "pending",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "all"
+              ]
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinRequestRowListEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "tags": [
+          "invites"
+        ],
+        "summary": "List join requests",
+        "description": "Board owner, Manager or Admin. Each user carries the Email. `?status=pending|approved|rejected|all`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "board_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "/api/join-requests/{request_id}": {
+      "patch": {
+        "responses": {
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinRequestEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role or board access insufficient",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid or expired Token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decide"
+              }
+            }
+          }
+        },
+        "tags": [
+          "invites"
+        ],
+        "summary": "Approve or reject a join request",
+        "description": "Manager or Admin only. 409 when already decided.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "request_id",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
     }
   },
   "info": {
@@ -4693,7 +5350,7 @@
     },
     {
       "name": "boards",
-      "description": "Boards, visibility, archive and members"
+      "description": "Boards, archive and members"
     },
     {
       "name": "columns",
@@ -4726,6 +5383,10 @@
     {
       "name": "shared",
       "description": "Read-only board view through a share link. GET only, no Token needed."
+    },
+    {
+      "name": "invites",
+      "description": "Invite link and join requests"
     }
   ],
   "openapi": "3.0.3",
@@ -5035,19 +5696,12 @@
             "type": "string",
             "maxLength": 500,
             "nullable": true
-          },
-          "visibility": {
-            "type": "string",
-            "default": "private",
-            "enum": [
-              "public",
-              "private"
-            ]
           }
         },
         "required": [
           "name"
-        ]
+        ],
+        "additionalProperties": false
       },
       "Column": {
         "type": "object",
@@ -5081,9 +5735,6 @@
           "description": {
             "type": "string",
             "nullable": true
-          },
-          "visibility": {
-            "type": "string"
           },
           "owner_id": {
             "type": "string",
@@ -5176,22 +5827,16 @@
             "maxLength": 500,
             "nullable": true
           },
-          "visibility": {
-            "type": "string",
-            "enum": [
-              "public",
-              "private"
-            ]
-          },
           "owner_id": {
             "type": "string",
             "format": "uuid",
             "description": "Supervisor user id, or null to clear",
             "nullable": true
           }
-        }
+        },
+        "additionalProperties": false
       },
-      "MemberWithEmail": {
+      "BoardMemberWithEmail": {
         "type": "object",
         "properties": {
           "id": {
@@ -5208,13 +5853,16 @@
             "type": "string",
             "nullable": true
           },
+          "is_owner": {
+            "type": "boolean"
+          },
           "email": {
             "type": "string",
             "description": "Only with ?include=email, for board staff"
           }
         }
       },
-      "MemberWithEmailListEnvelope": {
+      "BoardMemberWithEmailListEnvelope": {
         "type": "object",
         "properties": {
           "status": {
@@ -5228,7 +5876,7 @@
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/MemberWithEmail"
+              "$ref": "#/components/schemas/BoardMemberWithEmail"
             },
             "nullable": true
           }
@@ -5735,6 +6383,17 @@
               "$ref": "#/components/schemas/Subtask"
             }
           },
+          "progress": {
+            "type": "integer",
+            "description": "Derived from the subtasks: 0 to 10, or null without subtasks",
+            "nullable": true
+          },
+          "subtask_done_count": {
+            "type": "integer"
+          },
+          "subtask_total_count": {
+            "type": "integer"
+          },
           "attachments": {
             "type": "array",
             "items": {
@@ -6126,6 +6785,40 @@
         },
         "additionalProperties": false
       },
+      "Deleted": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "integer",
+            "description": "Rows removed: the comment plus its replies"
+          }
+        }
+      },
+      "DeletedEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/Deleted"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "CommentListEnvelope": {
         "type": "object",
         "properties": {
@@ -6156,11 +6849,29 @@
           },
           "type": {
             "type": "string",
-            "description": "assigned or deadline"
+            "description": "assigned, deadline, board_join_requested, board_added or board_join_rejected"
+          },
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "board_name": {
+            "type": "string",
+            "nullable": true
           },
           "card_id": {
             "type": "string",
-            "format": "uuid"
+            "format": "uuid",
+            "nullable": true
+          },
+          "card_title": {
+            "type": "string",
+            "nullable": true
+          },
+          "actor_name": {
+            "type": "string",
+            "nullable": true
           },
           "is_read": {
             "type": "boolean"
@@ -6565,6 +7276,16 @@
               "$ref": "#/components/schemas/Subtask"
             }
           },
+          "progress": {
+            "type": "integer",
+            "nullable": true
+          },
+          "subtask_done_count": {
+            "type": "integer"
+          },
+          "subtask_total_count": {
+            "type": "integer"
+          },
           "attachments": {
             "type": "array",
             "items": {
@@ -6618,6 +7339,247 @@
           }
         },
         "additionalProperties": false
+      },
+      "Invite": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string",
+            "description": "Secret; returned only by the invite endpoints",
+            "nullable": true
+          },
+          "path": {
+            "type": "string",
+            "description": "/invite/<token> or null",
+            "nullable": true
+          }
+        }
+      },
+      "InviteEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/Invite"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "InviteBoard": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "InviteRequestRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "InviteState": {
+        "type": "object",
+        "properties": {
+          "board": {
+            "$ref": "#/components/schemas/InviteBoard"
+          },
+          "state": {
+            "type": "string",
+            "description": "staff, member, pending or can_request"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/InviteRequestRef"
+              }
+            ]
+          }
+        }
+      },
+      "InviteStateEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/InviteState"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "JoinRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "board_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "JoinRequestEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "object",
+                "nullable": true
+              },
+              {
+                "$ref": "#/components/schemas/JoinRequest"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "JoinRequestUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "avatar_url": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "JoinRequestRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "user": {
+            "$ref": "#/components/schemas/JoinRequestUser"
+          }
+        }
+      },
+      "JoinRequestRowListEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "boolean",
+            "description": "True when the HTTP status is 2xx"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JoinRequestRow"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "Decide": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
       }
     },
     "responses": {

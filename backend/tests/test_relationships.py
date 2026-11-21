@@ -32,7 +32,7 @@ def count_queries():
 
 def seed_board(n_cards, make_user):
     author = make_user("manager")
-    board = Board(name=f"b{n_cards}", visibility="public")
+    board = Board(name=f"b{n_cards}")
     db.session.add(board)
     db.session.flush()
     col = Column(board_id=board.id, name="Todo", order=0)

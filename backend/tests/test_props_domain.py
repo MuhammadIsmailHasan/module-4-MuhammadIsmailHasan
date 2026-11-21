@@ -73,10 +73,10 @@ def test_property_6_7_default_columns_and_append_order(client, board_name, extra
 @PROP
 @given(flags=st.lists(st.tuples(st.booleans(), st.booleans()), min_size=1, max_size=5))
 def test_property_8_9_board_soft_delete_and_archive(client, flags):
-    env = Env(client, "public")
+    env = Env(client)
     ids = []
     for delete, archive in flags:
-        b = client.post("/api/boards", headers=env.h["manager"], json={"name": "x", "visibility": "public"}).get_json()["data"]
+        b = client.post("/api/boards", headers=env.h["manager"], json={"name": "x"}).get_json()["data"]
         ids.append((b["id"], delete, archive))
         if archive:
             assert client.post(f"/api/boards/{b['id']}/archive", headers=env.h["manager"]).get_json()["data"]["archived_at"]
@@ -93,7 +93,7 @@ def test_property_8_9_board_soft_delete_and_archive(client, flags):
 @PROP
 @given(card_deleted=st.booleans(), archive=st.booleans())
 def test_property_8_9_card_soft_delete_hides_children(client, card_deleted, archive):
-    env = Env(client, "public")
+    env = Env(client)
     card = env.card()
     sub = client.post(f"/api/cards/{card['id']}/subtasks", headers=env.h["manager"], json={"title": "s"}).get_json()["data"]
     client.post(f"/api/cards/{card['id']}/comments", headers=env.h["manager"], json={"content": "c"})
@@ -122,6 +122,9 @@ def test_property_18_board_member_add_remove(client, ops):
         u = targets[i]
         if op == "add":
             r = client.post(f"/api/boards/{env.bid}/members", headers=env.h["manager"], json={"user_id": str(u.id)})
+            if u.role not in ("member", "supervisor"):  # Property 52: a Manager or an Admin is never a Board_Member
+                assert r.status_code == 400 and "user_id" in r.get_json()["error"]["details"]
+                continue
             assert r.status_code == (409 if u.id in model else 201)
             model.add(u.id)
         else:
@@ -192,7 +195,7 @@ def test_property_11_member_edit_scope(client, assigned, field):
 
 # ---- Property 12: assignment ----
 @PROP
-@given(seq=st.lists(st.sampled_from(["member", "member_other", None]), min_size=1, max_size=8))
+@given(seq=st.lists(st.sampled_from(["member", "sup_member", None]), min_size=1, max_size=8))
 def test_property_12_assignment_effects(client, seq):
     env = Env(client)
     card = env.card()
@@ -213,6 +216,28 @@ def test_property_12_assignment_effects(client, seq):
             assert added == 1
             assert Notification.query.filter_by(card_id=cid, type="assigned").count() >= 1
         current = who
+
+
+def test_property_52_assignee_must_be_owner_or_board_member(client):
+    env = Env(client)
+    card = env.card()
+    for who, status in (("member_other", 400), ("sup_other", 400), ("admin", 400), ("manager", 400), ("owner", 200), ("member", 200)):
+        r = client.patch(f"/api/cards/{card['id']}", headers=env.h["manager"], json={"assignee_id": env.uid(who)})
+        assert r.status_code == status, who
+        if status == 400:
+            assert "assignee_id" in r.get_json()["error"]["details"]
+
+
+def test_property_52_removing_a_member_clears_assignments_without_notification(client):
+    env = Env(client)
+    card = env.card()
+    client.patch(f"/api/cards/{card['id']}", headers=env.h["manager"], json={"assignee_id": env.uid("member")})
+    before = Notification.query.count()
+    assert client.delete(f"/api/boards/{env.bid}/members/{env.uid('member')}", headers=env.h["manager"]).status_code == 200
+    assert Notification.query.count() == before
+    got = client.get(f"/api/cards/{card['id']}", headers=env.h["manager"]).get_json()["data"]
+    assert got["assignee_id"] is None
+    assert ActivityLog.query.filter_by(target_id=uuid.UUID(card["id"]), action="card.unassigned").count() == 1
 
 
 # ---- Property 13: subtasks ----

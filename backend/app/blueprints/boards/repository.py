@@ -41,7 +41,7 @@ def list_visible(actor):
     if actor.role not in ("manager", "admin"):
         uid = to_uuid(actor.id)
         member_ids = db.select(BoardMember.board_id).where(BoardMember.user_id == uid)
-        q = q.filter(db.or_(Board.visibility == "public", Board.owner_id == uid, Board.id.in_(member_ids)))
+        q = q.filter(db.or_(Board.owner_id == uid, Board.id.in_(member_ids)))
     return q.order_by(Board.created_at, Board.id).all()
 
 
@@ -78,8 +78,8 @@ def counts_for(board_ids, today):
     return out
 
 
-def create_board(name, visibility, owner_id=None, description=None):
-    board = Board(name=name, visibility=visibility, owner_id=owner_id, description=description)
+def create_board(name, owner_id=None, description=None):
+    board = Board(name=name, owner_id=owner_id, description=description)
     db.session.add(board)
     db.session.flush()
     return board
@@ -119,19 +119,29 @@ def delete_member(member):
     db.session.delete(member)
 
 
-def list_members(board_id):
-    return (
+def list_members(board, with_owner=True):
+    """The Board_Owner first (once, even when also a BoardMember), then every BoardMember by name: [(user, is_owner)]."""
+    rows = (
         User.query.join(BoardMember, BoardMember.user_id == User.id)
-        .filter(BoardMember.board_id == board_id)
+        .filter(BoardMember.board_id == board.id)
         .order_by(User.full_name)
         .all()
     )
+    out = []
+    if with_owner and board.owner_id is not None:
+        owner = db.session.get(User, board.owner_id)
+        if owner is not None:
+            out.append((owner, True))
+    out += [(u, False) for u in rows if not (with_owner and board.owner_id == u.id)]
+    return out
 
 
-def candidates(board_id, search, limit):
-    """Users who are not members of the board, matched on name or login, ordered by name."""
-    member_ids = db.select(BoardMember.user_id).where(BoardMember.board_id == board_id)
-    query = User.query.filter(User.id.notin_(member_ids))
+def candidates(board, search, limit):
+    """Members and Supervisors who are neither the owner nor a BoardMember, matched on name or login, ordered by name."""
+    member_ids = db.select(BoardMember.user_id).where(BoardMember.board_id == board.id)
+    query = User.query.filter(User.id.notin_(member_ids), User.role.in_(("member", "supervisor")))
+    if board.owner_id is not None:
+        query = query.filter(User.id != board.owner_id)
     text = (search or "").strip().lower()
     if text:
         escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -143,3 +153,16 @@ def candidates(board_id, search, limit):
             )
         )
     return query.order_by(User.full_name).limit(limit).all()
+
+
+def assigned_cards(board_id, user_id):
+    """Live Cards of this Board assigned to this user."""
+    return (
+        Card.query.join(Column, Card.column_id == Column.id)
+        .filter(Column.board_id == board_id, Card.assignee_id == user_id, Card.deleted_at.is_(None))
+        .all()
+    )
+
+
+def memberships_of(user_id):
+    return BoardMember.query.filter_by(user_id=user_id).all()

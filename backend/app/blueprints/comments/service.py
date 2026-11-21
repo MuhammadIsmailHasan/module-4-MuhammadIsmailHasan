@@ -61,6 +61,32 @@ def reply(actor, comment_id, data):
     return c
 
 
+def delete_comment(actor, comment_id):
+    """Author only; a top-level Comment takes its Replies with it. The log row keeps no text (Requirement 26)."""
+    cid = to_uuid(comment_id)
+    c = repo.get(cid) if cid else None
+    if c is None:
+        raise NotFound("Comment not found")
+    card = _load_card(actor, c.card_id)
+    if str(c.author_id) != actor.id:
+        raise Forbidden("Only the author can delete a comment")
+    is_reply = c.parent_id is not None
+    deleted_replies = 0
+    if is_reply:
+        parent = repo.get(c.parent_id)
+        if parent is not None:
+            parent.reply_count = max((parent.reply_count or 0) - 1, 0)
+    else:
+        deleted_replies = repo.delete_replies(c.id)
+    repo.delete(c)
+    activity.add(
+        to_uuid(actor.id), "comment.deleted", "card", card.id,
+        {"card_title": card.title, "comment_id": str(cid), "is_reply": is_reply, "deleted_replies": deleted_replies},
+    )
+    db.session.commit()
+    return {"deleted": 1 + deleted_replies}
+
+
 def toggle_priority(actor, comment_id):
     cid = to_uuid(comment_id)
     c = repo.get(cid) if cid else None

@@ -204,10 +204,10 @@ def test_property_29_one_activity_row_per_change(client, ops):
 
 
 @PROP
-@given(n_cards=st.integers(1, 3), vis=st.sampled_from(["public", "private"]))
-def test_property_30_activity_queries_return_right_rows(client, n_cards, vis):
-    env = Env(client, vis)
-    other = client.post("/api/boards", headers=env.h["manager"], json={"name": "O", "visibility": vis}).get_json()["data"]
+@given(n_cards=st.integers(1, 3))
+def test_property_30_activity_queries_return_right_rows(client, n_cards):
+    env = Env(client)
+    other = client.post("/api/boards", headers=env.h["manager"], json={"name": "O"}).get_json()["data"]
     oc = client.post(f"/api/columns/{other['columns'][0]['id']}/cards", headers=env.h["manager"], json={"title": "o"}).get_json()["data"]
     cards = [env.card(title=f"c{i}") for i in range(n_cards)]
     client.post(f"/api/boards/{env.bid}/columns", headers=env.h["manager"], json={"name": "X"})
@@ -223,7 +223,7 @@ def test_property_30_activity_queries_return_right_rows(client, n_cards, vis):
 @PROP
 @given(who=st.sampled_from(["guest", "member", "manager"]), fields=st.sampled_from(["", "?fields=comments,activity", "?include=activity"]))
 def test_property_28_guest_never_sees_comments_or_activity(client, who, fields):
-    env = Env(client, "public")
+    env = Env(client)
     card = env.card()
     client.post(f"/api/cards/{card['id']}/comments", headers=env.h["manager"], json={"content": "c"})
     if who == "guest":
@@ -268,22 +268,23 @@ def test_property_31_deadline_job_once_in_app_timezone(client, app, cards, hour,
 
 
 @PROP
-@given(assign=st.lists(st.sampled_from(["member", "member_other", "owner"]), min_size=1, max_size=6))
+@given(assign=st.lists(st.sampled_from(["member", "sup_member", "owner"]), min_size=1, max_size=6))
 def test_property_32_inbox_isolation_and_read_marking(client, assign):
     env = Env(client)
     for who in assign:
         env.card(assignee_id=env.uid(who))
     for who in set(assign):
         inbox = client.get("/api/notifications", headers=env.h[who]).get_json()["data"]
-        assert len(inbox["items"]) == assign.count(who) == inbox["unread_count"]
+        assigned = [n for n in inbox["items"] if n["type"] == "assigned"]
+        assert len(assigned) == assign.count(who) and inbox["unread_count"] == assign.count(who) + 1  # + board_added
         assert all(db.session.get(Notification, uuid.UUID(n["id"])).user_id == env.users[who].id for n in inbox["items"])
     victim = next(iter(set(assign)))
     nid = client.get("/api/notifications", headers=env.h[victim]).get_json()["data"]["items"][0]["id"]
-    stranger = next(w for w in ("member", "member_other", "owner") if w != victim)
+    stranger = next(w for w in ("member", "sup_member", "owner") if w != victim)
     assert client.patch(f"/api/notifications/{nid}/read", headers=env.h[stranger]).status_code == 404
     assert client.patch(f"/api/notifications/{UUID0}/read", headers=env.h[victim]).status_code == 404
     client.patch("/api/notifications/read-all", headers=env.h[stranger])
-    assert client.get("/api/notifications", headers=env.h[victim]).get_json()["data"]["unread_count"] == assign.count(victim)
+    assert client.get("/api/notifications", headers=env.h[victim]).get_json()["data"]["unread_count"] == assign.count(victim) + 1
     client.patch("/api/notifications/read-all", headers=env.h[victim])
     assert client.get("/api/notifications", headers=env.h[victim]).get_json()["data"]["unread_count"] == 0
 

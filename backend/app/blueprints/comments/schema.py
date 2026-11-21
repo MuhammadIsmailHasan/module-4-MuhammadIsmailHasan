@@ -30,3 +30,7 @@ class ReplySchema(BaseSchema):
 
 class CommentSchema(ReplySchema):
     replies = fields.List(fields.Nested(ReplySchema))
+
+
+class DeletedSchema(BaseSchema):
+    deleted = fields.Integer(metadata={"description": "Rows removed: the comment plus its replies"})

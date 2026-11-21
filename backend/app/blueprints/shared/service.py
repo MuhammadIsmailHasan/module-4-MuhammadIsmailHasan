@@ -3,7 +3,7 @@ from app.blueprints.boards import service as boards
 from app.blueprints.boards.dto import serialize_column
 from app.blueprints.cards import repository as cards_repo
 from app.blueprints.cards import service as cards
-from app.blueprints.cards.dto import serialize_attachment, serialize_subtask
+from app.blueprints.cards.dto import progress_fields, serialize_attachment, serialize_subtask
 from app.blueprints.categories import repository as categories_repo
 from app.blueprints.categories.service import serialize as serialize_category
 from app.blueprints.shared import repository as repo
@@ -49,6 +49,7 @@ def _card(card, names, board):
         "order": card.order,
         "archived_at": iso(card.archived_at),
         "subtasks": [serialize_subtask(s) for s in card.subtasks],
+        **progress_fields(card.subtasks),
         "attachments": [serialize_attachment(a, now, scope) for a in card.attachments],
     }
 

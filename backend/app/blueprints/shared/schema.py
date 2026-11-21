@@ -27,6 +27,9 @@ class SharedCardSchema(BaseSchema):
     order = fields.Float()
     archived_at = fields.String(allow_none=True)
     subtasks = fields.List(fields.Nested(SubtaskSchema))
+    progress = fields.Integer(allow_none=True)
+    subtask_done_count = fields.Integer()
+    subtask_total_count = fields.Integer()
     attachments = fields.List(fields.Nested(AttachmentSchema))
 
 

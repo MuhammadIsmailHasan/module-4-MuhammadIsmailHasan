@@ -53,8 +53,11 @@ def create_users_of_each_role(password, domain="example.com"):
 
 
 DEFAULT_COLUMNS = ("Todo", "In Progress", "Review", "Revision", "Done")
-EXTRA_USERS = (("member2", "member", "Member Two"), ("supervisor2", "supervisor", "Supervisor Two"))
-DEMO_BOARD = "Demo: Website Redesign"
+EXTRA_USERS = (
+    ("member2", "member", "Member Two"), ("member3", "member", "Member Three"), ("supervisor2", "supervisor", "Supervisor Two"),
+)
+DEMO_BOARD = "Alpha Board"
+SECOND_BOARD = "Beta Board"
 
 
 def _user(username, role, full_name, password, domain="example.com"):
@@ -63,8 +66,8 @@ def _user(username, role, full_name, password, domain="example.com"):
     return user
 
 
-def _board(name, visibility, owner, members, categories, now, description=None):
-    board = Board(name=name, visibility=visibility, owner_id=owner.id, description=description)
+def _board(name, owner, members, categories, now, description=None):
+    board = Board(name=name, owner_id=owner.id, description=description)
     db.session.add(board)
     db.session.flush()
     cols = []
@@ -104,7 +107,7 @@ def seed_demo_data(password, tz="UTC"):
     manager, sup, sup2, member, member2 = (users[k] for k in ("manager", "supervisor", "supervisor2", "member", "member2"))
 
     board, cols, cats = _board(
-        DEMO_BOARD, "public", sup, [member, member2],
+        DEMO_BOARD, sup, [member, member2],
         [("Design", "#8b5cf6"), ("Development", "#3b82f6"), ("Bug", "#ef4444")], now,
         description="Redesign the marketing site: new landing page, brand colors, and a faster build.",
     )
@@ -160,7 +163,7 @@ def seed_demo_data(password, tz="UTC"):
     db.session.add(Comment(card_id=made["Fix login redirect loop"].id, author_id=sup.id, content="Reproduced on Safari only.", created_at=now))
 
     board2, cols2, cats2 = _board(
-        "Demo: Internal Roadmap", "private", sup2, [member2], [("Planning", "#10b981")], now,
+        SECOND_BOARD, sup2, [], [("Planning", "#10b981")], now,
         description="Quarterly goals and hiring plan for the internal team.",
     )
     for i, (title, prio) in enumerate((("Q1 goals", "high"), ("Hiring plan", "medium"))):
@@ -196,7 +199,7 @@ def register_cli(app):
         if not created:
             click.echo("Demo data already present; nothing changed.")
             return
-        click.echo("Seeded demo data: 2 boards, categories, cards, subtasks, attachments, comments, activity, notifications.")
-        click.echo("Users: " + ", ".join(f"{r}@example.com" for r in ROLES) + ", member2@example.com, supervisor2@example.com")
+        click.echo("Seeded demo data: 2 boards (Alpha with member and member2, Beta with no member), categories, cards, subtasks, attachments, comments, activity, notifications.")
+        click.echo("Users: " + ", ".join(f"{r}@example.com" for r in ROLES) + ", member2@example.com, member3@example.com, supervisor2@example.com")
         if generated:
             click.echo(f"Password for NEW users (shown once): {password}")

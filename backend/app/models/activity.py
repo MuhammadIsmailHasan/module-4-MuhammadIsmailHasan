@@ -34,17 +34,41 @@ class ActivityLog(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now(), nullable=False)
 
 
+CARD_NOTIFICATIONS = ("assigned", "deadline")
+BOARD_NOTIFICATIONS = ("board_join_requested", "board_added", "board_join_rejected")
+
+
 class Notification(TimestampMixin, db.Model):
     __tablename__ = "notifications"
     __table_args__ = (
-        db.UniqueConstraint(
-            "user_id", "card_id", "type", "notify_date", name="uq_notifications_user_card_type_date"
+        db.CheckConstraint(
+            "(type IN ('assigned','deadline') AND card_id IS NOT NULL) OR "
+            "(type IN ('board_join_requested','board_added','board_join_rejected') AND card_id IS NULL AND board_id IS NOT NULL)",
+            name="notifications_scope",
         ),
     )
 
     id = uuid_pk()
     user_id = uuid_fk("users.id", nullable=False)
-    type = db.Column(db.Enum("assigned", "deadline", name="notification_type"), nullable=False)
-    card_id = uuid_fk("cards.id", nullable=False)
+    type = db.Column(
+        db.Enum(*CARD_NOTIFICATIONS, *BOARD_NOTIFICATIONS, name="notification_type"), nullable=False
+    )
+    card_id = uuid_fk("cards.id", nullable=True)
+    board_id = uuid_fk("boards.id", nullable=True)
+    actor_id = uuid_fk("users.id", nullable=True)
+    join_request_id = uuid_fk("board_join_requests.id", nullable=True)
     is_read = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     notify_date = db.Column(db.Date, nullable=False)
+
+
+def _partial(name, cols, where):
+    return db.Index(name, *cols, unique=True, postgresql_where=where, sqlite_where=where)
+
+
+_N = Notification
+_partial("uq_notifications_card", (_N.user_id, _N.card_id, _N.type, _N.notify_date), _N.card_id.isnot(None))
+_partial("uq_notifications_join_request", (_N.user_id, _N.type, _N.join_request_id), _N.join_request_id.isnot(None))
+_partial(
+    "uq_notifications_board", (_N.user_id, _N.type, _N.board_id, _N.notify_date),
+    db.and_(_N.card_id.is_(None), _N.join_request_id.is_(None)),
+)

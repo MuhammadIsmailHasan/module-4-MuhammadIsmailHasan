@@ -87,7 +87,7 @@ def create_card(actor, column_id, data):
     card = repo.add_card(column_id=column.id, order=1.0 if current is None else current + 1, **fields)
     activity.add(_aid(actor), "card.created", "card", card.id, {"title": card.title, "card_title": card.title})
     if data.get("assignee_id") is not None:
-        _assign(actor, card, data["assignee_id"])
+        _assign(actor, card, data["assignee_id"], board)
     db.session.commit()
     return card
 
@@ -105,7 +105,7 @@ def _apply_category(fields, data, board):
     fields["category_id"] = cat.id
 
 
-def _assign(actor, card, assignee_id):
+def _assign(actor, card, assignee_id, board):
     if assignee_id is None:
         if card.assignee_id is not None:
             card.assignee_id = None
@@ -115,6 +115,11 @@ def _assign(actor, card, assignee_id):
     user = users.get_by_id(uid) if uid else None
     if user is None:
         raise ValidationError("assignee_id must reference an existing user")
+    if not (board.owner_id == user.id or boards_repo.is_member(board.id, user.id)):
+        raise ValidationError(
+            "assignee_id must be the board owner or a board member",
+            details={"assignee_id": ["The user must be the board owner or a board member"]},
+        )
     card.assignee_id = user.id
     notif_repo.insert_ignore(user.id, card.id, "assigned", clock.today(current_app.config["APP_TIMEZONE"]))
     activity.add(
@@ -169,7 +174,7 @@ def update_card(actor, card_id, data):
     if assignment and (str(card.assignee_id) if card.assignee_id else None) != (
         str(to_uuid(data["assignee_id"])) if data["assignee_id"] else None
     ):
-        _assign(actor, card, data["assignee_id"])
+        _assign(actor, card, data["assignee_id"], board)
     db.session.commit()
     return card
 
@@ -254,7 +259,7 @@ def add_subtask(actor, card_id, data):
     current = repo.max_subtask_order(card.id)
     sub = repo.add_subtask(card.id, title.strip(), 1.0 if current is None else current + 1)
     activity.add(
-        _aid(actor), "subtask.added", "card", card.id, {"subtask_id": str(sub.id), "title": sub.title, "card_title": card.title}
+        _aid(actor), "card.subtask_added", "card", card.id, {"subtask_id": str(sub.id), "title": sub.title, "card_title": card.title}
     )
     db.session.commit()
     return sub
@@ -288,7 +293,7 @@ def update_subtask(actor, subtask_id, data):
         reorder_subtasks(sub, data)
     activity.add(
         _aid(actor),
-        "subtask.updated",
+        "card.subtask_updated",
         "card",
         card.id,
         {"subtask_id": str(sub.id), "title": sub.title, "is_done": sub.is_done, "card_title": card.title},
@@ -321,7 +326,7 @@ def delete_subtask(actor, subtask_id):
     sub, card = _load_subtask(actor, subtask_id)
     repo.delete_subtask(sub)
     activity.add(
-        _aid(actor), "subtask.deleted", "card", card.id, {"subtask_id": str(sub.id), "title": sub.title, "card_title": card.title}
+        _aid(actor), "card.subtask_removed", "card", card.id, {"subtask_id": str(sub.id), "title": sub.title, "card_title": card.title}
     )
     db.session.commit()
 
@@ -348,7 +353,7 @@ def add_attachment(actor, card_id, json_data, upload):
         name = (json_data.get("name") or url).strip()[:255]
         att = repo.add_attachment(card_id=card.id, name=name, url=url.strip())
     activity.add(
-        _aid(actor), "attachment.added", "card", card.id, {"attachment_id": str(att.id), "name": att.name, "card_title": card.title}
+        _aid(actor), "card.attachment_added", "card", card.id, {"attachment_id": str(att.id), "name": att.name, "card_title": card.title}
     )
     db.session.commit()
     return att
@@ -369,7 +374,7 @@ def delete_attachment(actor, attachment_id):
     path = att.file_path
     repo.delete_attachment(att)
     activity.add(
-        _aid(actor), "attachment.deleted", "card", card.id, {"attachment_id": str(att.id), "name": att.name, "card_title": card.title}
+        _aid(actor), "card.attachment_removed", "card", card.id, {"attachment_id": str(att.id), "name": att.name, "card_title": card.title}
     )
     db.session.commit()
     if path:

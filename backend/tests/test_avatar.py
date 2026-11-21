@@ -101,7 +101,7 @@ def _set_avatar(app, user, kind="png"):
 def test_avatar_fields_in_comment_member_candidate_and_card_payloads(client):
     from helpers import Env
 
-    env = Env(client, "public")
+    env = Env(client)
     _set_avatar(client.application, env.users["member"])
     card = env.card()
     client.patch(f"/api/cards/{card['id']}", headers=env.h["manager"], json={"assignee_id": env.uid("member")})
@@ -150,7 +150,7 @@ def test_property_50_query_count_does_not_depend_on_authors_or_assignees(app, cl
     from app.models import Board, Card, Column, Comment
 
     manager = make_user("manager", "mgr50")
-    board = Board(name="b", visibility="public")
+    board = Board(name="b")
     db.session.add(board)
     db.session.flush()
     col = Column(board_id=board.id, name="c", order=0)

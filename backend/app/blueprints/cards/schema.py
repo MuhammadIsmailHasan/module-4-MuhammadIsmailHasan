@@ -1,4 +1,5 @@
-from marshmallow import fields, validate
+from marshmallow import ValidationError as SchemaError
+from marshmallow import fields, validate, validates_schema
 
 from app.blueprints.activity.schema import ActivitySchema
 from app.blueprints.comments.schema import CommentSchema
@@ -14,6 +15,11 @@ class _CardFields(BaseSchema):
     end_date = fields.Date(allow_none=True, metadata={"description": "Must be on or after start_date"})
     category_id = fields.UUID(allow_none=True, metadata={"description": "Category of the same board"})
     assignee_id = fields.UUID(allow_none=True)
+
+    @validates_schema(pass_original=True)
+    def _no_progress(self, data, original, **kwargs):
+        if isinstance(original, dict) and "progress" in original:
+            raise SchemaError({"progress": ["progress is derived from the subtasks and cannot be set"]})
 
 
 class CreateCardSchema(_CardFields):
@@ -87,6 +93,9 @@ class CardSchema(BaseSchema):
     order = fields.Float()
     archived_at = fields.String(allow_none=True)
     subtasks = fields.List(fields.Nested(SubtaskSchema))
+    progress = fields.Integer(allow_none=True, metadata={"description": "Derived from the subtasks: 0 to 10, or null without subtasks"})
+    subtask_done_count = fields.Integer()
+    subtask_total_count = fields.Integer()
     attachments = fields.List(fields.Nested(AttachmentSchema))
     comments = fields.List(fields.Nested(CommentSchema), metadata={"description": "Omitted for Guests"})
     activity = fields.List(fields.Nested(ActivitySchema), metadata={"description": "Omitted for Guests"})

@@ -1,21 +1,33 @@
+import marshmallow as ma
 from marshmallow import fields, validate
 
+from app.blueprints.auth.schema import MemberSchema
 from app.common.fields import BaseSchema, Text
-
-_visibility = validate.OneOf(["public", "private"], error="visibility must be public or private")
 
 
 class CreateBoardSchema(BaseSchema):
+    class Meta:
+        unknown = ma.RAISE  # a posted `visibility` is a 400: every Board is private (V12)
+
     name = Text(required=True, max_length=255)
     description = fields.String(allow_none=True, validate=validate.Length(max=500, error="description must be at most 500 characters"))
-    visibility = fields.String(validate=_visibility, load_default="private")
 
 
 class UpdateBoardSchema(BaseSchema):
+    class Meta:
+        unknown = ma.RAISE
+
     name = Text(max_length=255)
     description = fields.String(allow_none=True, validate=validate.Length(max=500, error="description must be at most 500 characters"))
-    visibility = fields.String(validate=_visibility)
     owner_id = fields.UUID(allow_none=True, metadata={"description": "Supervisor user id, or null to clear"})
+
+
+class BoardMemberSchema(MemberSchema):
+    is_owner = fields.Boolean()
+
+
+class BoardMemberWithEmailSchema(BoardMemberSchema):
+    email = fields.String(metadata={"description": "Only with ?include=email, for board staff"})
 
 
 class AddMemberSchema(BaseSchema):
@@ -37,7 +49,6 @@ class BoardSchema(BaseSchema):
     id = fields.UUID()
     name = fields.String()
     description = fields.String(allow_none=True)
-    visibility = fields.String()
     owner_id = fields.UUID(allow_none=True)
     card_count = fields.Integer(metadata={"description": "Cards not deleted and not archived (board list only)"})
     done_count = fields.Integer(metadata={"description": "Of those, Cards in the Done column (board list only)"})

@@ -39,6 +39,18 @@ def check_dates(start, end):
         raise ValidationError("end_date must be on or after start_date")
 
 
+def derive_progress(subtasks):
+    """(progress, done, total): progress is `(20 * done + total) // (2 * total)`, an integer 0 to 10, or None without Subtasks (Requirement 27)."""
+    total = len(subtasks)
+    done = sum(1 for s in subtasks if s.is_done)
+    return ((20 * done + total) // (2 * total) if total else None), done, total
+
+
+def progress_fields(subtasks):
+    progress, done, total = derive_progress(subtasks)
+    return {"progress": progress, "subtask_done_count": done, "subtask_total_count": total}
+
+
 def serialize_subtask(s):
     return {"id": str(s.id), "card_id": str(s.card_id), "title": s.title, "is_done": s.is_done, "order": s.order}
 
@@ -79,6 +91,7 @@ def serialize_card(card, viewer, subtasks=(), attachments=(), comments=None, act
         "order": card.order,
         "archived_at": iso(card.archived_at),
         "subtasks": [serialize_subtask(s) for s in subtasks],
+        **progress_fields(subtasks),
         "attachments": [serialize_attachment(a) for a in attachments],
     }
     # Guests never get comments or activity.

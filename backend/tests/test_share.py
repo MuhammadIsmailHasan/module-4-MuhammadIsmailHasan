@@ -10,13 +10,15 @@ def _share(client, env, who="manager", method="post", suffix=""):
 
 
 def test_share_lifecycle_and_roles(client):
-    env = Env(client, "private")
+    env = Env(client)
     assert _share(client, env, "member", "get").status_code == 403
     assert _share(client, env, "sup_member").status_code == 403  # a BoardMember Supervisor is not enough
+    assert _share(client, env, "owner").status_code == 403  # nor is the Board_Owner (V12, Decision Z)
+    assert _share(client, env, "owner", "get").status_code == 403
     assert client.post(f"/api/boards/{env.bid}/share").status_code == 401
-    off = _share(client, env, "owner", "get").get_json()["data"]
+    off = _share(client, env, "manager", "get").get_json()["data"]
     assert off == {"enabled": False, "token": None, "path": None}
-    on = _share(client, env, "owner").get_json()["data"]
+    on = _share(client, env, "manager").get_json()["data"]
     assert on["enabled"] and len(on["token"]) >= 43 and on["path"] == f"/shared/{on['token']}"
     assert _share(client, env, "manager").get_json()["data"]["token"] == on["token"]  # idempotent
     new = _share(client, env, "admin", suffix="/regenerate").get_json()["data"]
@@ -32,11 +34,11 @@ def test_share_lifecycle_and_roles(client):
 
 
 def test_shared_payloads_never_leak_discussion_or_people(client):
-    env = Env(client, "private")
+    env = Env(client)
     card = env.card()
     client.patch(f"/api/cards/{card['id']}", headers=env.h["manager"], json={"assignee_id": env.uid("member")})
     client.post(f"/api/cards/{card['id']}/comments", headers=env.h["manager"], json={"content": "secret talk"})
-    token = _share(client, env, "owner").get_json()["data"]["token"]
+    token = _share(client, env, "manager").get_json()["data"]["token"]
     board = client.get(f"/api/shared/{token}")
     assert board.status_code == 200 and board.headers["Cache-Control"] == "private, no-store"
     b = board.get_json()["data"]
@@ -57,8 +59,31 @@ def test_shared_payloads_never_leak_discussion_or_people(client):
     assert client.get(f"/api/boards/{env.bid}", headers=env.h["member_other"]).status_code == 403
 
 
+def test_property_54_a_public_link_grants_no_write(client):
+    env = Env(client)
+    card = env.card()
+    token = _share(client, env).get_json()["data"]["token"]
+    sub = client.post(f"/api/cards/{card['id']}/subtasks", headers=env.h["manager"], json={"title": "s"}).get_json()["data"]
+    writes = (
+        ("post", f"/api/cards/{card['id']}/comments", {"content": "x"}),
+        ("patch", f"/api/cards/{card['id']}", {"title": "z"}),
+        ("post", f"/api/cards/{card['id']}/attachments", {"url": "https://e.com/x"}),
+        ("patch", f"/api/subtasks/{sub['id']}", {"is_done": True}),
+        ("post", f"/api/cards/{card['id']}/archive", None),
+        ("delete", f"/api/cards/{card['id']}", None),
+    )
+    for method, path, body in writes:
+        kw = {"json": body} if body is not None else {}
+        assert getattr(client, method)(path, **kw).status_code == 401, path  # Guest
+        assert getattr(client, method)(path, headers=env.h["member_other"], **kw).status_code == 403, path  # no access
+    # the link itself accepts nothing but GET
+    for method in ("post", "patch", "put", "delete"):
+        assert getattr(client, method)(f"/api/shared/{token}").status_code == 405
+        assert getattr(client, method)(f"/api/shared/{token}/cards").status_code == 405
+
+
 def test_a_token_never_reaches_another_board(client):
-    a = Env(client, "public")
+    a = Env(client)
     other = client.post("/api/boards", headers=a.h["manager"], json={"name": "Other"}).get_json()["data"]
     card_b = client.post(f"/api/columns/{other['columns'][0]['id']}/cards", headers=a.h["manager"], json={"title": "x"}).get_json()["data"]
     ta = _share(client, a).get_json()["data"]["token"]
@@ -68,7 +93,7 @@ def test_a_token_never_reaches_another_board(client):
 
 
 def test_shared_file_urls_are_scoped_and_die_with_the_link(client, app):
-    env = Env(client, "private")
+    env = Env(client)
     card = env.card()
     up = client.post(
         f"/api/cards/{card['id']}/attachments",
@@ -77,7 +102,7 @@ def test_shared_file_urls_are_scoped_and_die_with_the_link(client, app):
         content_type="multipart/form-data",
     )
     att = up.get_json()["data"]
-    token = _share(client, env, "owner").get_json()["data"]["token"]
+    token = _share(client, env, "manager").get_json()["data"]["token"]
     url = client.get(f"/api/shared/{token}/attachments/{att['id']}/url").get_json()["data"]["file_url"]
     assert "st=share:" in url and token not in url
     assert client.get(url).status_code == 200
@@ -85,7 +110,7 @@ def test_shared_file_urls_are_scoped_and_die_with_the_link(client, app):
     assert client.get(plain).status_code == 200  # ordinary URL unaffected
     assert client.get(url.replace("st=share:", "st=share:0")).status_code == 403
     assert client.get(plain + "&st=share:abcd").status_code == 403  # scope is inside the signature
-    _share(client, env, "owner", suffix="/regenerate")
+    _share(client, env, "manager", suffix="/regenerate")
     assert client.get(url).status_code == 403
     assert client.get(plain).status_code == 200
 
@@ -97,7 +122,7 @@ def test_shared_prefix_is_get_only(app):
 
 
 def test_member_email_only_for_staff(client):
-    env = Env(client, "public")
+    env = Env(client)
     base = f"/api/boards/{env.bid}/members"
     plain = client.get(base, headers=env.h["member"]).get_json()["data"]
     assert plain and all("email" not in m for m in plain)

@@ -39,7 +39,8 @@ def test_seed_data_fills_every_table_and_is_idempotent(make_app, monkeypatch):
         assert "already present" in runner.invoke(args=["seed-data"]).output
         assert counts == {m: m.query.count() for m in (User, Board, Card, Comment)}
         assert Comment.query.filter(Comment.parent_id.isnot(None)).count() == 2
-        assert Board.query.filter_by(visibility="private").count() == 1
+        assert Board.query.count() == 2
+        assert BoardMember.query.join(User, User.id == BoardMember.user_id).filter(User.role.in_(("manager", "admin"))).count() == 0
 
 
 def test_seed_data_refuses_in_production(make_app):

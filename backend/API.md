@@ -67,8 +67,7 @@ Roles: `guest` (no Token), `member`, `supervisor`, `manager`, `admin`. Admin is 
 
 | Action | Guest | Member | Supervisor | Manager | Admin |
 |---|---|---|---|---|---|
-| Read public board, cards, categories, search | no (401) | yes | yes | yes | yes |
-| Read private board | no (401) | if owner or member of it | if owner or member of it | yes | yes |
+| Read a board, cards, categories, search | no (401) | if owner or member of it | if owner or member of it | yes | yes |
 | Read comments and activity | no (401) | yes | yes | yes | yes |
 | Create, delete, archive card; add column; manage categories | no | no | board owner or member | yes | yes |
 | Edit or move a card | no | only when assigned | board owner or member | yes | yes |
@@ -76,26 +75,35 @@ Roles: `guest` (no Token), `member`, `supervisor`, `manager`, `admin`. Admin is 
 | Toggle comment priority | no | no | no | yes | no |
 | Create, archive, delete board | no | no | no | yes | yes |
 | Change board owner (must be a supervisor) | no | no | no | yes | yes |
-| Change visibility | no | no | owner or member | yes | yes |
-| Add or remove board members | no | no | if owner | yes | yes |
+| Add a board member (Members and Supervisors only) | no | no | no | yes | yes |
+| Remove a board member | no | no | if owner | yes | yes |
+| Public link (`/share`) | no | no | no | yes | yes |
+| Invite link and join-request list | no | no | if owner | yes | yes |
+| Approve or reject a join request | no | no | no | yes | yes |
+| Delete a comment | own only | own only | own only | own only | no |
+| Toggle a subtask | no | only when assigned | board owner or member | yes | yes |
 | Board analytics | no | no | only as owner | yes | no |
 | Cross-board analytics | no | no | no | yes | no |
 | Manage users | no | no | no | no | yes |
 
-A private board is visible only to its owner, its members, Managers and Admins. A request without a Token gets 401, a signed-in user without access gets 403. The board owner, a Manager or an Admin can enable a read-only share link.
+Every board is private (V12): it is visible only to its owner, its members, Managers and Admins, and `visibility` no longer exists (a posted `visibility` is 400). A request without a Token gets 401, a signed-in user without access gets 403. A Manager or an Admin can enable a read-only Public link; a Manager, an Admin or the board owner can enable an Invite link.
 
 ## Behaviours worth knowing
 
 - **Soft delete.** Deleting a board or card sets `deleted_at`; the row stays and is hidden (404). Archive sets `archived_at`.
 - **Ordering and move.** `PATCH /api/cards/{id}/move` takes `column_id` plus the neighbour ids `prev` and `next`. The server computes `order` (empty column `1.0`, first `min - 1`, last `max + 1`, otherwise the average) and ignores any client `order`. When two neighbours are closer than `1e-6` the column is renumbered `1.0, 2.0, …` in the same transaction. Moving to a column of another board returns 400. Subtasks reorder with `prev`/`next` or an explicit `order` on `PATCH /api/subtasks/{id}`.
 - **Attachments.** Add a link (`{ "url": "https://…" }`) or upload a PDF, Word or RAR file as multipart `file`. Uploaded files are stored privately. A card response carries a fresh signed `file_url` (valid 15 minutes) per uploaded attachment; request a new one with `GET /api/attachments/{id}/url`. `GET /api/attachments/{id}/file?exp=&sig=` needs no Token and returns 403 for a missing, altered or expired signature.
-- **Share links.** `POST /api/boards/{id}/share` creates a 256-bit token (owner, Manager, Admin); `POST …/share/regenerate` replaces it and `DELETE …/share` turns it off. `GET /api/shared/{token}` (and `/cards`, `/categories`, `/cards/{id}`, `/attachments/{id}/url`) need no Token, are GET only, never return comments, activity, owner, members, emails or avatars, and answer one 404 for any bad link. Shared file URLs carry a scope that dies with the token. A stale Bearer Token on these routes is ignored. Responses send `Cache-Control: private, no-store`.
+- **Public link.** `POST /api/boards/{id}/share` creates a 256-bit token (Manager, Admin only; the owner gets 403); `POST …/share/regenerate` replaces it and `DELETE …/share` turns it off. `GET /api/shared/{token}` (and `/cards`, `/categories`, `/cards/{id}`, `/attachments/{id}/url`) need no Token, are GET only, never return comments, activity, owner, members, emails or avatars, and answer one 404 for any bad link. Shared file URLs carry a scope that dies with the token. A stale Bearer Token on these routes is ignored. Responses send `Cache-Control: private, no-store`.
 - **Avatars in payloads.** Comment and reply authors carry `author_avatar_url`; board members, candidates and user payloads carry `avatar_url`; cards carry `assignee_name` and `assignee_avatar_url` (all null when there is none). Shared routes carry no avatar.
 - **Avatars.** `POST /api/users/me/avatar` (multipart `file`, PNG, JPEG or WebP by content, at most 2 MB) and `DELETE /api/users/me/avatar`. `avatar_url` in user payloads is a signed URL (15 minutes) to `GET /api/users/{id}/avatar/file`, or null.
-- **Notifications.** Created server-side only: an `assigned` one when a card is assigned, a `deadline` one from the daily `flask notify-deadlines` job (dates in `APP_TIMEZONE`). One per user, card, type and day.
+- **Invite link and join requests.** `POST /api/boards/{id}/invite` (owner, Manager, Admin) creates a 256-bit token, `…/invite/regenerate` replaces it, `DELETE` turns it off. A signed-in user opens `GET /api/invite/{token}` (`state`: `staff`, `member`, `pending`, `can_request`) and asks with `POST /api/invite/{token}/requests` (Manager and Admin get 400, a member or a pending requester 409). `GET /api/boards/{id}/join-requests` lists requests with each requester's Email (owner, Manager, Admin only); `PATCH /api/join-requests/{id}` approves or rejects (Manager, Admin only, 409 once decided). One 404 for any bad token; every `/api/invite` response is `Cache-Control: private, no-store`.
+- **Board members.** `GET /api/boards/{id}/members` lists the owner first (`is_owner`), once. Adding a member and `GET …/candidates` are Manager and Admin only and accept Member and Supervisor accounts only. A card assignee must be the owner or a board member (400 `details.assignee_id`). Removing a member clears that user's assignments on the board.
+- **Derived progress.** Every card carries `progress` (0 to 10, or null), `subtask_done_count` and `subtask_total_count`, computed from its subtasks; a posted `progress` is 400.
+- **Deleting a comment.** `DELETE /api/comments/{id}` (author only) returns `{ "deleted": n }`; a top-level comment takes its replies with it, the parent's `reply_count` follows, and the activity row `comment.deleted` keeps no text.
+- **Notifications.** Created server-side only: `assigned` when a card is assigned, `deadline` from the daily `flask notify-deadlines` job (dates in `APP_TIMEZONE`), and board types `board_join_requested`, `board_added`, `board_join_rejected` (no card). Each row carries `board_id`, `board_name`, `card_id`, `card_title`, `actor_name`; never an Email.
 - **Search.** `GET /api/boards/{id}/cards?search=&filter[priority]=&filter[assignee]=&filter[category]=`. Filters combine with AND; an unsupported `filter[...]` key returns 400.
 - **Comments.** `sort=latest|popular`; priority comments first; replies nested oldest first; replies to replies return 400. `can_create_card` is true when the viewer is a Supervisor, Manager or Admin and the author is a Manager. Every comment and reply carries `author_name`, and every activity row carries `actor_name` (the user's display name), so a client needs no user lookup.
-- **Activity metadata.** New activity rows keep the names and changes in `metadata`, so a row reads without a lookup: `card_title` on every card event; `changes` on `card.updated` (`{field: {from, to}}` for `title`, `priority`, `start_date`, `end_date`, and `category` by name; a changed `description` is `{}`); `from_column_name` and `to_column_name` on `card.moved`; `assignee_name` on `card.assigned`; `title` on subtask events; `name` on attachment events. Rows written earlier keep their older keys.
+- **Activity metadata.** New activity rows keep the names and changes in `metadata`, so a row reads without a lookup: `card_title` on every card event; `changes` on `card.updated` (`{field: {from, to}}` for `title`, `priority`, `start_date`, `end_date`, and `category` by name; a changed `description` is `{}`); `from_column_name` and `to_column_name` on `card.moved`; `assignee_name` on `card.assigned`; `title` on `card.subtask_*` events; `name` on `card.attachment_*` events; a `PATCH` that changes nothing writes no row. Rows written earlier keep their older keys.
 
 ## Endpoints
 
@@ -116,25 +124,33 @@ Register, log in, log out.
 
 ### boards
 
-Boards, visibility, archive, members and the board activity feed.
+Boards, archive, members, public link and the board activity feed.
 
 | Method | Path | Auth | Success | Errors | Summary |
 |---|---|---|---|---|---|
 | POST | `/api/boards` | Token | 201 | 400, 401, 403, 422 | Create a board |
 | GET | `/api/boards` | Token | 200 | 401 | List visible boards, each with `card_count`, `done_count`, `overdue_count`, `member_count` |
 | GET | `/api/boards/{board_id}` | Token | 200 | 400, 401, 403, 404 | Get a board with its columns |
-| PATCH | `/api/boards/{board_id}` | Token | 200 | 400, 401, 403, 404, 422 | Update name, visibility or owner |
+| PATCH | `/api/boards/{board_id}` | Token | 200 | 400, 401, 403, 404, 422 | Update name, description or owner |
 | DELETE | `/api/boards/{board_id}` | Token | 200 | 401, 403, 404 | Soft-delete a board |
 | POST | `/api/boards/{board_id}/archive` | Token | 200 | 401, 403, 404 | Archive a board |
 | POST | `/api/boards/{board_id}/unarchive` | Token | 200 | 401, 403, 404 | Unarchive a board |
 | GET | `/api/boards/{board_id}/members` | Token | 200 | 400, 401, 403, 404 | List board members (`?include=email` for board staff) |
-| GET | `/api/boards/{board_id}/share` | Token | 200 | 401, 403, 404 | Share link state (owner, Manager, Admin) |
+| GET | `/api/boards/{board_id}/share` | Token | 200 | 401, 403, 404 | Public link state (Manager, Admin) |
 | POST | `/api/boards/{board_id}/share` | Token | 200 | 401, 403, 404 | Enable the share link |
 | POST | `/api/boards/{board_id}/share/regenerate` | Token | 200 | 401, 403, 404 | Replace the share token |
 | DELETE | `/api/boards/{board_id}/share` | Token | 200 | 401, 403, 404 | Disable the share link |
 | POST | `/api/boards/{board_id}/members` | Token | 201 | 400, 401, 403, 404, 409, 422 | Add a board member |
 | DELETE | `/api/boards/{board_id}/members/{user_id}` | Token | 200 | 401, 403, 404 | Remove a board member |
 | GET | `/api/boards/{board_id}/activity` | Token | 200 | 400, 401, 403, 404 | Board activity feed (paged) |
+| GET | `/api/boards/{board_id}/invite` | Token | 200 | 401, 403, 404 | Invite link state (owner, Manager, Admin) |
+| POST | `/api/boards/{board_id}/invite` | Token | 200 | 401, 403, 404 | Enable the invite link |
+| POST | `/api/boards/{board_id}/invite/regenerate` | Token | 200 | 401, 403, 404 | Replace the invite token |
+| DELETE | `/api/boards/{board_id}/invite` | Token | 200 | 401, 403, 404 | Disable the invite link |
+| GET | `/api/boards/{board_id}/join-requests` | Token | 200 | 400, 401, 403, 404 | List join requests with the requester's Email |
+| GET | `/api/invite/{token}` | Token | 200 | 401, 404 | Look up an invite |
+| POST | `/api/invite/{token}/requests` | Token | 201 | 400, 401, 404, 409 | Ask to join a board |
+| PATCH | `/api/join-requests/{request_id}` | Token | 200 | 400, 401, 403, 404, 409 | Approve or reject (Manager, Admin) |
 | GET | `/api/boards/{board_id}/candidates` | Token | 200 | 400, 401, 403, 404 | Search users who can be added to a board |
 
 ### columns
@@ -189,6 +205,7 @@ Comments, replies and the priority flag.
 | GET | `/api/cards/{card_id}/comments` | Token | 200 | 400, 401, 403, 404, 422 | List comments |
 | POST | `/api/comments/{comment_id}/replies` | Token | 201 | 400, 401, 403, 404, 422 | Reply to a top-level comment |
 | PATCH | `/api/comments/{comment_id}/priority` | Token | 200 | 401, 403, 404 | Toggle the priority flag |
+| DELETE | `/api/comments/{comment_id}` | Token | 200 | 401, 403, 404 | Delete my comment (author only) |
 
 ### notifications
 

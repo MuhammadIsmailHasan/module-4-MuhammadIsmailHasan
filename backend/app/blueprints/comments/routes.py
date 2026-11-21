@@ -1,7 +1,7 @@
 from flask_smorest import Blueprint
 
 from app.blueprints.comments import service
-from app.blueprints.comments.schema import CommentListQuerySchema, CommentSchema, CreateCommentSchema, ReplySchema
+from app.blueprints.comments.schema import CommentListQuerySchema, CommentSchema, DeletedSchema, CreateCommentSchema, ReplySchema
 from app.common.auth import current_actor, require_role
 from app.common.docs import endpoint
 from app.common.envelope import envelope
@@ -38,6 +38,14 @@ def reply(data, comment_id):
 def priority(comment_id):
     c = service.toggle_priority(current_actor(), comment_id)
     return ok(service.serialize_one(c, "manager"), "Priority toggled")
+
+
+@bp.route("/comments/<comment_id>", methods=["DELETE"])
+@endpoint(bp, "Delete my comment", "Author only (403 for everyone else, Manager and Admin included). A top-level comment takes its replies with it; the log row keeps no text.", errors=(401, 403, 404))
+@require_role(*USERS)
+@bp.response(200, envelope(DeletedSchema))
+def delete_comment(comment_id):
+    return ok(service.delete_comment(current_actor(), comment_id), "Comment deleted")
 
 
 @bp.route("/cards/<card_id>/comments", methods=["GET"])

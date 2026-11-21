@@ -65,8 +65,21 @@ def update_user(actor, user_id, data):
                 to_uuid(actor.id), "user.role_changed", "user", user.id, {"from": user.role, "to": role}
             )
             user.role = role
+            if role in ("manager", "admin"):
+                _drop_board_access(actor, user)
     db.session.commit()
     return user
+
+
+def _drop_board_access(actor, user):
+    """A new Manager or Admin sees every Board, so BoardMember rows and pending requests go (Requirement 22, criterion 6)."""
+    from app.blueprints.boards import repository as boards_repo
+    from app.blueprints.invites import repository as invites_repo
+
+    for member in boards_repo.memberships_of(user.id):
+        activity.add(to_uuid(actor.id), "board.member_removed", "board", member.board_id, {"user_id": str(user.id)})
+        boards_repo.delete_member(member)
+    invites_repo.delete_pending_of_user(user.id)
 
 
 # ---- avatar (V10, Decision R) --------------------------------------------------------------------

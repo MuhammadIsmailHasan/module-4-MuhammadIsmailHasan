@@ -19,7 +19,7 @@ def world(client, make_user, auth):
     def post(path, who, **kw):
         return client.post(path, headers=h.get(who, {}), **kw)
 
-    board = post("/api/boards", "manager", json={"name": "B", "visibility": "private"}).get_json()["data"]
+    board = post("/api/boards", "manager", json={"name": "B"}).get_json()["data"]
     client.patch(f"/api/boards/{board['id']}", headers=h["manager"], json={"owner_id": str(users["supervisor"].id)})
     client.post(f"/api/boards/{board['id']}/members", headers=h["manager"], json={"user_id": str(users["member"].id)})
     return type("W", (), dict(users=users, h=h, board=board, client=client, post=staticmethod(post)))
@@ -89,8 +89,8 @@ def test_owner_reassign_and_visibility_archive_delete(world):
     r = c.patch(f"/api/boards/{bid}", headers=world.h["manager"], json={"owner_id": str(world.users["member"].id)})
     assert r.status_code == 400
     assert c.patch(f"/api/boards/{bid}", headers=world.h["supervisor"], json={"owner_id": None}).status_code == 403
-    assert c.patch(f"/api/boards/{bid}", headers=world.h["supervisor"], json={"visibility": "public"}).status_code == 200
-    assert len(c.get("/api/boards", headers=world.h["other_member"]).get_json()["data"]) == 1  # now public for signed-in users
+    assert c.patch(f"/api/boards/{bid}", headers=world.h["supervisor"], json={"visibility": "public"}).status_code == 400  # V12: no visibility
+    assert c.get("/api/boards", headers=world.h["other_member"]).get_json()["data"] == []  # every Board is private
     assert c.post(f"/api/boards/{bid}/archive", headers=world.h["supervisor"]).status_code == 403
     assert c.post(f"/api/boards/{bid}/archive", headers=world.h["manager"]).status_code == 200
     assert c.post(f"/api/boards/{bid}/unarchive", headers=world.h["manager"]).status_code == 200
@@ -147,15 +147,15 @@ def test_assignment_notification_and_activity(world):
     world.client.patch(f"/api/cards/{card['id']}", headers=world.h["supervisor"], json={"assignee_id": mid})
     assert Notification.query.filter_by(type="assigned").count() == 1
     world.client.patch(f"/api/cards/{card['id']}", headers=world.h["supervisor"], json={"assignee_id": None})
-    assert Notification.query.count() == 1
+    assert Notification.query.filter_by(type="assigned").count() == 1
     actions = [a.action for a in ActivityLog.query.all()]
     assert "card.assigned" in actions and "card.unassigned" in actions and "card.created" in actions
     inbox = world.client.get("/api/notifications", headers=world.h["member"]).get_json()["data"]
-    assert inbox["unread_count"] == 1
-    nid = inbox["items"][0]["id"]
+    assert inbox["unread_count"] == 2  # board_added when the member joined, then assigned
+    nid = next(n["id"] for n in inbox["items"] if n["type"] == "assigned")
     assert world.client.patch(f"/api/notifications/{nid}/read", headers=world.h["other_member"]).status_code == 404
     assert world.client.patch(f"/api/notifications/{nid}/read", headers=world.h["member"]).status_code == 200
-    assert world.client.get("/api/notifications", headers=world.h["member"]).get_json()["data"]["unread_count"] == 0
+    assert world.client.get("/api/notifications", headers=world.h["member"]).get_json()["data"]["unread_count"] == 1
 
 
 def test_move_order_and_scope(world):
@@ -234,9 +234,8 @@ def test_attachments_and_signed_urls(world, app):
     assert c.get(att["file_url"]).status_code == 404
 
 
-def test_guest_on_public_board(world):
+def test_guest_on_board(world):
     c, bid = world.client, world.board["id"]
-    c.patch(f"/api/boards/{bid}", headers=world.h["manager"], json={"visibility": "public"})
     card = mkcard(world)
     for path in (f"/api/cards/{card['id']}", f"/api/cards/{card['id']}/comments", f"/api/cards/{card['id']}/activity", f"/api/boards/{bid}", f"/api/boards/{bid}/members", f"/api/boards/{bid}/activity", f"/api/boards/{bid}/categories", f"/api/boards/{bid}/cards"):
         assert c.get(path).status_code == 401, path
@@ -244,7 +243,7 @@ def test_guest_on_public_board(world):
     assert c.patch(f"/api/cards/{card['id']}", json={"title": "z"}).status_code == 401
     signed = c.get(f"/api/cards/{card['id']}", headers=world.h["member"]).get_json()["data"]
     assert "comments" in signed and "activity" in signed
-    assert c.get(f"/api/cards/{card['id']}", headers=world.h["other_member"]).status_code == 200  # public
+    assert c.get(f"/api/cards/{card['id']}", headers=world.h["other_member"]).status_code == 403  # private
 
 
 # ---- categories ----
@@ -337,9 +336,9 @@ def test_activity_metadata_carries_names_and_changes(world):
     assert by["card.assigned"][0]["assignee_name"] == world.users["member"].full_name
     moved = by["card.moved"][0]
     assert (moved["from_column_name"], moved["to_column_name"]) == ("Todo", "In Progress")
-    assert by["subtask.added"][0]["title"] == "Outline"
-    assert by["subtask.updated"][0]["is_done"] is True
-    assert by["attachment.added"][0]["name"] == "Brief" and by["attachment.deleted"][0]["name"] == "Brief"
+    assert by["card.subtask_added"][0]["title"] == "Outline"
+    assert by["card.subtask_updated"][0]["is_done"] is True
+    assert by["card.attachment_added"][0]["name"] == "Brief" and by["card.attachment_removed"][0]["name"] == "Brief"
 
 
 def test_activity_and_inbox_paging_and_candidates(world):
@@ -371,9 +370,9 @@ def test_activity_and_inbox_paging_and_candidates(world):
         c.patch(f"/api/cards/{k['id']}", headers=h, json={"assignee_id": str(world.users["member"].id)})
     mh = world.h["member"]
     first = c.get("/api/notifications?limit=2", headers=mh).get_json()["data"]
-    assert len(first["items"]) == 2 and first["unread_count"] == 3
+    assert len(first["items"]) == 2 and first["unread_count"] == 4
     rest = c.get(f"/api/notifications?limit=2&before={first['items'][-1]['id']}", headers=mh).get_json()["data"]
-    assert len(rest["items"]) == 1 and rest["unread_count"] == 3
+    assert len(rest["items"]) == 2 and rest["unread_count"] == 4
     assert c.get(f"/api/notifications?before={first['items'][0]['id']}", headers=world.h["other_member"]).status_code == 400
 
     # candidates: non-members only, filtered, id and full_name only, role rules
@@ -390,7 +389,7 @@ def test_activity_and_inbox_paging_and_candidates(world):
     assert [x["email"] for x in hit] == [exact]
     assert c.get(f"/api/boards/{world.board['id']}/candidates", headers=world.h["member"]).status_code == 403
     assert c.get(f"/api/boards/{world.board['id']}/candidates", headers=world.h["other_sup"]).status_code == 403
-    assert c.get(f"/api/boards/{world.board['id']}/candidates?search=me", headers=h).status_code == 200  # the owner
+    assert c.get(f"/api/boards/{world.board['id']}/candidates?search=me", headers=h).status_code == 403  # the owner (V12)
     assert c.get(f"/api/boards/{world.board['id']}/candidates").status_code == 401
 
 

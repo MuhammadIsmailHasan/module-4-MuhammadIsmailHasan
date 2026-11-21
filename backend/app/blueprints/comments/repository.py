@@ -58,3 +58,17 @@ def author_identities(comments):
         if "replies" in c.__dict__:  # replies are loaded explicitly by list_for_card; never lazy-load here
             ids |= {r.author_id for r in c.replies}
     return users.identities(ids)
+
+
+def reply_ids(parent_id):
+    return list(db.session.scalars(db.select(Comment.id).where(Comment.parent_id == parent_id)))
+
+
+def delete_replies(parent_id):
+    """Replies go first so the foreign key on parent_id never blocks the parent (decision: explicit delete, no ON DELETE CASCADE)."""
+    return db.session.execute(db.delete(Comment).where(Comment.parent_id == parent_id)).rowcount
+
+
+def delete(comment):
+    db.session.delete(comment)
+    db.session.flush()

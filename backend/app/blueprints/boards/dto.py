@@ -13,12 +13,6 @@ def clean_name(value):
     return value
 
 
-def clean_visibility(value):
-    if value not in ("public", "private"):
-        raise ValidationError("visibility must be public or private")
-    return value
-
-
 def serialize_column(col):
     return {"id": str(col.id), "board_id": str(col.board_id), "name": col.name, "order": col.order}
 
@@ -41,7 +35,6 @@ def serialize_board(board, columns=None, viewer=None, counts=None):
         "id": str(board.id),
         "name": board.name,
         "description": board.description,
-        "visibility": board.visibility,
         "owner_id": str(board.owner_id) if board.owner_id else None,
         "archived_at": iso(board.archived_at),
     }

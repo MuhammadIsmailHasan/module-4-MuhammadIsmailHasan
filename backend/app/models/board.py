@@ -7,14 +7,9 @@ class Board(TimestampMixin, db.Model):
 
     id = uuid_pk()
     name = db.Column(db.String(255), nullable=False)
-    visibility = db.Column(
-        db.Enum("public", "private", name="board_visibility"),
-        nullable=False,
-        default="private",
-        server_default="private",
-    )
     description = db.Column(db.String(500), nullable=True)
     share_token = db.Column(db.String(64), nullable=True)
+    invite_token = db.Column(db.String(64), nullable=True)
     owner_id = uuid_fk("users.id", nullable=True)
     deleted_at = db.Column(db.DateTime(timezone=True), nullable=True)
     archived_at = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -37,6 +32,23 @@ class BoardMember(TimestampMixin, db.Model):
     board = db.relationship("Board", back_populates="members", lazy="raise")
 
 
+class BoardJoinRequest(TimestampMixin, db.Model):
+    """One request to join a Board through its Invite_Link (V12, Decision AA). No Email is stored here."""
+
+    __tablename__ = "board_join_requests"
+
+    id = uuid_pk()
+    board_id = uuid_fk("boards.id", nullable=False)
+    user_id = uuid_fk("users.id", nullable=False)
+    status = db.Column(
+        db.Enum("pending", "approved", "rejected", name="join_request_status"),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+    )
+    decided_by = uuid_fk("users.id", nullable=True)
+
+
 class Column(TimestampMixin, db.Model):
     __tablename__ = "columns"
 
@@ -48,3 +60,9 @@ class Column(TimestampMixin, db.Model):
 
 
 db.Index("uq_boards_share_token", Board.share_token, unique=True, postgresql_where=Board.share_token.isnot(None), sqlite_where=Board.share_token.isnot(None))
+db.Index("uq_boards_invite_token", Board.invite_token, unique=True, postgresql_where=Board.invite_token.isnot(None), sqlite_where=Board.invite_token.isnot(None))
+db.Index(
+    "uq_join_requests_pending", BoardJoinRequest.board_id, BoardJoinRequest.user_id, unique=True,
+    postgresql_where=BoardJoinRequest.status == "pending", sqlite_where=BoardJoinRequest.status == "pending",
+)
+db.Index("ix_join_requests_board_status_created", BoardJoinRequest.board_id, BoardJoinRequest.status, BoardJoinRequest.created_at)
